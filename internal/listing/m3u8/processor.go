@@ -115,18 +115,21 @@ func (p *Processor) addStreamToChannel(existingChannel, newChannel *store.Channe
 	}
 
 	if newChannel.Priority() > existingChannel.Priority() {
-		if streams, exists := p.channelStreams[existingChannel]; exists {
-			p.channelStreams[newChannel] = streams
-			delete(p.channelStreams, existingChannel)
-		}
-		p.trackChannel(newChannel)
-		existingChannel = newChannel
-	}
+		existingStreams := p.channelStreams[existingChannel]
 
-	p.channelStreams[existingChannel] = append(
-		p.channelStreams[existingChannel],
-		p.createStream(newChannel),
-	)
+		newStreamList := make([]urlgen.Stream, 0, 1+len(existingStreams))
+		newStreamList = append(newStreamList, p.createStream(newChannel))
+		newStreamList = append(newStreamList, existingStreams...)
+
+		p.channelStreams[newChannel] = newStreamList
+		delete(p.channelStreams, existingChannel)
+		p.trackChannel(newChannel)
+	} else {
+		p.channelStreams[existingChannel] = append(
+			p.channelStreams[existingChannel],
+			p.createStream(newChannel),
+		)
+	}
 }
 
 func (p *Processor) proxyChannelAttributes(ch *store.Channel) error {
