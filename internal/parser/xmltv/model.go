@@ -115,7 +115,7 @@ type Audio struct {
 }
 
 type PreviouslyShown struct {
-	Start   string `xml:"start,attr,omitempty"   json:"start,omitempty"`
+	Start   *Time  `xml:"start,attr,omitempty"   json:"start,omitempty"`
 	Channel string `xml:"channel,attr,omitempty" json:"channel,omitempty"`
 }
 

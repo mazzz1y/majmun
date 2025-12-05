@@ -7,6 +7,13 @@ import (
 	"time"
 )
 
+var timeFormats = []string{
+	"20060102150405 -0700",
+	"20060102150405",
+	"20060102",
+	"2006",
+}
+
 type Time struct {
 	Time time.Time
 }
@@ -23,24 +30,12 @@ func (t *Time) UnmarshalXMLAttr(attr xml.Attr) error {
 		return nil
 	}
 
-	t1, err := time.Parse("20060102150405 -0700", attr.Value)
-	if err == nil {
-		t.Time = t1
-		return nil
-	}
-
-	t1, err = time.Parse("20060102150405", attr.Value)
-	if err == nil {
-		t.Time = t1
-		return nil
-	}
-
-	t1, err = time.Parse("20060102150405 +0000", attr.Value)
+	parsed, err := parseTime(attr.Value)
 	if err != nil {
 		return err
 	}
 
-	t.Time = t1
+	t.Time = parsed
 	return nil
 }
 
@@ -60,22 +55,20 @@ func (p *Date) UnmarshalXML(d *xml.Decoder, start xml.StartElement) (err error) 
 		return fmt.Errorf("get the type Date field of %s error", start.Name.Local)
 	}
 
-	dateFormat := "20060102"
-
-	if len(content) == 4 {
-		dateFormat = "2006"
+	if content == "" {
+		return nil
 	}
 
 	if strings.Contains(content, "|") {
 		content = strings.Split(content, "|")[0]
-		dateFormat = "2006"
 	}
 
-	if v, e := time.Parse(dateFormat, content); e != nil {
+	parsed, err := parseTime(content)
+	if err != nil {
 		return fmt.Errorf("the type Date field of %s is not a time, value is: %s", start.Name.Local, content)
-	} else {
-		*p = Date(v)
 	}
+
+	*p = Date(parsed)
 	return nil
 }
 
@@ -120,4 +113,17 @@ func (e *ElementPresent) UnmarshalJSON(data []byte) error {
 	s := string(data)
 	e.Present = s == "true"
 	return nil
+}
+
+func parseTime(value string) (time.Time, error) {
+	var parsed time.Time
+	var lastErr error
+	for _, format := range timeFormats {
+		if v, e := time.Parse(format, value); e == nil {
+			return v, nil
+		} else {
+			lastErr = e
+		}
+	}
+	return parsed, lastErr
 }
