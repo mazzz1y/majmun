@@ -22,12 +22,11 @@ import (
 	"golang.org/x/sync/semaphore"
 )
 
-func createStreamer(subscriptions []listing.Playlist, epgLink string, httpClient listing.HTTPClient) *Streamer {
+func createStreamer(subscriptions []listing.Playlist, epgLink string) *Streamer {
 	channelProcessor := channel.NewRulesProcessor("test", nil)
 	playlistProcessor := playlist.NewRulesProcessor("test", nil)
 	return &Streamer{
 		subscriptions:     subscriptions,
-		httpClient:        httpClient,
 		epgURL:            epgLink,
 		channelProcessor:  channelProcessor,
 		playlistProcessor: playlistProcessor,
@@ -46,7 +45,7 @@ func (m *MockHTTPClient) Do(req *http.Request) (*http.Response, error) {
 	return args.Get(0).(*http.Response), args.Error(1)
 }
 
-func createTestSubscription(name string, playlists []string) (*app.Playlist, error) {
+func createTestSubscription(name string, playlists []string, httpClient listing.HTTPClient) (*app.Playlist, error) {
 	sem := semaphore.NewWeighted(1)
 	generator, err := urlgen.NewGenerator("http://localhost", "secret", time.Hour, time.Hour)
 	if err != nil {
@@ -59,6 +58,7 @@ func createTestSubscription(name string, playlists []string) (*app.Playlist, err
 		proxy.Proxy{},
 		nil,
 		sem,
+		httpClient,
 	)
 }
 
@@ -84,10 +84,11 @@ http://example.com/stream2`
 	sub, err := createTestSubscription(
 		"test-subscription",
 		[]string{"http://example.com/playlist.m3u"},
+		httpClient,
 	)
 	require.NoError(t, err)
 
-	streamer := createStreamer([]listing.Playlist{sub}, "http://example.com/epg.xml", httpClient)
+	streamer := createStreamer([]listing.Playlist{sub}, "http://example.com/epg.xml")
 
 	buffer := &bytes.Buffer{}
 
@@ -129,10 +130,11 @@ http://example.com/movies1`
 	sub, err := createTestSubscription(
 		"test-subscription",
 		[]string{"http://example.com/playlist.m3u"},
+		httpClient,
 	)
 	require.NoError(t, err)
 
-	streamer := createStreamer([]listing.Playlist{sub}, "http://example.com/epg.xml", httpClient)
+	streamer := createStreamer([]listing.Playlist{sub}, "http://example.com/epg.xml")
 
 	buffer := &bytes.Buffer{}
 
@@ -169,10 +171,11 @@ http://example.com/stream1_duplicate`
 	sub, err := createTestSubscription(
 		"test-subscription",
 		[]string{"http://example.com/playlist.m3u"},
+		httpClient,
 	)
 	require.NoError(t, err)
 
-	streamer := createStreamer([]listing.Playlist{sub}, "http://example.com/epg.xml", httpClient)
+	streamer := createStreamer([]listing.Playlist{sub}, "http://example.com/epg.xml")
 
 	buffer := &bytes.Buffer{}
 
@@ -204,10 +207,11 @@ func TestStreamerErrorHandling(t *testing.T) {
 	sub, err := createTestSubscription(
 		"test-subscription",
 		[]string{"http://example.com/playlist.m3u"},
+		httpClient,
 	)
 	require.NoError(t, err)
 
-	streamer := createStreamer([]listing.Playlist{sub}, "http://example.com/epg.xml", httpClient)
+	streamer := createStreamer([]listing.Playlist{sub}, "http://example.com/epg.xml")
 
 	buffer := &bytes.Buffer{}
 
@@ -230,14 +234,8 @@ http://example.com/news1`
 #EXTINF:-1 tvg-id="sports1" group-title="Sports", Sports Channel 1
 http://example.com/sports1`
 
-	response1 := &http.Response{
-		StatusCode: 200,
-		Body:       io.NopCloser(bytes.NewReader([]byte(sampleM3U1))),
-	}
-	response2 := &http.Response{
-		StatusCode: 200,
-		Body:       io.NopCloser(bytes.NewReader([]byte(sampleM3U2))),
-	}
+	response1 := &http.Response{StatusCode: 200, Body: io.NopCloser(bytes.NewReader([]byte(sampleM3U1)))}
+	response2 := &http.Response{StatusCode: 200, Body: io.NopCloser(bytes.NewReader([]byte(sampleM3U2)))}
 
 	httpClient.On("Do", mock.MatchedBy(func(req *http.Request) bool {
 		return req.Method == "GET" && req.URL.String() == "http://example.com/playlist1.m3u"
@@ -250,16 +248,18 @@ http://example.com/sports1`
 	sub1, err := createTestSubscription(
 		"subscription1",
 		[]string{"http://example.com/playlist1.m3u"},
+		httpClient,
 	)
 	require.NoError(t, err)
 
 	sub2, err := createTestSubscription(
 		"subscription2",
 		[]string{"http://example.com/playlist2.m3u"},
+		httpClient,
 	)
 	require.NoError(t, err)
 
-	streamer := createStreamer([]listing.Playlist{sub1, sub2}, "http://example.com/epg.xml", httpClient)
+	streamer := createStreamer([]listing.Playlist{sub1, sub2}, "http://example.com/epg.xml")
 
 	buffer := &bytes.Buffer{}
 
@@ -289,14 +289,8 @@ http://example.com/movies1
 #EXTINF:-1 tvg-id="music1" tvg-name="Music Channel 1" group-title="Music", Music Channel 1
 http://example.com/music1`
 
-	response1 := &http.Response{
-		StatusCode: 200,
-		Body:       io.NopCloser(bytes.NewReader([]byte(sampleM3U1))),
-	}
-	response2 := &http.Response{
-		StatusCode: 200,
-		Body:       io.NopCloser(bytes.NewReader([]byte(sampleM3U2))),
-	}
+	response1 := &http.Response{StatusCode: 200, Body: io.NopCloser(bytes.NewReader([]byte(sampleM3U1)))}
+	response2 := &http.Response{StatusCode: 200, Body: io.NopCloser(bytes.NewReader([]byte(sampleM3U2)))}
 
 	httpClient.On("Do", mock.MatchedBy(func(req *http.Request) bool {
 		return req.Method == "GET" && req.URL.String() == "http://example.com/playlist1.m3u"
@@ -312,10 +306,11 @@ http://example.com/music1`
 			"http://example.com/playlist1.m3u",
 			"http://example.com/playlist2.m3u",
 		},
+		httpClient,
 	)
 	require.NoError(t, err)
 
-	streamer := createStreamer([]listing.Playlist{sub}, "http://example.com/epg.xml", httpClient)
+	streamer := createStreamer([]listing.Playlist{sub}, "http://example.com/epg.xml")
 
 	buffer := &bytes.Buffer{}
 

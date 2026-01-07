@@ -1,6 +1,7 @@
 # Playlists
 
-Playlists define collections of IPTV channels from M3U/M3U8 sources. Each playlist can contain multiple sources with proxy configuration.
+Playlists define collections of IPTV channels from M3U/M3U8 sources. Each playlist can contain multiple sources with
+proxy configuration.
 
 ## YAML Structure
 
@@ -13,11 +14,11 @@ playlists:
 
 ## Fields
 
-| Field     | Type                   | Required | Description                                                     |
-|-----------|------------------------|----------|-----------------------------------------------------------------|
-| `name`    | `string`               | Yes      | Unique name identifier for this playlist                        |
-| `sources` | `[]string` | Yes      | List of playlist sources (URLs or file paths, M3U/M3U8 format). |
-| `proxy`   | [Proxy](./proxy.md)    | No       | Playlist-specific proxy configuration                           |
+| Field     | Type                | Required | Description                                                     |
+|-----------|---------------------|----------|-----------------------------------------------------------------|
+| `name`    | `string`            | Yes      | Unique name identifier for this playlist                        |
+| `sources` | `[]string`          | Yes      | List of playlist sources (URLs or file paths, M3U/M3U8 format). |
+| `proxy`   | [Proxy](./proxy.md) | No       | Playlist-specific proxy configuration                           |
 
 ## Examples
 

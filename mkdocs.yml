@@ -33,7 +33,7 @@ nav:
   - Configuration:
       - Overview: config.md
       - Logs: config/logs.md
-      - Cache: config/cache.md
+      - HTTP Client: config/http_client.md
       - Server: config/server.md
       - URL Generator: config/url_generator.md
       - Proxy: config/proxy.md

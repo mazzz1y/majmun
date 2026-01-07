@@ -4,7 +4,7 @@ The `Selector` type is used to specify which channel property to target for oper
 defined in a single-line format to select a specific field.
 
 !!! note
-    If selector is not specified, the default selector is `name`.
+If selector is not specified, the default selector is `name`.
 
 ## Possible Values
 

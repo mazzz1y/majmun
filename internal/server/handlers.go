@@ -6,10 +6,10 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"majmun/internal/app"
 	"net/http"
 	"time"
 
-	"majmun/internal/app"
 	"majmun/internal/ctxutil"
 	"majmun/internal/listing/m3u8"
 	"majmun/internal/listing/xmltv"
@@ -49,7 +49,6 @@ func (s *Server) handlePlaylist(w http.ResponseWriter, r *http.Request) {
 	streamer := m3u8.NewStreamer(
 		client.PlaylistProviders(),
 		client.EPGLink(),
-		s.httpClient,
 		client.ChannelProcessor(),
 		client.PlaylistProcessor(),
 	)
@@ -147,7 +146,7 @@ func (s *Server) handleFileProxy(ctx context.Context, w http.ResponseWriter, dat
 		return
 	}
 
-	resp, err := s.httpClient.Do(req)
+	resp, err := ctxutil.Provider(ctx).(app.Provider).HTTPClient().Do(req)
 	if err != nil {
 		logging.Error(ctx, err, "file proxy failed")
 		http.Error(w, http.StatusText(http.StatusBadGateway), http.StatusBadGateway)
@@ -181,7 +180,6 @@ func (s *Server) prepareEPGStreamer(ctx context.Context) (*xmltv.Streamer, error
 	m3u8Streamer := m3u8.NewStreamer(
 		client.PlaylistProviders(),
 		"",
-		s.httpClient,
 		client.ChannelProcessor(),
 		client.PlaylistProcessor(),
 	)
@@ -191,8 +189,7 @@ func (s *Server) prepareEPGStreamer(ctx context.Context) (*xmltv.Streamer, error
 		logging.Error(ctx, err, "failed to get channels")
 		return nil, err
 	}
-
-	return xmltv.NewStreamer(client.EPGProviders(), s.httpClient, channels), nil
+	return xmltv.NewStreamer(client.EPGProviders(), channels), nil
 }
 
 func setHeaders(w http.ResponseWriter, headers responseHeaders) {

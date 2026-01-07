@@ -34,5 +34,10 @@ func (c *Client) Validate(playlistNames, epgNames map[string]bool) error {
 		}
 	}
 
+	err := c.Proxy.ValidateOverride()
+	if err != nil {
+		return fmt.Errorf("client proxy validation error: %v", err)
+	}
+
 	return nil
 }

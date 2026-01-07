@@ -25,5 +25,10 @@ func (p *Playlist) Validate() error {
 		}
 	}
 
+	err := p.Proxy.ValidateOverride()
+	if err != nil {
+		return fmt.Errorf("playlist proxy validation error: %v", err)
+	}
+
 	return nil
 }

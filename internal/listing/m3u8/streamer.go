@@ -13,16 +13,14 @@ import (
 
 type Streamer struct {
 	subscriptions     []listing.Playlist
-	httpClient        listing.HTTPClient
 	epgURL            string
 	channelProcessor  *channel.Processor
 	playlistProcessor *playlist.Processor
 }
 
-func NewStreamer(subs []listing.Playlist, epgLink string, httpClient listing.HTTPClient, channelProcessor *channel.Processor, playlistProcessor *playlist.Processor) *Streamer {
+func NewStreamer(subs []listing.Playlist, epgLink string, channelProcessor *channel.Processor, playlistProcessor *playlist.Processor) *Streamer {
 	return &Streamer{
 		subscriptions:     subs,
-		httpClient:        httpClient,
 		epgURL:            epgLink,
 		channelProcessor:  channelProcessor,
 		playlistProcessor: playlistProcessor,
@@ -72,7 +70,7 @@ func (s *Streamer) fetchPlaylists(ctx context.Context) (*store.Store, error) {
 	var decoders []*decoderWrapper
 	for _, sub := range s.subscriptions {
 		for _, url := range sub.Playlists() {
-			decoders = append(decoders, newDecoderWrapper(sub, s.httpClient, url))
+			decoders = append(decoders, newDecoderWrapper(sub, sub.HTTPClient(), url))
 		}
 	}
 

@@ -1,4 +1,4 @@
-package cache
+package httpclient
 
 import (
 	"fmt"
@@ -33,7 +33,7 @@ func TestNewDirectHTTPClient_ExtraHeaders(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := newDirectHTTPClient(extraHeaders)
+	client := NewDirectClient(extraHeaders)
 	resp, err := client.Get(server.URL)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -65,7 +65,7 @@ func TestNewDirectHTTPClient_TooManyRedirects(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := newDirectHTTPClient(extraHeaders)
+	client := NewDirectClient(extraHeaders)
 	_, err := client.Get(server.URL)
 
 	if err == nil {
@@ -85,7 +85,7 @@ func TestNewDirectHTTPClient_NoRedirects(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := newDirectHTTPClient(extraHeaders)
+	client := NewDirectClient(extraHeaders)
 	resp, err := client.Get(server.URL)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -105,7 +105,7 @@ func TestNewDirectHTTPClient_Transport(t *testing.T) {
 		{Name: "X-Another", Value: "another-value"},
 	}
 
-	client := newDirectHTTPClient(extraHeaders)
+	client := NewDirectClient(extraHeaders)
 
 	transport, ok := client.Transport.(*headerTransport)
 	if !ok {
@@ -135,7 +135,7 @@ func TestNewDirectHTTPClient_Transport(t *testing.T) {
 }
 
 func TestNewDirectHTTPClient_EmptyHeaders(t *testing.T) {
-	client := newDirectHTTPClient(nil)
+	client := NewDirectClient(nil)
 
 	transport, ok := client.Transport.(*headerTransport)
 	if !ok {

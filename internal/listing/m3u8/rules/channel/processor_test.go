@@ -2,7 +2,9 @@ package channel
 
 import (
 	"majmun/internal/config/common"
+	"majmun/internal/config/proxy"
 	"majmun/internal/config/rules/channel"
+	"majmun/internal/listing"
 	"majmun/internal/listing/m3u8/store"
 	"majmun/internal/parser/m3u8"
 	"majmun/internal/urlgen"
@@ -23,7 +25,11 @@ func (m mockPlaylist) Name() string                    { return m.name }
 func (m mockPlaylist) Playlists() []string             { return nil }
 func (m mockPlaylist) URLGenerator() *urlgen.Generator { return nil }
 func (m mockPlaylist) Rules() []*channel.Rule          { return nil }
-func (m mockPlaylist) IsProxied() bool                 { return false }
+func (m mockPlaylist) ProxyConfig() proxy.Proxy        { return proxy.Proxy{} }
+
+func (m mockPlaylist) HTTPClient() listing.HTTPClient { return nil }
+
+func (m mockPlaylist) IsProxied() bool { return false }
 
 func TestConditionLogic(t *testing.T) {
 	playlist := mockPlaylist{name: "pl1"}

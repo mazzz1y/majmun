@@ -3,7 +3,6 @@ package xmltv
 import (
 	"context"
 	"io"
-
 	"majmun/internal/listing"
 	"majmun/internal/parser/xmltv"
 )

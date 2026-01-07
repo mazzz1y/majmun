@@ -18,6 +18,10 @@ server:
 
 proxy:
   enabled: true # Proxy everything throw the gateway
+  http_client:
+    cache:
+      enabled: true
+      ttl: "5m"
 
 playlists:
   - name: basic-tv
@@ -52,16 +56,22 @@ url_generator:
   stream_ttl: "24h"
   file_ttl: "0s"
 
-cache:
-  path: "/var/cache/iptv"
-  ttl: "12h"
-  retention: "7d"
-  compression: true
-
 proxy:
   enabled: true
   concurrency: 10 # Set global concurrency
-  error: # Override stream error templates
+  http_client:
+    cache:
+      enabled: true
+      path: /tmp/iptv/cache
+      ttl: 15m
+      retention: 72h
+      compression: true
+    headers:
+      - name: User-Agent
+        value: "My UA"
+      - name: Authorization
+        value: "Bearer ..."
+  error:
     upstream_error:
       template_variables:
         - name: message

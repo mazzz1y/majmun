@@ -24,5 +24,11 @@ func (e *EPG) Validate() error {
 			return fmt.Errorf("EPG source[%d] cannot be empty", i)
 		}
 	}
+
+	err := e.Proxy.ValidateOverride()
+	if err != nil {
+		return fmt.Errorf("epg proxy validation error: %v", err)
+	}
+
 	return nil
 }

@@ -35,6 +35,7 @@ func (p *MergeDuplicatesProcessor) processMergeGroups(groups map[string][]*store
 		}
 
 		best := group[0]
+		pl := best.Playlist()
 
 		if bestTvgId, exists := best.GetAttr(m3u8.AttrTvgID); exists {
 			for i := 1; i < len(group); i++ {
@@ -51,8 +52,8 @@ func (p *MergeDuplicatesProcessor) processMergeGroups(groups map[string][]*store
 					"Tags":     best.Tags(),
 				},
 				"Playlist": map[string]any{
-					"Name":      best.Playlist().Name(),
-					"IsProxied": best.Playlist().IsProxied(),
+					"Name":      pl.Name(),
+					"IsProxied": pl.IsProxied(),
 				},
 			}
 

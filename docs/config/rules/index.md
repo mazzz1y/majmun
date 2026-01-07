@@ -11,8 +11,9 @@ Rules are organized into two categories:
 - **Playlist Rules** - Operate on the entire playlist/channel list (remove_duplicates, merge_channels, sort)
 
 !!! note "Rule Processing"
-    * Rules can be filtered to specific channels, clients, or playlists using `condition` blocks.
-    * Channel rules are processed first, followed by playlist rules
+
+* Rules can be filtered to specific channels, clients, or playlists using `condition` blocks.
+* Channel rules are processed first, followed by playlist rules
 
 ## YAML Structure
 

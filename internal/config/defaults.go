@@ -26,13 +26,16 @@ func DefaultConfig() *Config {
 			StreamTTL: common.Duration(30 * 24 * time.Hour),
 			FileTTL:   common.Duration(0),
 		},
-		Cache: CacheConfig{
-			Path:        "cache",
-			TTL:         common.Duration(24 * time.Hour),
-			Retention:   common.Duration(24 * time.Hour * 30),
-			Compression: false,
-		},
 		Proxy: proxy.Proxy{
+			HTTPClient: common.HTTPClient{
+				Cache: common.Cache{
+					Enabled:     boolPtr(true),
+					Path:        stringPtr("cache"),
+					TTL:         durationPtr(24 * time.Hour),
+					Retention:   durationPtr(24 * time.Hour * 30),
+					Compression: boolPtr(false),
+				},
+			},
 			Stream: proxy.Handler{
 				Command: common.StringOrArr{
 					"ffmpeg",
@@ -86,4 +89,17 @@ func DefaultConfig() *Config {
 			},
 		},
 	}
+}
+
+func boolPtr(b bool) *bool {
+	return &b
+}
+
+func stringPtr(s string) *string {
+	return &s
+}
+
+func durationPtr(d time.Duration) *common.Duration {
+	cd := common.Duration(d)
+	return &cd
 }

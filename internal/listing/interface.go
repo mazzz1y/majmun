@@ -1,6 +1,7 @@
 package listing
 
 import (
+	"majmun/internal/config/proxy"
 	"majmun/internal/config/rules/channel"
 	"majmun/internal/urlgen"
 	"net/http"
@@ -24,7 +25,9 @@ type Playlist interface {
 	Name() string
 	Playlists() []string
 	URLGenerator() *urlgen.Generator
+	HTTPClient() HTTPClient
 	Rules() []*channel.Rule
+	ProxyConfig() proxy.Proxy
 	IsProxied() bool
 }
 
@@ -32,5 +35,7 @@ type EPG interface {
 	Name() string
 	EPGs() []string
 	URLGenerator() *urlgen.Generator
+	HTTPClient() HTTPClient
+	ProxyConfig() proxy.Proxy
 	IsProxied() bool
 }

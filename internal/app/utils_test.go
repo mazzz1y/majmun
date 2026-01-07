@@ -5,6 +5,8 @@ import (
 	"majmun/internal/config/proxy"
 	"reflect"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 func TestMergeProxies(t *testing.T) {
@@ -24,11 +26,13 @@ func TestMergeProxies(t *testing.T) {
 				{
 					Enabled:           boolPtr(true),
 					ConcurrentStreams: 5,
+					HTTPClient:        common.HTTPClient{Cache: common.Cache{TTL: durationPtr("5m")}},
 				},
 			},
 			expected: proxy.Proxy{
 				Enabled:           boolPtr(true),
 				ConcurrentStreams: 5,
+				HTTPClient:        common.HTTPClient{Cache: common.Cache{TTL: durationPtr("5m")}},
 			},
 		},
 		{
@@ -37,15 +41,18 @@ func TestMergeProxies(t *testing.T) {
 				{
 					Enabled:           boolPtr(false),
 					ConcurrentStreams: 3,
+					HTTPClient:        common.HTTPClient{Cache: common.Cache{TTL: durationPtr("10m")}},
 				},
 				{
 					Enabled:           boolPtr(true),
 					ConcurrentStreams: 5,
+					HTTPClient:        common.HTTPClient{Cache: common.Cache{TTL: durationPtr("3m")}},
 				},
 			},
 			expected: proxy.Proxy{
 				Enabled:           boolPtr(true),
 				ConcurrentStreams: 5,
+				HTTPClient:        common.HTTPClient{Cache: common.Cache{TTL: durationPtr("3m")}},
 			},
 		},
 		{
@@ -53,27 +60,47 @@ func TestMergeProxies(t *testing.T) {
 			proxies: []proxy.Proxy{
 				{
 					ConcurrentStreams: 5,
+					HTTPClient:        common.HTTPClient{Cache: common.Cache{TTL: durationPtr("7m")}},
 				},
 				{
 					ConcurrentStreams: 0,
+					HTTPClient:        common.HTTPClient{Cache: common.Cache{TTL: durationPtr("0")}},
 				},
 			},
 			expected: proxy.Proxy{
 				ConcurrentStreams: 5,
+				HTTPClient:        common.HTTPClient{Cache: common.Cache{TTL: durationPtr("0")}},
 			},
 		},
 		{
 			name: "nil enabled ignored",
 			proxies: []proxy.Proxy{
 				{
-					Enabled: boolPtr(true),
+					Enabled:    boolPtr(true),
+					HTTPClient: common.HTTPClient{Cache: common.Cache{TTL: durationPtr("2m")}},
 				},
 				{
-					Enabled: nil,
+					Enabled:    nil,
+					HTTPClient: common.HTTPClient{Cache: common.Cache{TTL: durationPtr("0")}},
 				},
 			},
 			expected: proxy.Proxy{
-				Enabled: boolPtr(true),
+				Enabled:    boolPtr(true),
+				HTTPClient: common.HTTPClient{Cache: common.Cache{TTL: durationPtr("0")}},
+			},
+		},
+		{
+			name: "nil cache ttl ignored",
+			proxies: []proxy.Proxy{
+				{
+					HTTPClient: common.HTTPClient{Cache: common.Cache{TTL: durationPtr("2m")}},
+				},
+				{
+					HTTPClient: common.HTTPClient{Cache: common.Cache{TTL: nil}},
+				},
+			},
+			expected: proxy.Proxy{
+				HTTPClient: common.HTTPClient{Cache: common.Cache{TTL: durationPtr("2m")}},
 			},
 		},
 	}
@@ -86,6 +113,18 @@ func TestMergeProxies(t *testing.T) {
 			}
 			if result.ConcurrentStreams != tt.expected.ConcurrentStreams {
 				t.Errorf("mergeProxies().ConcurrentStreams = %v, expected %v", result.ConcurrentStreams, tt.expected.ConcurrentStreams)
+			}
+			if !reflect.DeepEqual(result.HTTPClient.Cache.TTL, tt.expected.HTTPClient.Cache.TTL) {
+				t.Errorf("mergeProxies().HTTPClient.Cache.TTL = %v, expected %v", result.HTTPClient.Cache.TTL, tt.expected.HTTPClient.Cache.TTL)
+			}
+			if !reflect.DeepEqual(result.HTTPClient.Cache.Retention, tt.expected.HTTPClient.Cache.Retention) {
+				t.Errorf("mergeProxies().HTTPClient.Cache.Retention = %v, expected %v", result.HTTPClient.Cache.Retention, tt.expected.HTTPClient.Cache.Retention)
+			}
+			if !reflect.DeepEqual(result.HTTPClient.Cache.Compression, tt.expected.HTTPClient.Cache.Compression) {
+				t.Errorf("mergeProxies().HTTPClient.Cache.Compression = %v, expected %v", result.HTTPClient.Cache.Compression, tt.expected.HTTPClient.Cache.Compression)
+			}
+			if !reflect.DeepEqual(result.HTTPClient.HTTPHeaders, tt.expected.HTTPClient.HTTPHeaders) {
+				t.Errorf("mergeProxies().HTTPClient.HTTPHeaders = %v, expected %v", result.HTTPClient.HTTPHeaders, tt.expected.HTTPClient.HTTPHeaders)
 			}
 		})
 	}
@@ -295,6 +334,15 @@ func TestMergePairs(t *testing.T) {
 
 func boolPtr(b bool) *bool {
 	return &b
+}
+
+func durationPtr(s string) *common.Duration {
+	var d common.Duration
+	node := &yaml.Node{Kind: yaml.ScalarNode, Value: s}
+	if err := d.UnmarshalYAML(node); err != nil {
+		panic(err)
+	}
+	return &d
 }
 
 func TestUniqueNames(t *testing.T) {

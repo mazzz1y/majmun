@@ -17,6 +17,7 @@ const (
 	streamDataKey    contextKey = "stream_data"
 	providerTypeKey  contextKey = "provider_type"
 	providerNameKey  contextKey = "provider_name"
+	providerKey      contextKey = "provider"
 	streamIDKey      contextKey = "stream_id"
 	channelNameKey   contextKey = "channel_name"
 	semaphoreNameKey contextKey = "semaphore_name"
@@ -53,6 +54,10 @@ func WithChannelHidden(ctx context.Context, hidden bool) context.Context {
 
 func WithSemaphoreName(ctx context.Context, name string) context.Context {
 	return context.WithValue(ctx, semaphoreNameKey, name)
+}
+
+func WithProvider(ctx context.Context, provider any) context.Context {
+	return context.WithValue(ctx, providerKey, provider)
 }
 
 func WithProviderType(ctx context.Context, providerType string) context.Context {
@@ -97,6 +102,10 @@ func ProviderType(ctx context.Context) string {
 		return v.(string)
 	}
 	return ""
+}
+
+func Provider(ctx context.Context) any {
+	return ctx.Value(providerKey)
 }
 
 func RequestType(ctx context.Context) string {

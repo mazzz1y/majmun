@@ -1,4 +1,4 @@
-package cache
+package httpclient
 
 import (
 	"encoding/json"
@@ -12,7 +12,11 @@ var forwardedHeaders = []string{
 }
 
 func (r *Reader) SaveMetadata() error {
-	metaFile, err := os.Create(r.MetaPath)
+	if r.TmpMetaPath == "" {
+		r.TmpMetaPath = r.MetaPath + ".tmp"
+	}
+	_ = os.Remove(r.TmpMetaPath)
+	metaFile, err := os.Create(r.TmpMetaPath)
 	if err != nil {
 		return err
 	}
@@ -27,16 +31,27 @@ func (r *Reader) SaveMetadata() error {
 			}
 		}
 	}
+	ret := int64(r.retention / time.Second)
 
-	return json.NewEncoder(metaFile).Encode(Metadata{
-		CachedAt: time.Now().Unix(),
-		Headers:  headers,
-	})
+	if err := json.NewEncoder(metaFile).Encode(Metadata{
+		CachedAt:         time.Now().Unix(),
+		RetentionSeconds: &ret,
+		Headers:          headers,
+	}); err != nil {
+		return err
+	}
+	if err := metaFile.Close(); err != nil {
+		return err
+	}
+	_ = os.Remove(r.MetaPath)
+	return os.Rename(r.TmpMetaPath, r.MetaPath)
 }
 
 func (r *Reader) Cleanup() {
 	_ = os.Remove(r.FilePath)
+	_ = os.Remove(r.TmpFilePath)
 	_ = os.Remove(r.MetaPath)
+	_ = os.Remove(r.TmpMetaPath)
 }
 
 func readMetadata(metaPath string) (Metadata, error) {

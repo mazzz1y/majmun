@@ -6,6 +6,7 @@ import (
 	"majmun/internal/config/proxy"
 	channelconf "majmun/internal/config/rules/channel"
 	playlistconf "majmun/internal/config/rules/playlist"
+	"majmun/internal/httpclient"
 	"majmun/internal/listing"
 	"majmun/internal/listing/m3u8/rules/channel"
 	"majmun/internal/listing/m3u8/rules/playlist"
@@ -26,6 +27,8 @@ type Client struct {
 	playlistProcessor *playlist.Processor
 	epgLink           string
 	urlGen            *urlgen.Generator
+
+	cacheStore *httpclient.Store
 }
 
 type Provider interface {
@@ -33,9 +36,18 @@ type Provider interface {
 	Type() string
 	URLGenerator() *urlgen.Generator
 	ExpiredLinkStreamer() *shell.Streamer
+	ProxyConfig() proxy.Proxy
+	HTTPClient() listing.HTTPClient
 }
 
-func NewClient(clientCfg config.Client, urlGen *urlgen.Generator, channelRules []*channelconf.Rule, playlistRules []*playlistconf.Rule, publicURL string) (*Client, error) {
+func NewClient(
+	clientCfg config.Client,
+	urlGen *urlgen.Generator,
+	channelRules []*channelconf.Rule,
+	playlistRules []*playlistconf.Rule,
+	publicURL string,
+	cacheStore *httpclient.Store,
+) (*Client, error) {
 	if clientCfg.Secret == "" {
 		return nil, fmt.Errorf("client secret cannot be empty")
 	}
@@ -54,19 +66,26 @@ func NewClient(clientCfg config.Client, urlGen *urlgen.Generator, channelRules [
 		playlistProcessor: playlist.NewRulesProcessor(clientCfg.Name, playlistRules),
 		epgLink:           fmt.Sprintf("%s/%s/epg.xml.gz", publicURL, clientCfg.Secret),
 		urlGen:            urlGen,
+		cacheStore:        cacheStore,
 	}, nil
 }
 
 func (c *Client) BuildPlaylistProvider(
-	playlistConf config.Playlist, serverProxy proxy.Proxy, sem *semaphore.Weighted) error {
+	playlistConf config.Playlist,
+	serverProxy proxy.Proxy,
+	sem *semaphore.Weighted,
+) error {
+	mergedProxy := mergeProxies(serverProxy, playlistConf.Proxy, c.proxy)
+	httpClient := c.newHTTPClient(mergedProxy)
 
 	pr, err := NewPlaylistProvider(
 		playlistConf.Name,
 		c.urlGen,
 		playlistConf.Sources,
-		mergeProxies(serverProxy, playlistConf.Proxy, c.proxy),
+		mergedProxy,
 		nil,
 		sem,
+		httpClient,
 	)
 	if err != nil {
 		return err
@@ -76,14 +95,16 @@ func (c *Client) BuildPlaylistProvider(
 	return nil
 }
 
-func (c *Client) BuildEPGProvider(
-	epgConf config.EPG, serverProxy proxy.Proxy) error {
+func (c *Client) BuildEPGProvider(epgConf config.EPG, serverProxy proxy.Proxy) error {
+	mergedProxy := mergeProxies(serverProxy, epgConf.Proxy, c.proxy)
+	httpClient := c.newHTTPClient(mergedProxy)
 
 	subscription, err := NewEPGProvider(
 		epgConf.Name,
 		c.urlGen,
 		epgConf.Sources,
-		mergeProxies(serverProxy, epgConf.Proxy, c.proxy),
+		mergedProxy,
+		httpClient,
 	)
 	if err != nil {
 		return err
@@ -91,6 +112,19 @@ func (c *Client) BuildEPGProvider(
 
 	c.epgProviders = append(c.epgProviders, subscription)
 	return nil
+}
+
+func (c *Client) newHTTPClient(pr proxy.Proxy) listing.HTTPClient {
+	opt := httpClientOptions(pr)
+	if c.cacheStore == nil || !opt.CacheEnabled {
+		return httpclient.NewDirectClient(opt.HTTPHeaders)
+	}
+	return c.cacheStore.NewHTTPClient(httpclient.Options{
+		TTL:         opt.TTL,
+		Retention:   opt.Retention,
+		Compression: opt.Compression,
+		HTTPHeaders: opt.HTTPHeaders,
+	})
 }
 
 func (c *Client) PlaylistProviders() []listing.Playlist {
