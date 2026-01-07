@@ -1,15 +1,15 @@
-package cache
+package httpclient
 
-import (
-	"net/http"
-)
+import "net/http"
 
 type cachingTransport struct {
-	cache *Cache
+	store *Store
+	opt   Options
 }
 
 func (t *cachingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	reader, err := t.cache.NewReader(req.Context(), req.URL.String())
+	ctx := req.Context()
+	reader, err := t.store.newReader(ctx, req.URL.String(), t.opt)
 	if err != nil {
 		return nil, err
 	}

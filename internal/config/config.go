@@ -14,7 +14,7 @@ type Config struct {
 	Server        ServerConfig       `yaml:"server"`
 	Logs          Logs               `yaml:"logs"`
 	URLGenerator  URLGeneratorConfig `yaml:"url_generator"`
-	Cache         CacheConfig        `yaml:"cache"`
+	HTTPClient    common.HTTPClient  `yaml:"http_client"`
 	Proxy         proxy.Proxy        `yaml:"proxy"`
 	Clients       []Client           `yaml:"clients"`
 	Playlists     []Playlist         `yaml:"playlists"`
@@ -42,8 +42,8 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("url_generator configuration validation failed: %w", err)
 	}
 
-	if err := c.Cache.Validate(); err != nil {
-		return fmt.Errorf("cache configuration validation failed: %w", err)
+	if err := c.HTTPClient.Validate(); err != nil {
+		return fmt.Errorf("http_client configuration validation failed: %w", err)
 	}
 
 	if err := c.Proxy.Validate(); err != nil {

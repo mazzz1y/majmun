@@ -1,4 +1,4 @@
-package cache
+package httpclient
 
 import (
 	"net/http"
@@ -252,9 +252,10 @@ func TestReader_tryRenewal(t *testing.T) {
 			defer server.Close()
 
 			reader := &Reader{
-				URL:      server.URL,
-				MetaPath: "/tmp/nonexistent.meta",
-				client:   server.Client(),
+				URL:         server.URL,
+				MetaPath:    "/tmp/nonexistent.meta",
+				TmpMetaPath: "/tmp/nonexistent.meta.tmp",
+				client:      server.Client(),
 			}
 
 			result := reader.tryRenewal(tt.metadata)

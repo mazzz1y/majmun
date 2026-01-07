@@ -36,6 +36,8 @@ func (p *RemoveDuplicatesProcessor) processDuplicateGroups(groups map[string][]*
 		best := group[0]
 
 		for _, ch := range group {
+			pl := ch.Playlist()
+
 			if ch == best {
 				if p.rule.FinalValue != nil {
 					tmplMap := map[string]any{
@@ -46,8 +48,8 @@ func (p *RemoveDuplicatesProcessor) processDuplicateGroups(groups map[string][]*
 							"Tags":     ch.Tags(),
 						},
 						"Playlist": map[string]any{
-							"Name":      ch.Playlist().Name(),
-							"IsProxied": ch.Playlist().IsProxied(),
+							"Name":      pl.Name(),
+							"IsProxied": pl.IsProxied(),
 						},
 					}
 

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"majmun/internal/app"
-	"majmun/internal/cache"
 	"majmun/internal/config"
 	"majmun/internal/demux"
 	"majmun/internal/logging"
@@ -26,9 +25,6 @@ type Server struct {
 	server  *http.Server
 	manager *app.Manager
 
-	cache      *cache.Cache
-	httpClient *http.Client
-
 	demux *demux.Demuxer
 
 	serverURL     string
@@ -45,18 +41,11 @@ func NewServer(cfg *config.Config) (*Server, error) {
 		return nil, err
 	}
 
-	c, err := cache.NewCache(cfg.Cache)
-	if err != nil {
-		return nil, err
-	}
-
 	ctx, cancel := context.WithCancel(context.Background())
 
 	server := &Server{
 		router:     mux.NewRouter(),
 		manager:    m,
-		cache:      c,
-		httpClient: c.NewCachedHTTPClient(),
 		demux:      demux.NewDemuxer(),
 		serverURL:  cfg.Server.PublicURL.String(),
 		listenAddr: cfg.Server.ListenAddr,
@@ -105,7 +94,6 @@ func (s *Server) Stop() error {
 	ctx, cancel := context.WithTimeout(s.ctx, 5*time.Second)
 	defer cancel()
 
-	s.cache.Close()
 	s.demux.Stop()
 
 	logging.Info(ctx, "stopping http server")

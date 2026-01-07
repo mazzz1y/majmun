@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"majmun/internal/config/proxy"
 	"majmun/internal/config/rules/channel"
+	"majmun/internal/listing"
 	"majmun/internal/shell"
 	"majmun/internal/urlgen"
 
@@ -21,6 +22,7 @@ type Playlist struct {
 	rules []*channel.Rule
 
 	proxyConfig proxy.Proxy
+	httpClient  listing.HTTPClient
 
 	linkStreamer          *shell.Streamer
 	rateLimitStreamer     *shell.Streamer
@@ -31,7 +33,8 @@ type Playlist struct {
 func NewPlaylistProvider(
 	name string, urlGen *urlgen.Generator,
 	sources []string,
-	proxy proxy.Proxy, rules []*channel.Rule, sem *semaphore.Weighted) (*Playlist, error) {
+	proxy proxy.Proxy, rules []*channel.Rule, sem *semaphore.Weighted,
+	httpClient listing.HTTPClient) (*Playlist, error) {
 
 	streamStreamer, err := shell.NewShellStreamer(
 		proxy.Stream.Command,
@@ -75,6 +78,7 @@ func NewPlaylistProvider(
 		sources:               sources,
 		semaphore:             sem,
 		proxyConfig:           proxy,
+		httpClient:            httpClient,
 		rules:                 rules,
 		linkStreamer:          streamStreamer,
 		rateLimitStreamer:     rateLimitStreamer,
@@ -97,6 +101,10 @@ func (ps *Playlist) Playlists() []string {
 
 func (ps *Playlist) URLGenerator() *urlgen.Generator {
 	return ps.urlGenerator
+}
+
+func (ps *Playlist) HTTPClient() listing.HTTPClient {
+	return ps.httpClient
 }
 
 func (ps *Playlist) Rules() []*channel.Rule {

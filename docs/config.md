@@ -22,7 +22,7 @@ majmun -config ./config      # from directory
 | `url_generator` | [URL Generator](./config/url_generator.md) | URL generation and encryption configuration                       |
 | `logs`           | [Logs](config/logs.md)                      | Logging configuration                                             |
 | `proxy`         | [Proxy](./config/proxy.md)                 | Stream proxy configuration for remuxing with ffmpeg               |
-| `cache`         | [Cache](./config/cache.md)                 | Cache configuration for playlists and EPGs                        |
+| `http_client`   | [HTTP Client](./config/http_client.md)     | HTTP client configuration (headers, caching)                      |
 | `playlists`     | [Playlists](./config/playlists.md)         | Array of playlist definitions with sources                        |
 | `epgs`          | [EPGs](./config/epgs.md)                   | Array of EPG definitions with sources                             |
 | `channel_rules` | [Channel Rules](./config/rules/index.md)    | Global channel processing rules (applied to all channels)         |

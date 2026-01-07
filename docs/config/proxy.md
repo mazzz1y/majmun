@@ -33,6 +33,13 @@ filtering, or other stream processing features.
 proxy:
   enabled: false
   concurrency: 0
+  http_client:
+    cache:
+      enabled: true
+      ttl: ""
+      retention: ""
+      compression: false
+    headers: []
   stream:
     command: []
     template_variables: []
@@ -59,18 +66,19 @@ proxy:
 
 ### Main Proxy Configuration
 
-| Field         | Type      | Required | Description                                 |
-|---------------|-----------|----------|---------------------------------------------|
-| `enabled`     | `bool`    | No       | Enable or disable proxy functionality       |
-| `concurrency` | `int`     | No       | Maximum concurrent streams (0 = unlimited)  |
-| `stream`      | `command` | No       | Command configuration for stream processing |
-| `error`       | `command` | No       | Default error handling configuration        |
+| Field         | Type                             | Required | Description                                        |
+|---------------|----------------------------------|----------|----------------------------------------------------|
+| `enabled`     | `bool`                           | No       | Enable or disable proxy functionality              |
+| `concurrency` | `int`                            | No       | Maximum concurrent streams (0 = unlimited)         |
+| `http_client` | [`HTTPClient`](./http_client.md) | No       | HTTP client configuration overrides for this proxy |
+| `stream`      | `command`                        | No       | Command configuration for stream processing        |
+| `error`       | `command`                        | No       | Default error handling configuration               |
 
 ### Command Object
 
 !!! note "Command String Format"
-    Command can be specified as a string or an array of strings, similar to Dockerfile syntax. If the command is specified
-    as a string, it will be wrapped in a `/bin/sh` shell.
+Command can be specified as a string or an array of strings, similar to Dockerfile syntax. If the command is specified
+as a string, it will be wrapped in a `/bin/sh` shell.
 
 | Field                | Type                               | Required | Description                              |
 |----------------------|------------------------------------|----------|------------------------------------------|
@@ -132,6 +140,21 @@ proxy:
     template_variables:
       - name: ffmpeg_log_level
         value: "error"
+
+```
+
+### Proxy HTTP Client Overrides
+
+```yaml
+proxy:
+  enabled: true
+  http_client:
+    cache:
+      enabled: true
+      ttl: 5m
+    headers:
+      - name: User-Agent
+        value: "MyUA"
 ```
 
 ### Error Handling with Test Pattern

@@ -3,7 +3,68 @@ package app
 import (
 	"majmun/internal/config/common"
 	"majmun/internal/config/proxy"
+	"strings"
+	"time"
 )
+
+type httpClientSettings struct {
+	CacheEnabled bool
+	TTL          time.Duration
+	Retention    time.Duration
+	Compression  bool
+	HTTPHeaders  []common.NameValue
+}
+
+func httpClientOptions(httpClientCfg common.HTTPClient, pr proxy.Proxy) httpClientSettings {
+	cacheEnabled := false
+	if httpClientCfg.Cache.Enabled != nil {
+		cacheEnabled = *httpClientCfg.Cache.Enabled
+	}
+
+	var ttl, retention time.Duration
+	var compression bool
+
+	if httpClientCfg.Cache.TTL != nil {
+		ttl = time.Duration(*httpClientCfg.Cache.TTL)
+	}
+	if httpClientCfg.Cache.Retention != nil {
+		retention = time.Duration(*httpClientCfg.Cache.Retention)
+	}
+	if httpClientCfg.Cache.Compression != nil {
+		compression = *httpClientCfg.Cache.Compression
+	}
+
+	op := httpClientSettings{
+		CacheEnabled: cacheEnabled,
+		TTL:          ttl,
+		Retention:    retention,
+		Compression:  compression,
+		HTTPHeaders:  httpClientCfg.HTTPHeaders,
+	}
+
+	if len(pr.HTTPClient.HTTPHeaders) > 0 {
+		op.HTTPHeaders = mergeNameValues(op.HTTPHeaders, pr.HTTPClient.HTTPHeaders)
+	}
+
+	if pr.HTTPClient.Cache.Enabled != nil {
+		op.CacheEnabled = *pr.HTTPClient.Cache.Enabled
+	}
+	if !op.CacheEnabled {
+		return op
+	}
+
+	if pr.HTTPClient.Cache.TTL != nil {
+		op.TTL = time.Duration(*pr.HTTPClient.Cache.TTL)
+	}
+	if pr.HTTPClient.Cache.Retention != nil {
+		op.Retention = time.Duration(*pr.HTTPClient.Cache.Retention)
+	}
+	if pr.HTTPClient.Cache.Compression != nil {
+		op.Compression = *pr.HTTPClient.Cache.Compression
+	}
+
+	return op
+}
 
 func uniqueNames(names []string) []string {
 	seen := make(map[string]struct{})
@@ -26,11 +87,26 @@ func mergeProxies(proxies ...proxy.Proxy) proxy.Proxy {
 		if p.ConcurrentStreams > 0 {
 			result.ConcurrentStreams = p.ConcurrentStreams
 		}
-		result.Stream = mergeHandlers(
-			result.Stream, p.Stream)
 
-		result.Error.Handler = mergeHandlers(
-			result.Error.Handler, p.Error.Handler)
+		if p.HTTPClient.Cache.Enabled != nil {
+			result.HTTPClient.Cache.Enabled = p.HTTPClient.Cache.Enabled
+		}
+		if p.HTTPClient.Cache.TTL != nil {
+			result.HTTPClient.Cache.TTL = p.HTTPClient.Cache.TTL
+		}
+		if p.HTTPClient.Cache.Retention != nil {
+			result.HTTPClient.Cache.Retention = p.HTTPClient.Cache.Retention
+		}
+		if p.HTTPClient.Cache.Compression != nil {
+			result.HTTPClient.Cache.Compression = p.HTTPClient.Cache.Compression
+		}
+		if len(p.HTTPClient.HTTPHeaders) > 0 {
+			result.HTTPClient.HTTPHeaders = p.HTTPClient.HTTPHeaders
+		}
+
+		result.Stream = mergeHandlers(result.Stream, p.Stream)
+
+		result.Error.Handler = mergeHandlers(result.Error.Handler, p.Error.Handler)
 
 		result.Error.RateLimitExceeded = mergeHandlers(
 			result.Error.Handler, result.Error.RateLimitExceeded, p.Error.RateLimitExceeded)
@@ -74,4 +150,28 @@ func mergePairs[T ~[]common.NameValue](result *T, handler T) {
 		merged = append(merged, common.NameValue{Name: name, Value: value})
 	}
 	*result = merged
+}
+
+func mergeNameValues(base []common.NameValue, override []common.NameValue) []common.NameValue {
+	if len(override) == 0 {
+		return base
+	}
+	if len(base) == 0 {
+		return override
+	}
+
+	m := make(map[string]string, len(base)+len(override))
+
+	for _, nv := range base {
+		m[strings.ToLower(nv.Name)] = nv.Value
+	}
+	for _, nv := range override {
+		m[strings.ToLower(nv.Name)] = nv.Value
+	}
+
+	result := make([]common.NameValue, 0, len(m))
+	for name, value := range m {
+		result = append(result, common.NameValue{Name: name, Value: value})
+	}
+	return result
 }

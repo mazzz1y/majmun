@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"majmun/internal/config"
+	"majmun/internal/httpclient"
 	"majmun/internal/logging"
 	"majmun/internal/metrics"
 	"majmun/internal/urlgen"
@@ -18,6 +19,7 @@ type Manager struct {
 	clients        []*Client
 	secretToClient map[string]*Client
 	publicURLBase  string
+	cacheStore     *httpclient.Store
 }
 
 func NewManager(cfg *config.Config) (*Manager, error) {
@@ -29,6 +31,17 @@ func NewManager(cfg *config.Config) (*Manager, error) {
 
 	if cfg.Proxy.Enabled != nil && *cfg.Proxy.Enabled && cfg.Proxy.ConcurrentStreams > 0 {
 		m.semaphore = semaphore.NewWeighted(cfg.Proxy.ConcurrentStreams)
+	}
+
+	if cfg.HTTPClient.Cache.Enabled != nil && *cfg.HTTPClient.Cache.Enabled {
+		if cfg.HTTPClient.Cache.Path == nil {
+			return nil, fmt.Errorf("http_client.cache.path is required when cache is enabled")
+		}
+		st, err := httpclient.NewStore(*cfg.HTTPClient.Cache.Path)
+		if err != nil {
+			return nil, err
+		}
+		m.cacheStore = st
 	}
 
 	if err := m.initClients(); err != nil {
@@ -74,7 +87,7 @@ func (m *Manager) createClient(clientConf config.Client) (*Client, error) {
 		return nil, fmt.Errorf("failed to create URL generator: %w", err)
 	}
 
-	cl, err := NewClient(clientConf, urlGen, m.config.ChannelRules, m.config.PlaylistRules, m.publicURLBase)
+	cl, err := NewClient(clientConf, urlGen, m.config.ChannelRules, m.config.PlaylistRules, m.publicURLBase, m.cacheStore, m.config.HTTPClient)
 	if err != nil {
 		return nil, fmt.Errorf(
 			"failed to initialize client %s: %w", clientConf.Name, err)

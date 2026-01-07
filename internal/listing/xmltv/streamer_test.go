@@ -19,18 +19,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func createStreamer(subscriptions []listing.EPG, httpClient listing.HTTPClient, channelIDToName map[string]string) *Streamer {
-	channelLen := len(channelIDToName)
-	approxProgrammeLen := 300 * channelLen
-
-	return &Streamer{
-		subscriptions:    subscriptions,
-		httpClient:       httpClient,
-		channelIDToName:  channelIDToName,
-		addedProgrammes:  make(map[string]bool, approxProgrammeLen),
-		channelIDMapping: make(map[string]string, channelLen),
-		addedChannels:    make(map[string][]string, channelLen),
-	}
+func createStreamer(subscriptions []listing.EPG, channelIDToName map[string]string) *Streamer {
+	return NewStreamer(subscriptions, channelIDToName)
 }
 
 type MockHTTPClient struct {
@@ -45,7 +35,7 @@ func (m *MockHTTPClient) Do(req *http.Request) (*http.Response, error) {
 	return args.Get(0).(*http.Response), args.Error(1)
 }
 
-func createTestProvider(name string, epgs []string) (*app.EPG, error) {
+func createTestProvider(name string, epgs []string, httpClient listing.HTTPClient) (*app.EPG, error) {
 	generator, err := urlgen.NewGenerator("http://localhost", "secret", time.Hour, time.Hour)
 	if err != nil {
 		return nil, err
@@ -55,15 +45,15 @@ func createTestProvider(name string, epgs []string) (*app.EPG, error) {
 		generator,
 		epgs,
 		proxy.Proxy{},
+		httpClient,
 	)
 }
 
 func TestNewStreamer(t *testing.T) {
 	var subscriptions []listing.EPG
-	httpClient := &MockHTTPClient{}
 	channels := map[string]string{"channel1": "Channel One"}
 
-	streamer := createStreamer(subscriptions, httpClient, channels)
+	streamer := createStreamer(subscriptions, channels)
 	assert.NotNil(t, streamer)
 	assert.Equal(t, channels, streamer.channelIDToName)
 	assert.NotNil(t, streamer.addedProgrammes)
@@ -71,7 +61,7 @@ func TestNewStreamer(t *testing.T) {
 
 func TestStreamer_WriteTo(t *testing.T) {
 	ctx := context.Background()
-	streamer := createStreamer([]listing.EPG{}, &MockHTTPClient{}, nil)
+	streamer := createStreamer([]listing.EPG{}, nil)
 	buf := bytes.NewBuffer(nil)
 	_, err := streamer.WriteTo(ctx, buf)
 	assert.Error(t, err)
@@ -92,7 +82,7 @@ func TestStreamer_WriteTo(t *testing.T) {
   </programme>
 </tv>`
 
-	sub, err := createTestProvider("test-subscription", []string{"http://example.com/epg.xml"})
+	sub, err := createTestProvider("test-subscription", []string{"http://example.com/epg.xml"}, httpClient)
 	require.NoError(t, err)
 
 	response := &http.Response{
@@ -105,7 +95,7 @@ func TestStreamer_WriteTo(t *testing.T) {
 	})).Return(response, nil)
 
 	channels := map[string]string{"channel1": "Channel One"}
-	streamer = createStreamer([]listing.EPG{sub}, httpClient, channels)
+	streamer = createStreamer([]listing.EPG{sub}, channels)
 	buf = bytes.NewBuffer(nil)
 	_, err = streamer.WriteTo(ctx, buf)
 	require.NoError(t, err)
@@ -168,6 +158,7 @@ func TestStreamerWithMultipleEPGSources(t *testing.T) {
 			"http://example.com/epg1.xml",
 			"http://example.com/epg2.xml",
 		},
+		httpClient,
 	)
 	require.NoError(t, err)
 
@@ -176,7 +167,7 @@ func TestStreamerWithMultipleEPGSources(t *testing.T) {
 		"channel2": "Channel Two",
 	}
 
-	streamer := createStreamer([]listing.EPG{sub}, httpClient, channels)
+	streamer := createStreamer([]listing.EPG{sub}, channels)
 
 	buffer := &bytes.Buffer{}
 
@@ -232,12 +223,14 @@ func TestStreamerWithMultipleSubscriptionsAndEPGs(t *testing.T) {
 	sub1, err := createTestProvider(
 		"subscription-1",
 		[]string{"http://example.com/sub1_epg.xml"},
+		httpClient,
 	)
 	require.NoError(t, err)
 
 	sub2, err := createTestProvider(
 		"subscription-2",
 		[]string{"http://example.com/sub2_epg.xml"},
+		httpClient,
 	)
 	require.NoError(t, err)
 
@@ -246,7 +239,7 @@ func TestStreamerWithMultipleSubscriptionsAndEPGs(t *testing.T) {
 		"movies1": "Movies Channel",
 	}
 
-	streamer := createStreamer([]listing.EPG{sub1, sub2}, httpClient, channels)
+	streamer := createStreamer([]listing.EPG{sub1, sub2}, channels)
 
 	buffer := &bytes.Buffer{}
 
@@ -310,11 +303,11 @@ func TestChannelIDConflicts(t *testing.T) {
 		"http://example.com/epg1.xml",
 		"http://example.com/epg2.xml",
 		"http://example.com/epg3.xml",
-	})
+	}, httpClient)
 	require.NoError(t, err)
 
 	channels := map[string]string{"1337": "CNN Channel"}
-	streamer := createStreamer([]listing.EPG{sub}, httpClient, channels)
+	streamer := createStreamer([]listing.EPG{sub}, channels)
 
 	buf := &bytes.Buffer{}
 	_, err = streamer.WriteTo(ctx, buf)
@@ -365,11 +358,11 @@ func TestChannelNameMatching(t *testing.T) {
 	sub, err := createTestProvider("test", []string{
 		"http://example.com/epg1.xml",
 		"http://example.com/epg2.xml",
-	})
+	}, httpClient)
 	require.NoError(t, err)
 
 	channels := map[string]string{"1f3d47da": "CNN Channel"}
-	streamer := createStreamer([]listing.EPG{sub}, httpClient, channels)
+	streamer := createStreamer([]listing.EPG{sub}, channels)
 
 	buf := &bytes.Buffer{}
 	_, err = streamer.WriteTo(ctx, buf)
@@ -442,11 +435,11 @@ func TestTVGIDConflictIssue(t *testing.T) {
 		return req.URL.String() == "http://example.com/source3"
 	})).Return(response3, nil)
 
-	sub1, err := createTestProvider("source1", []string{"http://example.com/source1"})
+	sub1, err := createTestProvider("source1", []string{"http://example.com/source1"}, httpClient)
 	require.NoError(t, err)
-	sub2, err := createTestProvider("source2", []string{"http://example.com/source2"})
+	sub2, err := createTestProvider("source2", []string{"http://example.com/source2"}, httpClient)
 	require.NoError(t, err)
-	sub3, err := createTestProvider("source3", []string{"http://example.com/source3"})
+	sub3, err := createTestProvider("source3", []string{"http://example.com/source3"}, httpClient)
 	require.NoError(t, err)
 
 	expectedTVGID := listing.GenerateHashID("CNN")
@@ -454,7 +447,7 @@ func TestTVGIDConflictIssue(t *testing.T) {
 		expectedTVGID: "CNN",
 	}
 
-	streamer := createStreamer([]listing.EPG{sub1, sub2, sub3}, httpClient, channelMap)
+	streamer := createStreamer([]listing.EPG{sub1, sub2, sub3}, channelMap)
 
 	var buf bytes.Buffer
 	_, err = streamer.WriteTo(context.Background(), &buf)
@@ -510,9 +503,9 @@ func TestSameOriginalIDDifferentSources(t *testing.T) {
 		return req.URL.String() == "http://example.com/source2"
 	})).Return(response2, nil)
 
-	sub1, err := createTestProvider("source1", []string{"http://example.com/source1"})
+	sub1, err := createTestProvider("source1", []string{"http://example.com/source1"}, httpClient)
 	require.NoError(t, err)
-	sub2, err := createTestProvider("source2", []string{"http://example.com/source2"})
+	sub2, err := createTestProvider("source2", []string{"http://example.com/source2"}, httpClient)
 	require.NoError(t, err)
 
 	tvgID1 := listing.GenerateHashID("CNN US")
@@ -522,7 +515,7 @@ func TestSameOriginalIDDifferentSources(t *testing.T) {
 		tvgID2: "CNN International",
 	}
 
-	streamer := createStreamer([]listing.EPG{sub1, sub2}, httpClient, channelMap)
+	streamer := createStreamer([]listing.EPG{sub1, sub2}, channelMap)
 
 	var buf bytes.Buffer
 	_, err = streamer.WriteTo(context.Background(), &buf)

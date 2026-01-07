@@ -72,6 +72,7 @@ func (s *Server) proxyAuthMiddleware(next http.Handler) http.Handler {
 				}
 
 				ctx = ctxutil.WithClient(ctx, client)
+				ctx = ctxutil.WithProvider(ctx, provider)
 				ctx = ctxutil.WithStreamData(ctx, data)
 				ctx = ctxutil.WithProviderType(ctx, provider.Type())
 				ctx = ctxutil.WithProviderName(ctx, provider.Name())

@@ -1,4 +1,4 @@
-package cache
+package httpclient
 
 import (
 	"compress/gzip"
@@ -16,22 +16,26 @@ type status int
 
 const (
 	statusValid status = iota
-	statusExpired
 	statusRenewed
+	statusExpired
 	statusNotFound
 )
 
 type Metadata struct {
-	CachedAt int64             `json:"cached_at"`
-	Headers  map[string]string `json:"headers"`
+	CachedAt         int64             `json:"cached_at"`
+	RetentionSeconds *int64            `json:"retention_seconds"`
+	Headers          map[string]string `json:"headers"`
 }
 
 type Reader struct {
 	URL             string
 	Name            string
 	FilePath        string
+	TmpFilePath     string
 	MetaPath        string
+	TmpMetaPath     string
 	ReadCloser      io.ReadCloser
+	cacheWrite      bool
 	file            *os.File
 	gzipWriter      *gzip.Writer
 	originResponse  *http.Response
@@ -40,6 +44,7 @@ type Reader struct {
 	downloadedBytes int64
 	contentType     string
 	ttl             time.Duration
+	retention       time.Duration
 	compression     bool
 	eofReached      bool
 }
@@ -53,16 +58,6 @@ func (r *Reader) Read(p []byte) (n int, err error) {
 }
 
 func (r *Reader) Close() error {
-	if r.originResponse != nil {
-		if r.isDownloadComplete() {
-			if err := r.SaveMetadata(); err != nil {
-				return err
-			}
-		} else {
-			r.Cleanup()
-		}
-	}
-
 	var closers []func() error
 
 	if r.originResponse != nil {
@@ -84,8 +79,33 @@ func (r *Reader) Close() error {
 			firstErr = err
 		}
 	}
+	if firstErr != nil {
+		return firstErr
+	}
 
-	return firstErr
+	if !r.cacheWrite {
+		return nil
+	}
+
+	if !r.isDownloadComplete() {
+		r.Cleanup()
+		return nil
+	}
+
+	if r.TmpFilePath != "" {
+		_ = os.Remove(r.FilePath)
+		if err := os.Rename(r.TmpFilePath, r.FilePath); err != nil {
+			r.Cleanup()
+			return err
+		}
+	}
+
+	if err := r.SaveMetadata(); err != nil {
+		r.Cleanup()
+		return err
+	}
+
+	return nil
 }
 
 func (r *Reader) getCachedHeaders() map[string]string {
@@ -97,12 +117,15 @@ func (r *Reader) getCachedHeaders() map[string]string {
 }
 
 func (r *Reader) createCacheFile() error {
-	_ = os.Remove(r.FilePath)
-	file, err := os.Create(r.FilePath)
+	if r.TmpFilePath == "" {
+		r.TmpFilePath = r.FilePath + ".tmp"
+	}
+	_ = os.Remove(r.TmpFilePath)
+	file, err := os.Create(r.TmpFilePath)
 	if err != nil {
 		return fmt.Errorf("failed to create cache file: %w", err)
 	}
-
+	r.cacheWrite = true
 	r.file = file
 	return nil
 }
@@ -328,19 +351,4 @@ func (r *Reader) newCachingReader(ctx context.Context) (io.ReadCloser, error) {
 	}
 
 	return reader, nil
-}
-
-func formatCacheStatus(status status) string {
-	switch status {
-	case statusValid:
-		return "cached"
-	case statusExpired:
-		return "expired"
-	case statusNotFound:
-		return "not found"
-	case statusRenewed:
-		return "renewed"
-	default:
-		return "unknown"
-	}
 }

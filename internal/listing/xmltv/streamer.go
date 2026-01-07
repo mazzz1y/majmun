@@ -13,7 +13,6 @@ import (
 
 type Streamer struct {
 	subscriptions    []listing.EPG
-	httpClient       listing.HTTPClient
 	channelIDToName  map[string]string
 	addedChannels    map[string][]string
 	addedProgrammes  map[string]bool
@@ -26,14 +25,13 @@ type Encoder interface {
 	Close() error
 }
 
-func NewStreamer(subs []listing.EPG, httpClient listing.HTTPClient, channelIDToName map[string]string) *Streamer {
+func NewStreamer(subs []listing.EPG, channelIDToName map[string]string) *Streamer {
 	subscriptions := subs
 	channelLen := len(channelIDToName)
 	approxProgrammeLen := 300 * channelLen
 
 	return &Streamer{
 		subscriptions:    subscriptions,
-		httpClient:       httpClient,
 		channelIDToName:  channelIDToName,
 		channelIDMapping: make(map[string]string, channelLen),
 		addedProgrammes:  make(map[string]bool, approxProgrammeLen),
@@ -59,7 +57,7 @@ func (s *Streamer) WriteTo(ctx context.Context, w io.Writer) (int64, error) {
 	var decoders []*decoderWrapper
 	for _, sub := range s.subscriptions {
 		for _, url := range sub.EPGs() {
-			decoders = append(decoders, newDecoderWrapper(sub, s.httpClient, url))
+			decoders = append(decoders, newDecoderWrapper(sub, sub.HTTPClient(), url))
 		}
 	}
 	defer func() {

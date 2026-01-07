@@ -1,4 +1,4 @@
-package cache
+package httpclient
 
 import (
 	"fmt"
@@ -13,13 +13,14 @@ type headerTransport struct {
 }
 
 func (t *headerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	req2 := req.Clone(req.Context())
 	for _, header := range t.headers {
-		req.Header.Set(header.Name, header.Value)
+		req2.Header.Set(header.Name, header.Value)
 	}
-	return t.base.RoundTrip(req)
+	return t.base.RoundTrip(req2)
 }
 
-func newDirectHTTPClient(extraHeaders []common.NameValue) *http.Client {
+func NewDirectClient(extraHeaders []common.NameValue) *http.Client {
 	return &http.Client{
 		Transport: &headerTransport{
 			base:    http.DefaultTransport,
