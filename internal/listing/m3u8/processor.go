@@ -9,19 +9,16 @@ import (
 	"majmun/internal/parser/m3u8"
 	"majmun/internal/urlgen"
 	"net/url"
-	"strings"
 )
 
 type Processor struct {
 	channelsByID   map[string]*store.Channel
-	channelsByName map[string]*store.Channel
 	channelStreams map[*store.Channel][]urlgen.Stream
 }
 
 func NewProcessor() *Processor {
 	return &Processor{
 		channelsByID:   make(map[string]*store.Channel),
-		channelsByName: make(map[string]*store.Channel),
 		channelStreams: make(map[*store.Channel][]urlgen.Stream),
 	}
 }
@@ -79,11 +76,6 @@ func (p *Processor) findDuplicate(ch *store.Channel) *store.Channel {
 		if existing, exists := p.channelsByID[id]; exists {
 			return existing
 		}
-	} else {
-		trackName := strings.ToLower(ch.Name())
-		if existing, exists := p.channelsByName[trackName]; exists {
-			return existing
-		}
 	}
 	return nil
 }
@@ -92,9 +84,6 @@ func (p *Processor) trackChannel(ch *store.Channel) {
 	id, hasID := ch.GetAttr(m3u8.AttrTvgID)
 	if hasID && id != "" {
 		p.channelsByID[id] = ch
-	} else {
-		trackName := strings.ToLower(ch.Name())
-		p.channelsByName[trackName] = ch
 	}
 }
 
