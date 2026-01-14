@@ -66,47 +66,19 @@ proxy:
 
 ### Main Proxy Configuration
 
-| Field         | Type                             | Required | Description                                        |
-|---------------|----------------------------------|----------|----------------------------------------------------|
-| `enabled`     | `bool`                           | No       | Enable or disable proxy functionality              |
-| `concurrency` | `int`                            | No       | Maximum concurrent streams (0 = unlimited)         |
-| `http_client` | [`HTTPClient`](./http_client.md) | No       | HTTP client configuration overrides for this proxy |
-| `stream`      | `command`                        | No       | Command configuration for stream processing        |
-| `error`       | `command`                        | No       | Default error handling configuration               |
+| Field         | Type                                   | Required | Description                                        |
+|---------------|----------------------------------------|----------|----------------------------------------------------|
+| `enabled`     | `bool`                                 | No       | Enable or disable proxy functionality              |
+| `concurrency` | `int`                                  | No       | Maximum concurrent streams (0 = unlimited)         |
+| `http_client` | [`HTTPClient`](./proxy/http_client.md) | No       | HTTP client configuration overrides for this proxy |
+| `stream`      | `command`                              | No       | Command configuration for stream processing        |
+| `error`       | `command`                              | No       | Default error handling configuration               |
 
+### Related Documentation
 
-### Command Object
-
-!!! note "Command String Format"
-Command can be specified as a string or an array of strings, similar to Dockerfile syntax. If the command is specified
-as a string, it will be wrapped in a `/bin/sh` shell.
-
-| Field                | Type                               | Required | Description                              |
-|----------------------|------------------------------------|----------|------------------------------------------|
-| `command`            | `gotemplate` or `[]gotemplate`     | No       | Command array to execute                 |
-| `template_variables` | [`[]NameValue`](#namevalue-object) | No       | Variables available in command templates |
-| `env_variables`      | [`[]NameValue`](#namevalue-object) | No       | Environment variables for the command    |
-
-### Error Handling Objects
-
-| Field                 | Type      | Required | Description                               |
-|-----------------------|-----------|----------|-------------------------------------------|
-| `upstream_error`      | `command` | No       | Command to run when upstream source fails |
-| `rate_limit_exceeded` | `command` | No       | Command to run when rate limits are hit   |
-| `link_expired`        | `command` | No       | Command to run when stream links expire   |
-
-### Name/Value Object
-
-| Field   | Type     | Required | Description                          |
-|---------|----------|----------|--------------------------------------|
-| `name`  | `string` | Yes      | Name identifier for the object       |
-| `value` | `string` | Yes      | Value associated with the given name |
-
-### Available Template Variables
-
-| Variable | Type     | Description |
-|----------|----------|-------------|
-| `url`    | `string` | Stream URL  |
+- [Stream Processing](./proxy/stream.md) - Configure stream remuxing commands
+- [Error Handling](./proxy/error.md) - Configure error fallback content
+- [HTTP Client](./proxy/http_client.md) - Configure HTTP request settings
 
 ## Examples
 
@@ -141,7 +113,6 @@ proxy:
     template_variables:
       - name: ffmpeg_log_level
         value: "error"
-
 ```
 
 ### Proxy HTTP Client Overrides
@@ -156,45 +127,4 @@ proxy:
     headers:
       - name: User-Agent
         value: "MyUA"
-```
-
-### Error Handling with Test Pattern
-
-```yaml
-proxy:
-  enabled: true
-  error:
-    upstream_error:
-      command:
-        - "ffmpeg"
-        - "-v"
-        - "{{ default \"fatal\" .ffmpeg_log_level }}"
-        - "-f"
-        - "lavfi"
-        - "-i"
-        - "testsrc2=size=1280x720:rate=25"
-        - "-f"
-        - "lavfi"
-        - "-i"
-        - "sine=frequency=1000:duration=0"
-        - "-c:v"
-        - "libx264"
-        - "-c:a"
-        - "aac"
-        - "-t"
-        - "3600"
-        - "-f"
-        - "mpegts"
-        - "pipe:1"
-      template_variables:
-        - name: ffmpeg_log_level
-          value: "fatal"
-    rate_limit_exceeded:
-      template_variables:
-        - name: message
-          value: "Rate limit exceeded. Please try again later."
-    link_expired:
-      template_variables:
-        - name: message
-          value: "Link has expired. Please refresh your playlist."
 ```

@@ -33,10 +33,13 @@ nav:
   - Configuration:
       - Overview: config.md
       - Logs: config/logs.md
-      - HTTP Client: config/http_client.md
       - Server: config/server.md
       - URL Generator: config/url_generator.md
-      - Proxy: config/proxy.md
+      - Proxy:
+          - Overview: config/proxy.md
+          - Stream: config/proxy/stream.md
+          - Error: config/proxy/error.md
+          - HTTP Client: config/proxy/http_client.md
       - Playlists: config/playlists.md
       - EPGs: config/epgs.md
       - Clients: config/clients.md
