@@ -16,12 +16,17 @@ server:
   listen_addr: ":8080"
   public_url: "http://localhost:8080"
 
+url_generator:
+  secret: "your-secret-key"
+
 proxy:
-  enabled: true # Proxy everything through the gateway
+  enabled: true
   http_client:
     cache:
       enabled: true
-      ttl: "5m"
+      path: /tmp/cache
+      ttl: 5m
+      retention: 24h
 
 playlists:
   - name: basic-tv
@@ -34,7 +39,6 @@ epgs:
 clients:
   - name: "tv"
     secret: "tv-secret"
-
 ```
 
 ## Advanced Configuration

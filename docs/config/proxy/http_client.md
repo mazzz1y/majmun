@@ -31,12 +31,13 @@ proxy:
 
 ### `http_client.cache`
 
-| Field         | Type     | Required | Description                               |
-|---------------|----------|----------|-------------------------------------------|
-| `enabled`     | `bool`   | No       | Enable/disable disk cache (default: true) |
-| `ttl`         | `string` | No       | Cache TTL (e.g., "5m", "1h")              |
-| `retention`   | `string` | No       | Cache retention duration                  |
-| `compression` | `bool`   | No       | Enable gzip compression for cached files  |
+| Field         | Type       | Required                | Description                               |
+|---------------|------------|-------------------------|-------------------------------------------|
+| `enabled`     | `bool`     | No                      | Enable/disable disk cache (default: true) |
+| `path`        | `string`   | Yes (if cache enabled)  | Path to cache directory (global only)     |
+| `ttl`         | `duration` | Yes (if cache enabled)  | Cache TTL (e.g., "5m", "1h")              |
+| `retention`   | `duration` | Yes (if cache enabled)  | Cache retention duration                  |
+| `compression` | `bool`     | No                      | Enable gzip compression for cached files  |
 
 ### Name/Value Object
 
@@ -54,6 +55,7 @@ proxy:
   http_client:
     cache:
       enabled: true
+      path: /tmp/cache
       ttl: 5m
       retention: 24h
 ```
@@ -77,6 +79,7 @@ proxy:
   http_client:
     cache:
       enabled: true
+      path: /tmp/cache
       ttl: 10m
       retention: 48h
       compression: true
@@ -89,6 +92,7 @@ proxy:
   http_client:
     cache:
       enabled: true
+      path: /tmp/cache
       ttl: 15m
       retention: 72h
       compression: true

@@ -31,23 +31,23 @@ Prefer the best quality:
 
 ```yaml
 # Input: CNN HD, CNN 4K
-# Output: CNN HQ
+# Output: CNN HQ (with fallback to CNN HD)
 
 playlist_rules:
-  - remove_duplicates:
+  - merge_duplicates:
       patterns: ["4K", "UHD", "FHD", "HD", "SD"]
       final_value:
         template: "{{.BaseName}} HQ"
 ```
 
-Restrict deduplication to specific clients:
+Restrict merging to specific clients:
 
 ```yaml
 # Input: CNN HD, CNN 4K, CNN SD
-# Output: CNN SD
+# Output: CNN SD (with fallbacks to CNN HD, CNN 4K)
 
 playlist_rules:
-  - remove_duplicates:
+  - merge_duplicates:
       patterns: ["SD", "HD", "FHD", "4K"]
       condition:
         clients: ["kitchen", "office-lite"]

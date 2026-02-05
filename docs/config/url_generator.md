@@ -34,8 +34,11 @@ Duration values support the following units:
 - `m` - minutes
 - `h` - hours
 - `d` - days (24 hours)
+- `w` - weeks (7 days)
+- `M` - months (30 days)
+- `y` - years (365 days)
 
-Examples: `30s`, `5m`, `2h`, `1d`, `24h30m`
+Examples: `30s`, `5m`, `2h`, `1d`, `2w`
 
 ## URL Generation
 

@@ -12,11 +12,10 @@ remove_field:
 
 ## Fields
 
-| Field     | Type                           | Required | Description                    |
-|-----------|--------------------------------|----------|--------------------------------|
-| selector  | [`Selector`](../selector.md)   | Yes      | What to remove (attribute/tag) |
-| patterns  | `[]regex`                      | Yes      | Patterns (regex) to match      |
-| condition | [`Condition`](../condition.md) | No       | Optional, restricts rule       |
+| Field     | Type                           | Required | Description                             |
+|-----------|--------------------------------|----------|-----------------------------------------|
+| selector  | [`Selector`](../selector.md)   | Yes      | What to remove (attribute/tag)          |
+| condition | [`Condition`](../condition.md) | No       | Optional, restricts which channels match |
 
 ## Examples
 
