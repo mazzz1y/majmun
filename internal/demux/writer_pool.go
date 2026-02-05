@@ -18,28 +18,26 @@ func NewWriterPool() *WriterPool {
 
 func (p *WriterPool) Stop() {
 	p.mutex.Lock()
-	defer p.mutex.Unlock()
+	writers := p.writers
+	p.writers = make(map[string]*StreamWriter)
+	p.mutex.Unlock()
 
-	for key, writer := range p.writers {
+	for _, writer := range writers {
 		writer.Close()
-		delete(p.writers, key)
 	}
 }
 
 func (p *WriterPool) AddClient(streamKey string, client io.WriteCloser) (*StreamWriter, bool) {
 	p.mutex.Lock()
-	defer p.mutex.Unlock()
-
 	writer, exists := p.writers[streamKey]
-	if exists {
-		writer.AddClient(client)
-		return writer, false
+	if !exists {
+		writer = NewStreamWriter()
+		p.writers[streamKey] = writer
 	}
+	p.mutex.Unlock()
 
-	writer = NewStreamWriter()
-	p.writers[streamKey] = writer
 	writer.AddClient(client)
-	return writer, true
+	return writer, !exists
 }
 
 func (p *WriterPool) RemoveClient(streamKey string, client io.WriteCloser) {
@@ -52,12 +50,12 @@ func (p *WriterPool) RemoveClient(streamKey string, client io.WriteCloser) {
 	}
 }
 
-func (p *WriterPool) RemoveAndClose(streamKey string) {
+func (p *WriterPool) CloseStream(streamKey string) {
 	p.mutex.Lock()
-	defer p.mutex.Unlock()
-
 	writer := p.writers[streamKey]
 	delete(p.writers, streamKey)
+	p.mutex.Unlock()
+
 	if writer != nil {
 		writer.Close()
 	}

@@ -24,7 +24,6 @@ type Streamer interface {
 }
 
 type Request struct {
-	Context   context.Context
 	StreamKey string
 	Streamer  Streamer
 	Semaphore *semaphore.Weighted
@@ -40,19 +39,17 @@ func NewDemuxer() *Demuxer {
 	}
 }
 
-func (m *Demuxer) Stop() {
-	m.pool.Stop()
+func (d *Demuxer) Stop() {
+	d.pool.Stop()
 }
 
-func (m *Demuxer) GetReader(ctx context.Context, req Request) (io.ReadCloser, error) {
+func (d *Demuxer) GetReader(ctx context.Context, req Request) (io.ReadCloser, error) {
 	pr, pw := io.Pipe()
 
 	clientCtx := ctxutil.WithStreamID(ctx, req.StreamKey)
 	streamCtx := context.WithoutCancel(clientCtx)
 
-	sr := &streamReader{
-		PipeReader: pr,
-	}
+	sr := &streamReader{PipeReader: pr}
 
 	stop := context.AfterFunc(clientCtx, func() {
 		_ = pr.CloseWithError(clientCtx.Err())
@@ -62,19 +59,19 @@ func (m *Demuxer) GetReader(ctx context.Context, req Request) (io.ReadCloser, er
 	sr.closeFunc = func() {
 		stop()
 		_ = pw.Close()
-		m.pool.RemoveClient(req.StreamKey, pw)
+		d.pool.RemoveClient(req.StreamKey, pw)
 		logging.Debug(clientCtx, "reader closed")
 	}
 
-	writer, isNewStream := m.pool.AddClient(req.StreamKey, pw)
-	if isNewStream {
+	writer, isNew := d.pool.AddClient(req.StreamKey, pw)
+	if isNew {
 		if !utils.AcquireSemaphore(streamCtx, req.Semaphore, semaphoreTimeout, "subscription") {
-			m.pool.RemoveAndClose(req.StreamKey)
+			d.pool.CloseStream(req.StreamKey)
 			_ = sr.Close()
 			return nil, ErrSubscriptionSemaphore
 		}
 		logging.Debug(streamCtx, "acquired subscription semaphore")
-		go m.startStream(streamCtx, req, writer)
+		go d.startStream(streamCtx, req, writer)
 		logging.Info(streamCtx, "started new stream")
 	} else {
 		metrics.IncStreamsReused(ctx)
@@ -84,32 +81,31 @@ func (m *Demuxer) GetReader(ctx context.Context, req Request) (io.ReadCloser, er
 	return sr, nil
 }
 
-func (m *Demuxer) startStream(ctx context.Context, req Request, writer *StreamWriter) {
+func (d *Demuxer) startStream(ctx context.Context, req Request, writer *StreamWriter) {
 	metrics.IncPlaylistStreamsActive(ctx)
 	defer metrics.DecPlaylistStreamsActive(ctx)
-	defer m.pool.RemoveAndClose(req.StreamKey)
+	defer d.pool.CloseStream(req.StreamKey)
+	defer func() {
+		if req.Semaphore != nil {
+			req.Semaphore.Release(1)
+			logging.Debug(ctx, "releasing subscription semaphore")
+		}
+	}()
 
-	streamID := ctxutil.StreamID(ctx)
-	streamCtx, cancel := context.WithCancel(ctxutil.WithStreamID(context.Background(), streamID))
+	streamCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	go func() {
-		if req.Semaphore != nil {
-			defer req.Semaphore.Release(1)
-			defer logging.Debug(ctx, "releasing subscription semaphore")
-		}
-
 		select {
-		case <-writer.EmptyChannel():
+		case <-writer.WaitEmpty():
 			logging.Debug(ctx, "no clients left, stopping stream")
 			cancel()
 		case <-streamCtx.Done():
-			logging.Debug(ctx, "context canceled, stopping stream")
 		}
 	}()
 
 	_, err := req.Streamer.Stream(streamCtx, writer)
 	if err != nil && !errors.Is(err, context.Canceled) {
-		logging.Error(streamCtx, err, "stream failed")
+		logging.Error(ctx, err, "stream failed")
 	}
 }
