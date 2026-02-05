@@ -123,8 +123,8 @@ func (ps *Playlist) ProxyConfig() proxy.Proxy {
 	return ps.proxyConfig
 }
 
-func (ps *Playlist) LinkStreamer(streamUrl string) *shell.Streamer {
-	return ps.linkStreamer.WithTemplateVars(map[string]any{"url": streamUrl})
+func (ps *Playlist) LinkStreamer(streamURL string) *shell.Streamer {
+	return ps.linkStreamer.WithTemplateVars(map[string]any{"url": streamURL})
 }
 
 func (ps *Playlist) LimitStreamer() *shell.Streamer {

@@ -42,7 +42,7 @@ Examples: `30s`, `5m`, `2h`, `1d`, `24h30m`
 The URL generator creates encrypted URLs in the following format:
 
 ```
-{public_url}/f{extension}
+{public_url}/{encrypted_token}{extension}
 ```
 
 Where:

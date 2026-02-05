@@ -87,12 +87,9 @@ func (c *Config) Validate() error {
 
 		if client.Secret != "" {
 			if existingClients, exists := clientSecrets[client.Secret]; exists {
-				allClients := append(existingClients, client.Name)
-				clientSecrets[client.Secret] = allClients
-				return fmt.Errorf("duplicate secret: %v", allClients)
-			} else {
-				clientSecrets[client.Secret] = []string{client.Name}
+				return fmt.Errorf("duplicate secret: %v", append(existingClients, client.Name))
 			}
+			clientSecrets[client.Secret] = []string{client.Name}
 		}
 	}
 

@@ -15,6 +15,6 @@ server:
 
 | Field          | Type     | Required | Default                   | Description                                       |
 |:---------------|:---------|:---------|:--------------------------|:--------------------------------------------------|
-| `listen_addr`  | `string` | Yes      | `":6078"`                 | Address the gateway listens on                    |
-| `public_url`   | `string` | Yes      | `"http://127.0.0.1:6078"` | Public URL of the gateway, used to generate links |
+| `listen_addr`  | `string` | Yes      | `":8080"`                 | Address the gateway listens on                    |
+| `public_url`   | `string` | Yes      | `"http://127.0.0.1:8080"` | Public URL of the gateway, used to generate links |
 | `metrics_addr` | `string` | No       | `""`                      | Address for the metrics server, disabled if empty |

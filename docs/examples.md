@@ -17,7 +17,7 @@ server:
   public_url: "http://localhost:8080"
 
 proxy:
-  enabled: true # Proxy everything throw the gateway
+  enabled: true # Proxy everything through the gateway
   http_client:
     cache:
       enabled: true

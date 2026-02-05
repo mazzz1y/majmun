@@ -1,4 +1,4 @@
-Mark as Hidden
+# Mark as Hidden
 
 The `mark_hidden` rule marks channels as hidden from metrics and logs.
 

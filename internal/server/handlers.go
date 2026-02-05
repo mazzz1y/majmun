@@ -68,7 +68,7 @@ func (s *Server) handlePlaylist(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleEPG(w http.ResponseWriter, r *http.Request) {
 	ctx := ctxutil.WithRequestType(r.Context(), metrics.RequestTypeEPG)
 
-	logging.Info(ctx, "epg request")
+	logging.Debug(ctx, "epg request")
 
 	streamer, err := s.prepareEPGStreamer(ctx)
 	if err != nil {

@@ -44,7 +44,6 @@ func NewDemuxer() *Demuxer {
 		pool:          NewWriterPool(),
 		rootCtx:       rootCtx,
 		rootCtxCancel: cancel,
-		streamLocks:   sync.Map{},
 	}
 }
 
@@ -117,7 +116,7 @@ func (m *Demuxer) startStream(ctx context.Context, req Request) {
 	unlock()
 
 	if writer == nil {
-		logging.Error(ctx, nil, "failed to get writer")
+		logging.Error(ctx, errors.New("writer is nil"), "failed to get writer")
 		return
 	}
 

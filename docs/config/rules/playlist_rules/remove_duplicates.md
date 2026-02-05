@@ -6,7 +6,7 @@ CNN").
 ## YAML Structure
 
 ```yaml
-merge_duplicates:
+remove_duplicates:
   patterns: []
   selector: ""
   final_value: {}

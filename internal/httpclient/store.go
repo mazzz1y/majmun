@@ -25,6 +25,7 @@ type Store struct {
 	dir           string
 	cleanupTicker *time.Ticker
 	doneCh        chan struct{}
+	closed        bool
 }
 
 func NewStore(path string) (*Store, error) {
@@ -57,6 +58,10 @@ func (s *Store) NewHTTPClient(opt Options) *http.Client {
 }
 
 func (s *Store) Close() {
+	if s.closed {
+		return
+	}
+	s.closed = true
 	if s.cleanupTicker != nil {
 		s.cleanupTicker.Stop()
 	}

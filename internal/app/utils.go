@@ -137,18 +137,18 @@ func mergeNameValues(base []common.NameValue, override []common.NameValue) []com
 		return override
 	}
 
-	m := make(map[string]string, len(base)+len(override))
+	m := make(map[string]common.NameValue, len(base)+len(override))
 
 	for _, nv := range base {
-		m[strings.ToLower(nv.Name)] = nv.Value
+		m[strings.ToLower(nv.Name)] = nv
 	}
 	for _, nv := range override {
-		m[strings.ToLower(nv.Name)] = nv.Value
+		m[strings.ToLower(nv.Name)] = nv
 	}
 
 	result := make([]common.NameValue, 0, len(m))
-	for name, value := range m {
-		result = append(result, common.NameValue{Name: name, Value: value})
+	for _, nv := range m {
+		result = append(result, nv)
 	}
 	return result
 }

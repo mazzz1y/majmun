@@ -98,11 +98,8 @@ func (sw *StreamWriter) Write(p []byte) (n int, err error) {
 		return len(data), nil
 	}
 
-	sharedData := make([]byte, len(data))
-	copy(sharedData, data)
-
 	for _, cw := range sw.clients {
-		cw.Write(sharedData)
+		cw.Write(data)
 	}
 	sw.clientsLock.RUnlock()
 

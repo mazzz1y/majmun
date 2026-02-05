@@ -168,8 +168,8 @@ func LogFields(ctx context.Context) []any {
 	if name := SemaphoreName(ctx); name != "" {
 		fields = append(fields, "semaphore_name", name)
 	}
-	if id := ChannelName(ctx); id != "" {
-		fields = append(fields, "channel_id", id)
+	if name := ChannelName(ctx); name != "" {
+		fields = append(fields, "channel_name", name)
 	}
 
 	return fields

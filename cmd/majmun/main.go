@@ -3,17 +3,17 @@ package main
 import (
 	"context"
 	"flag"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"majmun/internal/config"
 	"majmun/internal/logging"
 	"majmun/internal/server"
-	"os"
-	"os/signal"
-	"syscall"
 )
 
 func main() {
-	ctx := context.TODO()
+	ctx := context.Background()
 	configPath := flag.String("config", "config.yaml", "path to configuration (file or dir)")
 	flag.Parse()
 

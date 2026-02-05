@@ -89,10 +89,10 @@ func (s *Server) Start() error {
 }
 
 func (s *Server) Stop() error {
-	s.cancel()
-
-	ctx, cancel := context.WithTimeout(s.ctx, 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+
+	s.cancel()
 
 	s.demux.Stop()
 
@@ -116,10 +116,6 @@ func (s *Server) Stop() error {
 
 func (s *Server) setupRoutes() {
 	s.router.HandleFunc("/healthz", s.handleHealthz)
-
-	if s.metricsServer != nil {
-		s.router.Handle("/metrics", promhttp.HandlerFor(metrics.Registry, promhttp.HandlerOpts{}))
-	}
 
 	s.router.Use(s.requestIDMiddleware)
 	s.router.Use(s.loggerMiddleware)

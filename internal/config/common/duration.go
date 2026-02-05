@@ -9,6 +9,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+var durationRegex = regexp.MustCompile(`^(\d+)([smhdwMy])$`)
+
 type Duration time.Duration
 
 func (t *Duration) UnmarshalYAML(value *yaml.Node) error {
@@ -21,8 +23,7 @@ func (t *Duration) UnmarshalYAML(value *yaml.Node) error {
 		return nil
 	}
 
-	re := regexp.MustCompile(`^(\d+)([smhdwMy])$`)
-	matches := re.FindStringSubmatch(ttlStr)
+	matches := durationRegex.FindStringSubmatch(ttlStr)
 
 	if matches == nil {
 		return fmt.Errorf("invalid duration format: %s", ttlStr)
@@ -50,8 +51,6 @@ func (t *Duration) UnmarshalYAML(value *yaml.Node) error {
 		*t = Duration(time.Duration(val) * 30 * 24 * time.Hour)
 	case "y":
 		*t = Duration(time.Duration(val) * 365 * 24 * time.Hour)
-	default:
-		return fmt.Errorf("unknown time unit: %s", unit)
 	}
 
 	return nil

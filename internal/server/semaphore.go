@@ -27,7 +27,7 @@ func (s *Server) acquireSemaphores(ctx context.Context) bool {
 			if sem == nil || utils.AcquireSemaphore(gCtx, sem, semaphoreTimeout, reason) {
 				return nil
 			}
-			metrics.IncStreamsFailures(ctx, reason)
+			metrics.IncStreamsFailures(gCtx, reason)
 			return fmt.Errorf("failed to acquire semaphore: %s", reason)
 		}
 	}

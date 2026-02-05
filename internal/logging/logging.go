@@ -90,7 +90,7 @@ func HttpRequest(ctx context.Context, r *http.Request, status int, duration time
 		level = slog.LevelWarn
 	}
 
-	ctxArgs := extractContextValues(ctx)
+	ctxArgs := ctxutil.LogFields(ctx)
 
 	stdFields := []any{
 		"remote", r.RemoteAddr,
@@ -154,10 +154,6 @@ func log(ctx context.Context, level slog.Level, msg string, args ...any) {
 		args = combinedArgs
 	}
 	logger.Log(ctx, level, msg, args...)
-}
-
-func extractContextValues(ctx context.Context) []any {
-	return ctxutil.LogFields(ctx)
 }
 
 func humanizeBytes(bytes int64) string {

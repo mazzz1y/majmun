@@ -13,7 +13,6 @@ func (t *Template) UnmarshalYAML(value *yaml.Node) error {
 	var tmplStr string
 	if err := value.Decode(&tmplStr); err != nil {
 		return err
-
 	}
 	tmpl, err := template.New("yaml_template").Funcs(sprig.FuncMap()).Parse(tmplStr)
 	if err != nil {

@@ -44,7 +44,7 @@ func (s *Server) handleStreamProxy(ctx context.Context, w http.ResponseWriter, r
 	ctx = ctxutil.WithChannelName(ctx, data.StreamData.ChannelName)
 
 	if !s.acquireSemaphores(ctx) {
-		logging.Error(ctx, errors.New("failed to acquire semaphores"), "")
+		logging.Error(ctx, errors.New("failed to acquire semaphores"), "stream proxy failed")
 		if len(data.StreamData.Streams) > 0 {
 			firstProvider := client.GetProvider(
 				data.StreamData.Streams[0].ProviderInfo.ProviderType,
@@ -201,7 +201,7 @@ func (s *Server) streamToResponse(
 	written, err := io.Copy(w, reader)
 
 	if err == nil && written == 0 {
-		logging.Error(ctx, errors.New("no data written to response"), "")
+		logging.Error(ctx, errors.New("no data written to response"), "stream empty")
 		metrics.IncStreamsFailures(ctx, metrics.FailureReasonUpstreamError)
 		return streamResult{false, false, true}
 	}

@@ -154,7 +154,7 @@ func (s *Streamer) renderCommand(tmplVars map[string]any) ([]string, error) {
 		if err != nil {
 			return nil, err
 		}
-		return []string{"sh", "-s", result}, nil
+		return []string{"sh", "-c", result}, nil
 	}
 
 	command := make([]string, cmdLen)
