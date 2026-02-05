@@ -55,5 +55,5 @@ func (p *Proxy) UnmarshalYAML(value *yaml.Node) error {
 	}
 
 	type proxyYAML Proxy
-	return value.Decode((*proxyYAML)(p))
+	return common.DecodeStrict(value, (*proxyYAML)(p))
 }

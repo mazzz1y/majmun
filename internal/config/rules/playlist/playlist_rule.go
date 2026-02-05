@@ -2,6 +2,7 @@ package playlist
 
 import (
 	"fmt"
+	"majmun/internal/config/common"
 
 	"gopkg.in/yaml.v3"
 )
@@ -36,7 +37,7 @@ func (r *Rule) UnmarshalYAML(value *yaml.Node) error {
 	type rawRule Rule
 	var rr rawRule
 
-	if err := value.Decode(&rr); err != nil {
+	if err := common.DecodeStrict(value, &rr); err != nil {
 		return err
 	}
 
