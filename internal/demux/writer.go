@@ -6,9 +6,7 @@ import (
 	"sync"
 )
 
-const (
-	bufferSize = 32 * 1024 * 1024
-)
+const bufferSize = 16 * 1024 * 1024
 
 type StreamWriter struct {
 	clients     map[io.WriteCloser]*ioutil.AsyncWriter
@@ -19,17 +17,15 @@ type StreamWriter struct {
 	bufferFull bool
 	bufferLock sync.RWMutex
 
-	emptyNotify     chan struct{}
-	notifyListeners sync.Map
+	emptyCh   chan struct{}
+	emptyOnce sync.Once
 }
 
 func NewStreamWriter() *StreamWriter {
 	return &StreamWriter{
-		clients:     make(map[io.WriteCloser]*ioutil.AsyncWriter),
-		buffer:      make([]byte, bufferSize),
-		bufferPos:   0,
-		bufferFull:  false,
-		emptyNotify: make(chan struct{}),
+		clients: make(map[io.WriteCloser]*ioutil.AsyncWriter),
+		buffer:  make([]byte, bufferSize),
+		emptyCh: make(chan struct{}),
 	}
 }
 
@@ -91,13 +87,6 @@ func (sw *StreamWriter) Write(p []byte) (n int, err error) {
 	sw.bufferLock.Unlock()
 
 	sw.clientsLock.RLock()
-	clientCount := len(sw.clients)
-
-	if clientCount == 0 {
-		sw.clientsLock.RUnlock()
-		return len(data), nil
-	}
-
 	for _, cw := range sw.clients {
 		cw.Write(data)
 	}
@@ -128,45 +117,19 @@ func (sw *StreamWriter) Close() {
 	defer sw.clientsLock.Unlock()
 
 	for client, cw := range sw.clients {
-		cw.Close()
 		_ = client.Close()
+		cw.Close()
 		delete(sw.clients, client)
 	}
-
-	if len(sw.clients) == 0 {
-		sw.notifyEmpty()
-	}
+	sw.notifyEmpty()
 }
 
-func (sw *StreamWriter) ClientCount() int {
-	sw.clientsLock.RLock()
-	defer sw.clientsLock.RUnlock()
-	return len(sw.clients)
-}
-
-func (sw *StreamWriter) IsEmpty() bool {
-	sw.clientsLock.RLock()
-	defer sw.clientsLock.RUnlock()
-	return len(sw.clients) == 0
-}
-
-func (sw *StreamWriter) CancelEmptyChannel(ch <-chan struct{}) {
-	sw.notifyListeners.Delete(ch)
-}
-
-func (sw *StreamWriter) IsEmptyChannel() <-chan struct{} {
-	notifyCh := make(chan struct{})
-	sw.notifyListeners.Store(notifyCh, struct{}{})
-	return notifyCh
+func (sw *StreamWriter) EmptyChannel() <-chan struct{} {
+	return sw.emptyCh
 }
 
 func (sw *StreamWriter) notifyEmpty() {
-	sw.notifyListeners.Range(func(key, value any) bool {
-		ch, ok := key.(chan struct{})
-		if ok {
-			close(ch)
-			sw.notifyListeners.Delete(key)
-		}
-		return true
+	sw.emptyOnce.Do(func() {
+		close(sw.emptyCh)
 	})
 }

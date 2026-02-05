@@ -5,68 +5,52 @@ import (
 	"sync"
 )
 
-const (
-	bufferSize = 64
-)
+const asyncBufferSize = 64
 
 type AsyncWriter struct {
-	client     io.Writer
-	dataChan   chan []byte
-	doneChan   chan struct{}
-	statsLock  sync.Mutex
-	droppedMsg int
+	client    io.Writer
+	dataChan  chan []byte
+	doneChan  chan struct{}
+	closeOnce sync.Once
 }
 
 func NewAsyncWriter(client io.Writer) *AsyncWriter {
 	cw := &AsyncWriter{
 		client:   client,
-		dataChan: make(chan []byte, bufferSize),
+		dataChan: make(chan []byte, asyncBufferSize),
 		doneChan: make(chan struct{}),
 	}
-
 	go cw.writeLoop()
 	return cw
 }
 
 func (cw *AsyncWriter) writeLoop() {
 	defer close(cw.doneChan)
-
 	for data := range cw.dataChan {
-		_, err := cw.client.Write(data)
-		if err != nil {
+		if _, err := cw.client.Write(data); err != nil {
 			break
 		}
 	}
 }
 
 func (cw *AsyncWriter) Write(data []byte) {
-	buf := make([]byte, len(data))
-	copy(buf, data)
-
 	select {
-	case cw.dataChan <- buf:
-		return
+	case cw.dataChan <- data:
 	default:
-	}
-
-	select {
-	case <-cw.dataChan:
-		cw.statsLock.Lock()
-		cw.droppedMsg++
-		cw.statsLock.Unlock()
-	default:
-	}
-
-	select {
-	case cw.dataChan <- buf:
-	default:
-		cw.statsLock.Lock()
-		cw.droppedMsg++
-		cw.statsLock.Unlock()
+		select {
+		case <-cw.dataChan:
+		default:
+		}
+		select {
+		case cw.dataChan <- data:
+		default:
+		}
 	}
 }
 
 func (cw *AsyncWriter) Close() {
-	close(cw.dataChan)
+	cw.closeOnce.Do(func() {
+		close(cw.dataChan)
+	})
 	<-cw.doneChan
 }

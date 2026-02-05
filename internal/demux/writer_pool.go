@@ -8,27 +8,17 @@ import (
 type WriterPool struct {
 	writers map[string]*StreamWriter
 	mutex   sync.Mutex
-	doneCh  chan struct{}
 }
 
 func NewWriterPool() *WriterPool {
-	pool := &WriterPool{
+	return &WriterPool{
 		writers: make(map[string]*StreamWriter),
-		doneCh:  make(chan struct{}),
 	}
-
-	return pool
 }
 
 func (p *WriterPool) Stop() {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
-
-	select {
-	case <-p.doneCh:
-	default:
-		close(p.doneCh)
-	}
 
 	for key, writer := range p.writers {
 		writer.Close()
@@ -36,18 +26,20 @@ func (p *WriterPool) Stop() {
 	}
 }
 
-func (p *WriterPool) AddClient(streamKey string, client io.WriteCloser) bool {
+func (p *WriterPool) AddClient(streamKey string, client io.WriteCloser) (*StreamWriter, bool) {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 
 	writer, exists := p.writers[streamKey]
-	if !exists {
-		writer = NewStreamWriter()
-		p.writers[streamKey] = writer
+	if exists {
+		writer.AddClient(client)
+		return writer, false
 	}
 
+	writer = NewStreamWriter()
+	p.writers[streamKey] = writer
 	writer.AddClient(client)
-	return !exists
+	return writer, true
 }
 
 func (p *WriterPool) RemoveClient(streamKey string, client io.WriteCloser) {
@@ -57,28 +49,16 @@ func (p *WriterPool) RemoveClient(streamKey string, client io.WriteCloser) {
 
 	if exists {
 		writer.RemoveClient(client)
-		p.cleanup()
 	}
 }
 
-func (p *WriterPool) GetWriter(streamKey string) *StreamWriter {
-	p.mutex.Lock()
-	defer p.mutex.Unlock()
-	return p.writers[streamKey]
-}
-
-func (p *WriterPool) cleanup() {
+func (p *WriterPool) RemoveAndClose(streamKey string) {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 
-	var keysToRemove []string
-	for key, writer := range p.writers {
-		if writer.IsEmpty() {
-			keysToRemove = append(keysToRemove, key)
-		}
-	}
-
-	for _, key := range keysToRemove {
-		delete(p.writers, key)
+	writer := p.writers[streamKey]
+	delete(p.writers, streamKey)
+	if writer != nil {
+		writer.Close()
 	}
 }
