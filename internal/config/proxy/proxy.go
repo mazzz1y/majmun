@@ -19,19 +19,15 @@ func (p *Proxy) ValidateGlobal() error {
 	if p.ConcurrentStreams < 0 {
 		return fmt.Errorf("concurrency cannot be negative")
 	}
-
 	if err := p.Stream.Validate(); err != nil {
-		return fmt.Errorf("stream handler: %w", err)
+		return fmt.Errorf("stream: %w", err)
 	}
-
 	if err := p.HTTPClient.ValidateProxyGlobal(); err != nil {
 		return fmt.Errorf("http_client: %w", err)
 	}
-
 	if err := p.Error.Validate(); err != nil {
-		return fmt.Errorf("error handler: %w", err)
+		return fmt.Errorf("error: %w", err)
 	}
-
 	return nil
 }
 
@@ -39,19 +35,15 @@ func (p *Proxy) ValidateOverride() error {
 	if p.ConcurrentStreams < 0 {
 		return fmt.Errorf("concurrency cannot be negative")
 	}
-
 	if err := p.Stream.Validate(); err != nil {
-		return fmt.Errorf("stream handler: %w", err)
+		return fmt.Errorf("stream: %w", err)
 	}
-
 	if err := p.HTTPClient.ValidateProxyOverride(); err != nil {
 		return fmt.Errorf("http_client: %w", err)
 	}
-
 	if err := p.Error.Validate(); err != nil {
-		return fmt.Errorf("error handler: %w", err)
+		return fmt.Errorf("error: %w", err)
 	}
-
 	return nil
 }
 

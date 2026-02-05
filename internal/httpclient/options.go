@@ -11,7 +11,7 @@ type Options struct {
 	TTL         time.Duration
 	Retention   time.Duration
 	Compression bool
-	HTTPHeaders []common.NameValue
+	Headers     []common.NameValue
 }
 
 func (o Options) key() string {
@@ -27,7 +27,7 @@ func (o Options) key() string {
 		b.WriteString("0")
 	}
 	b.WriteString(";hdr=")
-	b.WriteString(canonicalHeaders(o.HTTPHeaders))
+	b.WriteString(canonicalHeaders(o.Headers))
 	return b.String()
 }
 

@@ -213,7 +213,7 @@ func (s *Store) newReader(ctx context.Context, url string, opt Options) (*Reader
 		TmpFilePath: filepath.Join(s.dir, name+fileExt+".tmp"),
 		MetaPath:    filepath.Join(s.dir, name+metaExtension),
 		TmpMetaPath: filepath.Join(s.dir, name+metaExtension+".tmp"),
-		client:      NewDirectClient(opt.HTTPHeaders),
+		client:      NewDirectClient(opt.Headers),
 		ttl:         opt.TTL,
 		compression: opt.Compression,
 		retention:   opt.Retention,

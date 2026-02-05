@@ -11,20 +11,16 @@ type Error struct {
 
 func (e *Error) Validate() error {
 	if err := e.Handler.Validate(); err != nil {
-		return fmt.Errorf("error inline handler: %w", err)
+		return err
 	}
-
 	if err := e.UpstreamError.Validate(); err != nil {
-		return fmt.Errorf("upstream error handler: %w", err)
+		return fmt.Errorf("upstream_error: %w", err)
 	}
-
 	if err := e.RateLimitExceeded.Validate(); err != nil {
-		return fmt.Errorf("rate limit exceeded handler: %w", err)
+		return fmt.Errorf("rate_limit_exceeded: %w", err)
 	}
-
 	if err := e.LinkExpired.Validate(); err != nil {
-		return fmt.Errorf("link expired handler: %w", err)
+		return fmt.Errorf("link_expired: %w", err)
 	}
-
 	return nil
 }

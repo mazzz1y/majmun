@@ -123,8 +123,8 @@ func TestMergeProxies(t *testing.T) {
 			if !reflect.DeepEqual(result.HTTPClient.Cache.Compression, tt.expected.HTTPClient.Cache.Compression) {
 				t.Errorf("mergeProxies().HTTPClient.Cache.Compression = %v, expected %v", result.HTTPClient.Cache.Compression, tt.expected.HTTPClient.Cache.Compression)
 			}
-			if !reflect.DeepEqual(result.HTTPClient.HTTPHeaders, tt.expected.HTTPClient.HTTPHeaders) {
-				t.Errorf("mergeProxies().HTTPClient.HTTPHeaders = %v, expected %v", result.HTTPClient.HTTPHeaders, tt.expected.HTTPClient.HTTPHeaders)
+			if !reflect.DeepEqual(result.HTTPClient.Headers, tt.expected.HTTPClient.Headers) {
+				t.Errorf("mergeProxies().HTTPClient.Headers = %v, expected %v", result.HTTPClient.Headers, tt.expected.HTTPClient.Headers)
 			}
 		})
 	}

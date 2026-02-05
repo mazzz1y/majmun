@@ -5,8 +5,8 @@ import (
 )
 
 type HTTPClient struct {
-	Cache       Cache       `yaml:"cache"`
-	HTTPHeaders []NameValue `yaml:"headers"`
+	Cache   Cache       `yaml:"cache"`
+	Headers []NameValue `yaml:"headers"`
 }
 
 type Cache struct {
@@ -19,23 +19,20 @@ type Cache struct {
 
 func (c *HTTPClient) ValidateProxyOverride() error {
 	if c.Cache.Path != nil {
-		return fmt.Errorf("path can only be configured at the global level")
+		return fmt.Errorf("cache.path can only be configured at the global level")
 	}
-	if c.Cache.Enabled != nil && !*c.Cache.Enabled {
-		if c.Cache.TTL != nil {
-			return fmt.Errorf("ttl cannot be set when cache is disabled")
-		}
+	if c.Cache.Enabled != nil && !*c.Cache.Enabled && c.Cache.TTL != nil {
+		return fmt.Errorf("cache.ttl cannot be set when cache is disabled")
 	}
 	if c.Cache.TTL != nil && *c.Cache.TTL <= 0 {
-		return fmt.Errorf("ttl must be positive")
+		return fmt.Errorf("cache.ttl must be positive")
 	}
 	if c.Cache.Retention != nil && *c.Cache.Retention < 0 {
-		return fmt.Errorf("retention cannot be negative")
+		return fmt.Errorf("cache.retention cannot be negative")
 	}
-
-	for i, header := range c.HTTPHeaders {
+	for i, header := range c.Headers {
 		if err := header.Validate(); err != nil {
-			return fmt.Errorf("header[%d]: %w", i, err)
+			return fmt.Errorf("headers[%d]: %w", i, err)
 		}
 	}
 	return nil
@@ -49,21 +46,20 @@ func (c *HTTPClient) ValidateProxyGlobal() error {
 	if disabled {
 		return nil
 	}
-
 	if enabled {
 		if cache.Path == nil || *cache.Path == "" {
-			return fmt.Errorf("path is required when cache is enabled")
+			return fmt.Errorf("cache.path is required when cache is enabled")
 		}
 		if cache.TTL == nil || *cache.TTL <= 0 {
-			return fmt.Errorf("ttl must be positive when cache is enabled")
+			return fmt.Errorf("cache.ttl must be positive when cache is enabled")
 		}
 		if cache.Retention == nil || *cache.Retention <= 0 {
-			return fmt.Errorf("retention must be positive when cache is enabled")
+			return fmt.Errorf("cache.retention must be positive when cache is enabled")
 		}
 	}
-	for i, header := range c.HTTPHeaders {
+	for i, header := range c.Headers {
 		if err := header.Validate(); err != nil {
-			return fmt.Errorf("header[%d]: %w", i, err)
+			return fmt.Errorf("headers[%d]: %w", i, err)
 		}
 	}
 	return nil

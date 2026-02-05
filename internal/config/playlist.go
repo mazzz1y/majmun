@@ -14,21 +14,19 @@ type Playlist struct {
 
 func (p *Playlist) Validate() error {
 	if p.Name == "" {
-		return fmt.Errorf("playlist name is required")
+		return fmt.Errorf("name is required")
 	}
 	if len(p.Sources) == 0 {
-		return fmt.Errorf("playlist sources are required")
+		return fmt.Errorf("sources is required")
 	}
 	for i, source := range p.Sources {
 		if source == "" {
-			return fmt.Errorf("playlist source[%d] cannot be empty", i)
+			return fmt.Errorf("sources[%d] cannot be empty", i)
 		}
 	}
 
-	err := p.Proxy.ValidateOverride()
-	if err != nil {
-		return fmt.Errorf("playlist proxy validation error: %v", err)
+	if err := p.Proxy.ValidateOverride(); err != nil {
+		return fmt.Errorf("proxy: %w", err)
 	}
-
 	return nil
 }

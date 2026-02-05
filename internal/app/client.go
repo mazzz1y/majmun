@@ -117,13 +117,13 @@ func (c *Client) BuildEPGProvider(epgConf config.EPG, serverProxy proxy.Proxy) e
 func (c *Client) newHTTPClient(pr proxy.Proxy) listing.HTTPClient {
 	opt := httpClientOptions(pr)
 	if c.cacheStore == nil || !opt.CacheEnabled {
-		return httpclient.NewDirectClient(opt.HTTPHeaders)
+		return httpclient.NewDirectClient(opt.Headers)
 	}
 	return c.cacheStore.NewHTTPClient(httpclient.Options{
 		TTL:         opt.TTL,
 		Retention:   opt.Retention,
 		Compression: opt.Compression,
-		HTTPHeaders: opt.HTTPHeaders,
+		Headers:     opt.Headers,
 	})
 }
 

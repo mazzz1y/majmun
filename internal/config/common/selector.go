@@ -55,20 +55,15 @@ func (s *Selector) UnmarshalYAML(unmarshal func(any) error) error {
 }
 
 func (s *Selector) Validate() error {
-	if s.Type == "" {
-		s.Type = SelectorName
-		s.Value = ""
-	}
-
 	switch s.Type {
-	case SelectorName:
+	case "", SelectorName:
 		return nil
 	case SelectorAttr, SelectorTag:
 		if s.Value == "" {
-			return fmt.Errorf("selector: %s requires a value", s.Type)
+			return fmt.Errorf("%s requires a value", s.Type)
 		}
 		return nil
 	default:
-		return fmt.Errorf("selector: unknown type %s", s.Type)
+		return fmt.Errorf("unknown type: %s", s.Type)
 	}
 }

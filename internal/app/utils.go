@@ -12,7 +12,7 @@ type httpClientSettings struct {
 	TTL          time.Duration
 	Retention    time.Duration
 	Compression  bool
-	HTTPHeaders  []common.NameValue
+	Headers      []common.NameValue
 }
 
 func httpClientOptions(pr proxy.Proxy) httpClientSettings {
@@ -39,7 +39,7 @@ func httpClientOptions(pr proxy.Proxy) httpClientSettings {
 		TTL:          ttl,
 		Retention:    retention,
 		Compression:  compression,
-		HTTPHeaders:  pr.HTTPClient.HTTPHeaders,
+		Headers:      pr.HTTPClient.Headers,
 	}
 }
 
@@ -77,8 +77,8 @@ func mergeProxies(proxies ...proxy.Proxy) proxy.Proxy {
 		if p.HTTPClient.Cache.Compression != nil {
 			result.HTTPClient.Cache.Compression = p.HTTPClient.Cache.Compression
 		}
-		if len(p.HTTPClient.HTTPHeaders) > 0 {
-			result.HTTPClient.HTTPHeaders = p.HTTPClient.HTTPHeaders
+		if len(p.HTTPClient.Headers) > 0 {
+			result.HTTPClient.Headers = p.HTTPClient.Headers
 		}
 
 		result.Stream = mergeHandlers(result.Stream, p.Stream)
