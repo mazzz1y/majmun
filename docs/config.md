@@ -14,6 +14,11 @@ majmun -config ./config      # from directory
 
     All arrays with a single value can be specified without brackets.
 
+!!! warning "Strict Validation"
+
+    Configuration files are validated strictly. Unknown fields will cause an error during validation.
+    Use dot-prefixed keys (e.g. `.my_anchor`) for reusable YAML anchors.
+
 ### Root Level Configuration
 
 | Field            | Type                                       | Description                                                       |
