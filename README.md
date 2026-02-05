@@ -1,7 +1,13 @@
+<p align="center">
+  <img src="docs/assets/logo-tv.svg" alt="logo" width="200">
+</p>
+
 # Majmun
 
-A minimal, functional IPTV gateway for your TV
+A minimal, functional IPTV gateway for your home TVs.
 
-This app allows you to distribute M3U8 playlists, XMLTV files, and proxy streams to your TVs with a declarative config.
+Transform and proxy your M3U playlists, EPG, and video streams through a single entry point. Configure playlists exactly how each client needs them with a flexible YAML configuration.
+
+## Documentation
 
 https://mazzz1y.github.io/majmun/

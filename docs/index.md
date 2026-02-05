@@ -11,8 +11,7 @@ hide:
   <img src="assets/logo-tv.svg" alt="logo" width="100"/>
   <div style="flex: 1; min-width: 250px;">
     <strong>A minimal, functional IPTV gateway for your home TVs.</strong><br/>
-    Transform and proxy your M3U playlists, EPG, and video streams through a single entry point.
-    Configure playlists exactly how each client needs them, declaratively.
+    Transform and proxy your M3U playlists, EPG, and video streams through a single entry point. Configure playlists exactly how each client needs them with a flexible YAML configuration.
   </div>
 </div>
 
