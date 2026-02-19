@@ -5,9 +5,9 @@ import (
 	"errors"
 	"majmun/internal/app"
 	"majmun/internal/config"
-	"majmun/internal/demux"
 	"majmun/internal/logging"
 	"majmun/internal/metrics"
+	"majmun/internal/streampool"
 	"net/http"
 	"time"
 
@@ -25,7 +25,7 @@ type Server struct {
 	server  *http.Server
 	manager *app.Manager
 
-	demux *demux.Demuxer
+	streamPool *streampool.StreamPool
 
 	serverURL     string
 	listenAddr    string
@@ -46,7 +46,7 @@ func NewServer(cfg *config.Config) (*Server, error) {
 	server := &Server{
 		router:     mux.NewRouter(),
 		manager:    m,
-		demux:      demux.NewDemuxer(),
+		streamPool: streampool.New(),
 		serverURL:  cfg.Server.PublicURL.String(),
 		listenAddr: cfg.Server.ListenAddr,
 		ctx:        ctx,
@@ -94,7 +94,7 @@ func (s *Server) Stop() error {
 
 	s.cancel()
 
-	s.demux.Stop()
+	s.streamPool.Stop()
 
 	logging.Info(ctx, "stopping http server")
 	if err := s.server.Shutdown(ctx); err != nil {

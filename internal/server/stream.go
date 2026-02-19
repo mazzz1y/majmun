@@ -10,9 +10,9 @@ import (
 
 	"majmun/internal/app"
 	"majmun/internal/ctxutil"
-	"majmun/internal/demux"
 	"majmun/internal/logging"
 	"majmun/internal/metrics"
+	"majmun/internal/streampool"
 	"majmun/internal/urlgen"
 )
 
@@ -162,14 +162,14 @@ func (s *Server) tryStream(
 		return streamResult{false, false, false}
 	}
 
-	demuxReq := demux.Request{
+	streamReq := streampool.Request{
 		StreamKey: streamKey,
 		Streamer:  streamSource,
 		Semaphore: playlist.Semaphore(),
 	}
 
-	reader, err := s.demux.GetReader(ctx, demuxReq)
-	if errors.Is(err, demux.ErrSubscriptionSemaphore) {
+	reader, err := s.streamPool.GetReader(ctx, streamReq)
+	if errors.Is(err, streampool.ErrSubscriptionSemaphore) {
 		s.handleSubscriptionError(ctx, streamIndex)
 		return streamResult{false, true, false}
 	}
@@ -185,7 +185,7 @@ func (s *Server) tryStream(
 
 func (s *Server) handleSubscriptionError(ctx context.Context, streamIndex int) {
 	logging.Error(
-		ctx, demux.ErrSubscriptionSemaphore,
+		ctx, streampool.ErrSubscriptionSemaphore,
 		"failed to get stream - subscription semaphore", "stream_index", streamIndex)
 
 	metrics.IncStreamsFailures(ctx, metrics.FailureReasonPlaylistLimit)
