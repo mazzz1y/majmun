@@ -12,7 +12,7 @@ Each client can access the following endpoints:
 - `{public_url}/{client_secret}/epg.xml.gz`
 
 !!! note
-    If playlists/epgs are not explicitly configured for a client, it means that all sources are enabled.
+If playlists/epgs are not explicitly configured for a client, it means that all sources are enabled.
 
 ## YAML Structure
 
@@ -27,12 +27,12 @@ clients:
 
 ## Fields
 
-| Field       | Type       | Required | Description                              |
-|-------------|------------|----------|------------------------------------------|
-| `name`      | `string`   | Yes      | Unique name identifier for this client   |
-| `secret`    | `string`   | Yes      | Authentication secret key for the client |
-| `playlists` | `[]string` | No       | List of playlist names for this client.   |
-| `epgs`      | `[]string` | No       | List of EPG names for this client.        |
+| Field       | Type                  | Required | Description                              |
+| ----------- | --------------------- | -------- | ---------------------------------------- |
+| `name`      | `string`              | Yes      | Unique name identifier for this client   |
+| `secret`    | `string`              | Yes      | Authentication secret key for the client |
+| `playlists` | `[]string`            | No       | List of playlist names for this client.  |
+| `epgs`      | `[]string`            | No       | List of EPG names for this client.       |
 | `proxy`     | [`Proxy`](./proxy.md) | No       | Optional per-client proxy config         |
 
 ## Examples

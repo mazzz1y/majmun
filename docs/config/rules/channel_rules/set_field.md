@@ -11,11 +11,10 @@ set_field:
   condition: {}
 ```
 
-
 ## Fields
 
 | Field       | Type                           | Required | Description                               |
-|-------------|--------------------------------|----------|-------------------------------------------|
+| ----------- | ------------------------------ | -------- | ----------------------------------------- |
 | `selector`  | [`Selector`](../selector.md)   | Yes      | What property to set (attribute/tag/name) |
 | `template`  | `gotemplate`                   | Yes      | The template definition for the new value |
 | `condition` | [`Condition`](../condition.md) | No       | Optional, restricts rule activation       |
@@ -23,11 +22,11 @@ set_field:
 ## Template Variables
 
 !!! note "Error handling"
-    If the template refers to `nil` or if any other runtime template execution error occurs,
-    playlist generation will fail.
+If the template refers to `nil` or if any other runtime template execution error occurs,
+playlist generation will fail.
 
 | Variable                  | Type                | Description                                |
-|---------------------------|---------------------|--------------------------------------------|
+| ------------------------- | ------------------- | ------------------------------------------ |
 | `{{.Channel.Name}}`       | string              | The original channel name.                 |
 | `{{.Channel.Attrs}}`      | `map[string]string` | A map containing the channel's attributes. |
 | `{{.Channel.Tags}}`       | `map[string]string` | A map containing the channel's tags.       |
@@ -46,4 +45,3 @@ channel_rules:
       condition:
         playlists: custom
 ```
-

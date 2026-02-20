@@ -118,12 +118,6 @@ func mergeSegmenter(dst *proxy.Segmenter, src proxy.Segmenter) {
 	}
 	mergePairs(&dst.TemplateVars, src.TemplateVars)
 	mergePairs(&dst.EnvVars, src.EnvVars)
-	if src.SegmentDuration != nil {
-		dst.SegmentDuration = src.SegmentDuration
-	}
-	if src.MaxSegments != nil {
-		dst.MaxSegments = src.MaxSegments
-	}
 	if src.InitSegments != nil {
 		dst.InitSegments = src.InitSegments
 	}

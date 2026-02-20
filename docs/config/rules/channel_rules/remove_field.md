@@ -12,9 +12,9 @@ remove_field:
 
 ## Fields
 
-| Field     | Type                           | Required | Description                             |
-|-----------|--------------------------------|----------|-----------------------------------------|
-| `selector`  | [`Selector`](../selector.md)   | Yes      | What to remove (attribute/tag)          |
+| Field       | Type                           | Required | Description                              |
+| ----------- | ------------------------------ | -------- | ---------------------------------------- |
+| `selector`  | [`Selector`](../selector.md)   | Yes      | What to remove (attribute/tag)           |
 | `condition` | [`Condition`](../condition.md) | No       | Optional, restricts which channels match |
 
 ## Examples
@@ -29,4 +29,3 @@ channel_rules:
         selector: attr/group-title
         patterns: ["^International$"]
 ```
-

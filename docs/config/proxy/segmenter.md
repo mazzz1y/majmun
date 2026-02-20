@@ -12,38 +12,42 @@ proxy:
     command: []
     template_variables: []
     env_variables: []
-    segment_duration: 2
-    max_segments: 15
     init_segments: 2
     ready_timeout: 30s
 ```
 
 ## Fields
 
-| Field                | Type                               | Required | Description                                                              |
-|----------------------|------------------------------------|----------|--------------------------------------------------------------------------|
-| `command`            | [`Command`](../shared.md#command)          | No       | Segmenter command array to execute                                       |
-| `template_variables` | [`[]NameValue`](../shared.md#namevalue-object) | No       | Variables available in command templates                                 |
-| `env_variables`      | [`[]NameValue`](../shared.md#namevalue-object) | No       | Environment variables for the command                                    |
-| `segment_duration`   | `int`                                     | No       | Duration of each HLS segment in seconds (default: `2`). Must be at least 1.            |
-| `max_segments`       | `int`                                     | No       | Maximum number of segments kept in the playlist (default: `15`). Must be at least 1.    |
-| `init_segments`      | `int`                                     | No       | Number of segments that must exist before clients can start reading (default: `2`). Must be at least 1 and cannot exceed `max_segments`. |
-| `ready_timeout`      | [`duration`](../shared.md#duration)       | No       | Maximum time to wait for the initial segments to become available (default: `30s`).     |
+| Field                | Type                                           | Required | Description                                                                                                              |
+| -------------------- | ---------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `command`            | [`Command`](../shared.md#command)              | No       | Segmenter command array to execute                                                                                       |
+| `template_variables` | [`[]NameValue`](../shared.md#namevalue-object) | No       | Variables available in command templates                                                                                  |
+| `env_variables`      | [`[]NameValue`](../shared.md#namevalue-object) | No       | Environment variables for the command                                                                                    |
+| `init_segments`      | `int`                                          | No       | Number of segments that must exist before clients can start reading (default: `2`). Must be at least 1.                  |
+| `ready_timeout`      | [`duration`](../shared.md#duration)            | No       | Maximum time to wait for the initial segments to become available (default: `30s`).                                       |
 
-### Available Template Variables
+### Default Template Variables
 
-These variables are automatically injected by the system and are always available in the segmenter command templates:
+These variables have default values and are used in the default segmenter command. They can be overridden via `template_variables`:
 
-| Variable           | Type     | Description                                                       |
-|--------------------|----------|-------------------------------------------------------------------|
-| `segment_duration` | `string` | Value of `segment_duration` config field                          |
-| `max_segments`     | `string` | Value of `max_segments` config field                              |
-| `segment_path`     | `string` | File path for segment files (e.g. `/tmp/.../seg_%05d.ts`)         |
-| `playlist_path`    | `string` | File path for the HLS playlist (e.g. `/tmp/.../stream.m3u8`)     |
+| Variable           | Default | Description                                          |
+| ------------------ | ------- | ---------------------------------------------------- |
+| `segment_duration` | `2`     | Duration of each HLS segment in seconds              |
+| `max_segments`     | `15`    | Maximum number of segments kept in the playlist      |
+| `ffmpeg_log_level` | `fatal` | FFmpeg log level                                     |
+
+### Reserved Template Variables
+
+These variables are injected at runtime by the system and are always available in the segmenter command templates:
+
+| Variable        | Type     | Description                                                  |
+| --------------- | -------- | ------------------------------------------------------------ |
+| `segment_path`  | `string` | File path for segment files (e.g. `/tmp/.../seg_%05d.ts`)    |
+| `playlist_path` | `string` | File path for the HLS playlist (e.g. `/tmp/.../stream.m3u8`) |
 
 !!! warning "Reserved Variables"
 
-    These variable names are reserved and cannot be used in `template_variables`. Setting them will result in a validation error.
+    `segment_path` and `playlist_path` are reserved and cannot be used in `template_variables`. Setting them will result in a validation error.
 
 ## Examples
 
@@ -58,7 +62,7 @@ proxy:
     command:
       - "ffmpeg"
       - "-v"
-      - "{{ default \"fatal\" .ffmpeg_log_level }}"
+      - '{{ default "fatal" .ffmpeg_log_level }}'
       - "-i"
       - "pipe:0"
       - "-c"
@@ -77,6 +81,10 @@ proxy:
     template_variables:
       - name: ffmpeg_log_level
         value: "fatal"
+      - name: segment_duration
+        value: "2"
+      - name: max_segments
+        value: "15"
 ```
 
 ### Transcoding
@@ -118,7 +126,9 @@ Shorter segments and fewer init segments reduce startup latency:
 ```yaml
 proxy:
   segmenter:
-    segment_duration: 1
+    template_variables:
+      - name: segment_duration
+        value: "1"
     init_segments: 1
     ready_timeout: 15s
 ```
@@ -130,8 +140,11 @@ Override segmenter settings for a specific playlist:
 ```yaml
 proxy:
   segmenter:
-    segment_duration: 2
-    max_segments: 15
+    template_variables:
+      - name: segment_duration
+        value: "2"
+      - name: max_segments
+        value: "15"
 
 playlists:
   - name: low-bandwidth
@@ -139,7 +152,10 @@ playlists:
       - url: "http://example.com/playlist.m3u"
     proxy:
       segmenter:
-        segment_duration: 4
-        max_segments: 20
-        init_segments: 5 # 4s * 5 = 20s buffered before clients can start
+        template_variables:
+          - name: segment_duration
+            value: "4"
+          - name: max_segments
+            value: "20"
+        init_segments: 5
 ```

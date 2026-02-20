@@ -49,8 +49,6 @@ proxy:
     command: []
     template_variables: []
     env_variables: []
-    segment_duration: 2
-    max_segments: 15
     init_segments: 2
     ready_timeout: 30s
   error:
@@ -76,10 +74,10 @@ proxy:
 ### Main Proxy Configuration
 
 | Field         | Type                                   | Required | Description                                        |
-|---------------|----------------------------------------|----------|----------------------------------------------------|
+| ------------- | -------------------------------------- | -------- | -------------------------------------------------- |
 | `enabled`     | `bool`                                 | No       | Enable or disable proxy functionality              |
 | `concurrency` | `int`                                  | No       | Maximum concurrent streams (0 = unlimited)         |
-| `http_client` | [`HTTPClient`](./proxy/http_client.md)  | No       | HTTP client configuration overrides for this proxy |
+| `http_client` | [`HTTPClient`](./proxy/http_client.md) | No       | HTTP client configuration overrides for this proxy |
 | `stream`      | [`Stream`](./proxy/stream.md)          | No       | Command configuration for stream processing        |
 | `segmenter`   | [`Segmenter`](./proxy/segmenter.md)    | No       | HLS segmenter configuration for stream pooling     |
 | `error`       | [`Error`](./proxy/error.md)            | No       | Default error handling configuration               |
@@ -111,7 +109,7 @@ proxy:
     command:
       - "ffmpeg"
       - "-v"
-      - "{{ default \"fatal\" .ffmpeg_log_level }}"
+      - '{{ default "fatal" .ffmpeg_log_level }}'
       - "-i"
       - "{{ .url }}"
       - "-c:v"

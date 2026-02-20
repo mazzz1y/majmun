@@ -28,10 +28,12 @@ var testSegmenterCfg = proxy.Segmenter{
 		"-hls_segment_filename", "{{ .segment_path }}",
 		"{{ .playlist_path }}",
 	},
-	SegmentDuration: intPtr(2),
-	MaxSegments:     intPtr(15),
-	InitSegments:    intPtr(1),
-	ReadyTimeout:    durationPtr(30 * time.Second),
+	TemplateVars: []common.NameValue{
+		{Name: "segment_duration", Value: "2"},
+		{Name: "max_segments", Value: "15"},
+	},
+	InitSegments: intPtr(1),
+	ReadyTimeout: durationPtr(30 * time.Second),
 }
 
 func intPtr(i int) *int { return &i }

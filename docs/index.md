@@ -3,6 +3,7 @@ hide:
   - navigation
   - toc
 ---
+
 <div style="max-width: 850px; margin: 0 auto;" markdown>
 
 # Majmun
@@ -23,19 +24,20 @@ hide:
   }
 }
 </style>
+
 ---
 
 ![Diagram](./assets/diagram.svg)
 
 ### :material-playlist-music: Features
 
-* Use multiple stream sources
-* Transform channels: add or remove fields, set values using the full power of Go templates
-* Transform playlists: filter, sort, merge, or remove duplicates
-* Configure proxies and limits at global, playlist, or client level
-* Demultiplex single streams to multiple TVs
-* Generate custom errors for limits, stream failures, and expired links
-* Proxy and cache all connections to 3rd party services, cache with configurable retention to all static assets
+- Use multiple stream sources
+- Transform channels: add or remove fields, set values using the full power of Go templates
+- Transform playlists: filter, sort, merge, or remove duplicates
+- Configure proxies and limits at global, playlist, or client level
+- Demultiplex single streams to multiple TVs
+- Generate custom errors for limits, stream failures, and expired links
+- Proxy and cache all connections to 3rd party services, cache with configurable retention to all static assets
 
 Majmun acts as a lightweight wrapper over FFmpeg (or other stream processors).
 

@@ -48,10 +48,8 @@ func newSegmenter(parentCtx context.Context, streamKey string, baseDir string, c
 	}
 
 	streamer := base.WithTemplateVars(map[string]any{
-		"segment_duration": fmt.Sprintf("%d", *cfg.SegmentDuration),
-		"max_segments":     fmt.Sprintf("%d", *cfg.MaxSegments),
-		"segment_path":     filepath.Join(dir, "seg_%05d.ts"),
-		"playlist_path":    playlistURL,
+		"segment_path":  filepath.Join(dir, "seg_%05d.ts"),
+		"playlist_path": playlistURL,
 	})
 
 	ctx, cancel := context.WithCancel(parentCtx)

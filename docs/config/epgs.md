@@ -14,11 +14,11 @@ epgs:
 
 ## Fields
 
-| Field     | Type                  | Required | Description                                                          |
-|-----------|-----------------------|----------|----------------------------------------------------------------------|
-| `name`    | `string`              | Yes      | Unique name identifier for this EPG                                  |
-| `sources` | `[]string` | Yes      | List of EPG sources (URLs or file paths, XML or .gz). |
-| `proxy`   | [`Proxy`](./proxy.md) | No       | EPG-specific proxy configuration, only enabled takes effect          |
+| Field     | Type                  | Required | Description                                                 |
+| --------- | --------------------- | -------- | ----------------------------------------------------------- |
+| `name`    | `string`              | Yes      | Unique name identifier for this EPG                         |
+| `sources` | `[]string`            | Yes      | List of EPG sources (URLs or file paths, XML or .gz).       |
+| `proxy`   | [`Proxy`](./proxy.md) | No       | EPG-specific proxy configuration, only enabled takes effect |
 
 ## Examples
 

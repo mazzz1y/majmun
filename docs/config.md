@@ -22,7 +22,7 @@ majmun -config ./config      # from directory
 ### Root Level Configuration
 
 | Field            | Type                                         | Description                                                       |
-|------------------|----------------------------------------------|-------------------------------------------------------------------|
+| ---------------- | -------------------------------------------- | ----------------------------------------------------------------- |
 | `server`         | [`Server`](./config/server.md)               | Server configuration including listening addresses and public URL |
 | `url_generator`  | [`URL Generator`](./config/url_generator.md) | URL generation and encryption configuration                       |
 | `logs`           | [`Logs`](./config/logs.md)                   | Logging configuration                                             |

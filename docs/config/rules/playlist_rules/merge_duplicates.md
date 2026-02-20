@@ -18,8 +18,8 @@ merge_duplicates:
 
 ## Fields
 
-| Field       | Type                              | Required | Description                                 |
-|-------------|-----------------------------------|----------|---------------------------------------------|
+| Field         | Type                              | Required | Description                                 |
+| ------------- | --------------------------------- | -------- | ------------------------------------------- |
 | `patterns`    | `[]regex`                         | Yes      | Priority order (first has highest priority) |
 | `selector`    | [`Selector`](../selector.md)      | No       | Use attribute or tag to identify groups     |
 | `final_value` | [`FinalValue`](../final_value.md) | No       | Use for modify result channels              |
@@ -52,4 +52,3 @@ playlist_rules:
       condition:
         clients: ["kitchen", "office-lite"]
 ```
-

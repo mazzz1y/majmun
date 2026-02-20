@@ -2,10 +2,7 @@
 
 # Configuration Examples
 
-!!! note "Exposed endpoints"
-    - `{public_url}/{client_secret}/playlist.m3u8`
-    - `{public_url}/{client_secret}/epg.xml`
-    - `{public_url}/{client_secret}/epg.xml.gz`
+!!! note "Exposed endpoints" - `{public_url}/{client_secret}/playlist.m3u8` - `{public_url}/{client_secret}/epg.xml` - `{public_url}/{client_secret}/epg.xml.gz`
 
 ## Simple Configuration
 

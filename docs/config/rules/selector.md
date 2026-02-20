@@ -10,7 +10,7 @@ defined in a single-line format to select a specific field.
 ## Possible Values
 
 | Format             | Description                                                     |
-|--------------------|-----------------------------------------------------------------|
+| ------------------ | --------------------------------------------------------------- |
 | `name`             | Targets the channel name                                        |
 | `attr/<attribute>` | Targets a specific channel attribute (e.g., `attr/group-title`) |
 | `tag/<tag>`        | Targets a specific M3U tag (e.g., `tag/EXTGRP`)                 |

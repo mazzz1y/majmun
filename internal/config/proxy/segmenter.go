@@ -7,8 +7,6 @@ import (
 )
 
 var reservedSegmenterVars = []string{
-	"segment_duration",
-	"max_segments",
 	"segment_path",
 	"playlist_path",
 }
@@ -18,10 +16,8 @@ type Segmenter struct {
 	TemplateVars []common.NameValue `yaml:"template_variables,omitempty"`
 	EnvVars      []common.NameValue `yaml:"env_variables,omitempty"`
 
-	SegmentDuration *int             `yaml:"segment_duration,omitempty"`
-	MaxSegments     *int             `yaml:"max_segments,omitempty"`
-	InitSegments    *int             `yaml:"init_segments,omitempty"`
-	ReadyTimeout    *common.Duration `yaml:"ready_timeout,omitempty"`
+	InitSegments *int             `yaml:"init_segments,omitempty"`
+	ReadyTimeout *common.Duration `yaml:"ready_timeout,omitempty"`
 }
 
 func (s *Segmenter) Validate() error {
@@ -38,17 +34,8 @@ func (s *Segmenter) Validate() error {
 			return fmt.Errorf("env_variables[%d]: %w", i, err)
 		}
 	}
-	if s.SegmentDuration != nil && *s.SegmentDuration < 1 {
-		return fmt.Errorf("segment_duration must be at least 1")
-	}
-	if s.MaxSegments != nil && *s.MaxSegments < 1 {
-		return fmt.Errorf("max_segments must be at least 1")
-	}
 	if s.InitSegments != nil && *s.InitSegments < 1 {
 		return fmt.Errorf("init_segments must be at least 1")
-	}
-	if s.MaxSegments != nil && s.InitSegments != nil && *s.InitSegments > *s.MaxSegments {
-		return fmt.Errorf("init_segments cannot exceed max_segments")
 	}
 	return nil
 }

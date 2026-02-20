@@ -20,8 +20,8 @@ proxy:
 
 ## Fields
 
-| Field                | Type                                          | Required | Description                              |
-|----------------------|-----------------------------------------------|----------|------------------------------------------|
+| Field                | Type                                           | Required | Description                              |
+| -------------------- | ---------------------------------------------- | -------- | ---------------------------------------- |
 | `command`            | [`Command`](../shared.md#command)              | No       | Command array to execute                 |
 | `template_variables` | [`[]NameValue`](../shared.md#namevalue-object) | No       | Variables available in command templates |
 | `env_variables`      | [`[]NameValue`](../shared.md#namevalue-object) | No       | Environment variables for the command    |
@@ -29,7 +29,7 @@ proxy:
 ### Available Template Variables
 
 | Variable | Type     | Description |
-|----------|----------|-------------|
+| -------- | -------- | ----------- |
 | `url`    | `string` | Stream URL  |
 
 ## Examples
@@ -60,7 +60,7 @@ proxy:
     command:
       - "ffmpeg"
       - "-v"
-      - "{{ default \"fatal\" .ffmpeg_log_level }}"
+      - '{{ default "fatal" .ffmpeg_log_level }}'
       - "-i"
       - "{{ .url }}"
       - "-c:v"

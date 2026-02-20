@@ -64,11 +64,11 @@ func DefaultConfig() *Config {
 				},
 				TemplateVars: []common.NameValue{
 					{Name: "ffmpeg_log_level", Value: "fatal"},
+					{Name: "segment_duration", Value: "2"},
+					{Name: "max_segments", Value: "15"},
 				},
-				SegmentDuration: intPtr(2),
-				MaxSegments:     intPtr(15),
-				InitSegments:    intPtr(2),
-				ReadyTimeout:    durationPtr(30 * time.Second),
+				InitSegments: intPtr(2),
+				ReadyTimeout: durationPtr(30 * time.Second),
 			},
 			Error: proxy.Error{
 				Handler: proxy.Handler{

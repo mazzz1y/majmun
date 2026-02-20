@@ -4,8 +4,8 @@
 
 ## Releases
 
-* Binary releases: [GitHub Releases](https://github.com/mazzz1y/majmun/releases)
-* Docker image: [GitHub Packages](https://github.com/mazzz1y/majmun/pkgs/container/majmun)
+- Binary releases: [GitHub Releases](https://github.com/mazzz1y/majmun/releases)
+- Docker image: [GitHub Packages](https://github.com/mazzz1y/majmun/pkgs/container/majmun)
 
 ## Docker Compose Example
 

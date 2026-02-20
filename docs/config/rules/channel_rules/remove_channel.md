@@ -11,8 +11,8 @@ remove_channel:
 
 ## Fields
 
-| Field     | Type                           | Required | Description            |
-|-----------|--------------------------------|----------|------------------------|
+| Field       | Type                           | Required | Description            |
+| ----------- | ------------------------------ | -------- | ---------------------- |
 | `condition` | [`Condition`](../condition.md) | Yes      | Which channels to drop |
 
 ## Example
