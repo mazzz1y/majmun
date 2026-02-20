@@ -109,9 +109,9 @@ proxy:
     command:
       - "ffmpeg"
       - "-v"
-      - '{{ default "fatal" .ffmpeg_log_level }}'
+      - "{{ .ffmpeg_log_level }}"
       - "-i"
-      - "{{ .url }}"
+      - "{{ .input }}"
       - "-c:v"
       - "libx264"
       - "-preset"

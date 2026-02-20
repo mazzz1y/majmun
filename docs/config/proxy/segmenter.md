@@ -2,7 +2,7 @@
 
 The `segmenter` block configures the HLS segmenter used for stream pooling. For each proxied stream, Majmun runs a single upstream fetch and an FFmpeg HLS segmenter that writes segments to a temporary directory. Each client is served by an independent FFmpeg process reading from the local HLS playlist, ensuring keyframe-aligned starts and isolation between slow and fast clients. When multiple clients request the same stream, they share the same segmenter and segment directory.
 
-The segmenter command receives the upstream stream data on `stdin` and must output HLS segments to the paths provided via template variables.
+The segmenter command reads the upstream stream via the `url` template variable and must output HLS segments to the paths provided via template variables.
 
 ## YAML Structure
 
@@ -42,12 +42,13 @@ These variables are injected at runtime by the system and are always available i
 
 | Variable        | Type     | Description                                                  |
 | --------------- | -------- | ------------------------------------------------------------ |
+| `url`           | `string` | Upstream stream URL                                          |
 | `segment_path`  | `string` | File path for segment files (e.g. `/tmp/.../seg_%05d.ts`)    |
 | `playlist_path` | `string` | File path for the HLS playlist (e.g. `/tmp/.../stream.m3u8`) |
 
 !!! warning "Reserved Variables"
 
-    `segment_path` and `playlist_path` are reserved and cannot be used in `template_variables`. Setting them will result in a validation error.
+    `url`, `segment_path` and `playlist_path` are reserved and cannot be used in `template_variables`. Setting them will result in a validation error.
 
 ## Examples
 
@@ -62,9 +63,9 @@ proxy:
     command:
       - "ffmpeg"
       - "-v"
-      - '{{ default "fatal" .ffmpeg_log_level }}'
+      - "{{ .ffmpeg_log_level }}"
       - "-i"
-      - "pipe:0"
+      - "{{ .url }}"
       - "-c"
       - "copy"
       - "-f"
@@ -99,7 +100,7 @@ proxy:
       - "-v"
       - "fatal"
       - "-i"
-      - "pipe:0"
+      - "{{ .url }}"
       - "-c:v"
       - "libx264"
       - "-preset"

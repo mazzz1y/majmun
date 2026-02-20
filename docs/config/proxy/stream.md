@@ -26,11 +26,13 @@ proxy:
 | `template_variables` | [`[]NameValue`](../shared.md#namevalue-object) | No       | Variables available in command templates |
 | `env_variables`      | [`[]NameValue`](../shared.md#namevalue-object) | No       | Environment variables for the command    |
 
-### Available Template Variables
+### Reserved Template Variables
 
-| Variable | Type     | Description |
-| -------- | -------- | ----------- |
-| `url`    | `string` | Stream URL  |
+These variables are injected at runtime by the system and are always available in the stream command templates:
+
+| Variable | Type     | Description                                              |
+| -------- | -------- | -------------------------------------------------------- |
+| `input`  | `string` | Path to the local HLS playlist produced by the segmenter |
 
 ## Examples
 
@@ -44,7 +46,7 @@ proxy:
       - "-v"
       - "error"
       - "-i"
-      - "{{ .url }}"
+      - "{{ .input }}"
       - "-c"
       - "copy"
       - "-f"
@@ -60,9 +62,9 @@ proxy:
     command:
       - "ffmpeg"
       - "-v"
-      - '{{ default "fatal" .ffmpeg_log_level }}'
+      - "{{ .ffmpeg_log_level }}"
       - "-i"
-      - "{{ .url }}"
+      - "{{ .input }}"
       - "-c:v"
       - "libx264"
       - "-preset"
@@ -86,7 +88,7 @@ proxy:
   stream:
     command:
       - "/opt/scripts/stream.sh"
-      - "{{ .url }}"
+      - "{{ .input }}"
     env_variables:
       - name: STREAM_QUALITY
         value: "high"

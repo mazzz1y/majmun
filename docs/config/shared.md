@@ -37,11 +37,11 @@ command:
   - "-v"
   - "{{ .log_level }}"
   - "-i"
-  - "{{ .url }}"
+  - "{{ .input }}"
 ```
 
 **String form** — passed to `sh -c`:
 
 ```yaml
-command: "ffmpeg -v {{ .log_level }} -i {{ .url }} -c copy -f mpegts pipe:1"
+command: "ffmpeg -v {{ .log_level }} -i {{ .input }} -c copy -f mpegts pipe:1"
 ```
