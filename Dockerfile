@@ -1,4 +1,4 @@
-FROM golang:1.25 AS build
+FROM golang:1.26-trixie AS build
 
 ENV CGO_ENABLED=0
 COPY . /src
@@ -6,7 +6,7 @@ COPY . /src
 RUN cd /src && \
   go build -ldflags="-s -w" -trimpath -o /majmun ./cmd/majmun
 
-FROM ubuntu:24.04
+FROM debian:trixie-slim
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends ca-certificates ffmpeg && \
