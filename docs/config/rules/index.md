@@ -12,8 +12,8 @@ Rules are organized into two categories:
 
 !!! note "Rule Processing"
 
-- Rules can be filtered to specific channels, clients, or playlists using `condition` blocks.
-- Channel rules are processed first, followed by playlist rules
+    - Rules can be filtered to specific channels, clients, or playlists using `condition` blocks.
+    - Channel rules are processed first, followed by playlist rules
 
 ## YAML Structure
 

@@ -22,8 +22,9 @@ set_field:
 ## Template Variables
 
 !!! note "Error handling"
-If the template refers to `nil` or if any other runtime template execution error occurs,
-playlist generation will fail.
+
+    If the template refers to `nil` or if any other runtime template execution error occurs,
+    playlist generation will fail.
 
 | Variable                  | Type                | Description                                |
 | ------------------------- | ------------------- | ------------------------------------------ |

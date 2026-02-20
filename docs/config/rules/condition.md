@@ -3,7 +3,8 @@
 The `condition` block controls when a rule is applied, based on channel properties, client, playlist, and more
 
 !!! note
-All fields are optional. To combine criteria use `and` or `or`, which take arrays of condition blocks.
+
+    All fields are optional. To combine criteria use `and` or `or`, which take arrays of condition blocks.
 
 ## YAML Structure
 

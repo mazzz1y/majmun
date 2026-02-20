@@ -12,7 +12,8 @@ Each client can access the following endpoints:
 - `{public_url}/{client_secret}/epg.xml.gz`
 
 !!! note
-If playlists/epgs are not explicitly configured for a client, it means that all sources are enabled.
+
+    If playlists/epgs are not explicitly configured for a client, it means that all sources are enabled.
 
 ## YAML Structure
 

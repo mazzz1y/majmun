@@ -12,10 +12,11 @@ defined in a single-line format to select a specific field.
 | Format             | Description                                                     |
 | ------------------ | --------------------------------------------------------------- |
 | `name`             | Targets the channel name                                        |
+| `url`              | Targets the channel URL                                         |
 | `attr/<attribute>` | Targets a specific channel attribute (e.g., `attr/group-title`) |
 | `tag/<tag>`        | Targets a specific M3U tag (e.g., `tag/EXTGRP`)                 |
 
-## Example
+## Examples
 
 Set EXTGRP tag to "News" for the "news" playlist:
 
@@ -25,4 +26,12 @@ set_field:
   template: "News"
   condition:
     playlists: news
+```
+
+Rewrite channel URLs from `http://localhost:1234` to `https://example.com`:
+
+```yaml
+set_field:
+  selector: url
+  template: '{{ .Channel.URL | replace "http://localhost:1234" "https://example.com" }}'
 ```
