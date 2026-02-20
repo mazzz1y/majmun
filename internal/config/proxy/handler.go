@@ -11,6 +11,11 @@ type Handler struct {
 	EnvVars      []common.NameValue `yaml:"env_variables,omitempty"`
 }
 
+func mergeHandlerVars(base, override *Handler) {
+	override.TemplateVars = common.MergeNameValues(base.TemplateVars, override.TemplateVars)
+	override.EnvVars = common.MergeNameValues(base.EnvVars, override.EnvVars)
+}
+
 func (h *Handler) Validate() error {
 	for i, templateVar := range h.TemplateVars {
 		if err := templateVar.Validate(); err != nil {

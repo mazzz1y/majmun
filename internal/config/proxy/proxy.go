@@ -61,6 +61,19 @@ func (p *Proxy) UnmarshalYAML(value *yaml.Node) error {
 		return nil
 	}
 
+	prev := *p
+
 	type proxyYAML Proxy
-	return common.DecodeStrict(value, (*proxyYAML)(p))
+	if err := common.DecodeStrict(value, (*proxyYAML)(p)); err != nil {
+		return err
+	}
+
+	mergeHandlerVars(&prev.Stream, &p.Stream)
+	mergeSegmenterVars(&prev.Segmenter, &p.Segmenter)
+	mergeHandlerVars(&prev.Error.Handler, &p.Error.Handler)
+	mergeHandlerVars(&prev.Error.UpstreamError, &p.Error.UpstreamError)
+	mergeHandlerVars(&prev.Error.RateLimitExceeded, &p.Error.RateLimitExceeded)
+	mergeHandlerVars(&prev.Error.LinkExpired, &p.Error.LinkExpired)
+
+	return nil
 }

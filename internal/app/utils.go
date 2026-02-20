@@ -104,8 +104,8 @@ func mergeHandlers(handlers ...proxy.Handler) proxy.Handler {
 		if len(h.Command) > 0 {
 			result.Command = h.Command
 		}
-		mergePairs(&result.TemplateVars, h.TemplateVars)
-		mergePairs(&result.EnvVars, h.EnvVars)
+		result.TemplateVars = common.MergeNameValues(result.TemplateVars, h.TemplateVars)
+		result.EnvVars = common.MergeNameValues(result.EnvVars, h.EnvVars)
 	}
 
 	return result
@@ -115,30 +115,12 @@ func mergeSegmenter(dst *proxy.Segmenter, src proxy.Segmenter) {
 	if len(src.Command) > 0 {
 		dst.Command = src.Command
 	}
-	mergePairs(&dst.TemplateVars, src.TemplateVars)
-	mergePairs(&dst.EnvVars, src.EnvVars)
+	dst.TemplateVars = common.MergeNameValues(dst.TemplateVars, src.TemplateVars)
+	dst.EnvVars = common.MergeNameValues(dst.EnvVars, src.EnvVars)
 	if src.InitSegments != nil {
 		dst.InitSegments = src.InitSegments
 	}
 	if src.ReadyTimeout != nil {
 		dst.ReadyTimeout = src.ReadyTimeout
 	}
-}
-
-func mergePairs[T ~[]common.NameValue](result *T, handler T) {
-	if len(handler) == 0 {
-		return
-	}
-	varMap := make(map[string]string, len(*result)+len(handler))
-	for _, v := range *result {
-		varMap[v.Name] = v.Value
-	}
-	for _, v := range handler {
-		varMap[v.Name] = v.Value
-	}
-	merged := make([]common.NameValue, 0, len(varMap))
-	for name, value := range varMap {
-		merged = append(merged, common.NameValue{Name: name, Value: value})
-	}
-	*result = merged
 }

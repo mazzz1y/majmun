@@ -320,13 +320,10 @@ func TestMergePairs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := make([]common.NameValue, len(tt.result))
-			copy(result, tt.result)
-
-			mergePairs(&result, tt.handler)
+			result := common.MergeNameValues(tt.result, tt.handler)
 
 			if !nameValueSlicesEqual(result, tt.expected) {
-				t.Errorf("mergePairs() result = %v, expected %v", result, tt.expected)
+				t.Errorf("MergeNameValues() result = %v, expected %v", result, tt.expected)
 			}
 		})
 	}

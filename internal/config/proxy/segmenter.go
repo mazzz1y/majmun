@@ -20,6 +20,11 @@ type Segmenter struct {
 	ReadyTimeout *common.Duration `yaml:"ready_timeout,omitempty"`
 }
 
+func mergeSegmenterVars(base, override *Segmenter) {
+	override.TemplateVars = common.MergeNameValues(base.TemplateVars, override.TemplateVars)
+	override.EnvVars = common.MergeNameValues(base.EnvVars, override.EnvVars)
+}
+
 func (s *Segmenter) Validate() error {
 	for i, templateVar := range s.TemplateVars {
 		if err := templateVar.Validate(); err != nil {
