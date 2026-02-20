@@ -2,11 +2,13 @@ package playlist
 
 import (
 	"bytes"
+	"fmt"
 	"majmun/internal/config/common"
 	configrules "majmun/internal/config/rules/playlist"
 	"majmun/internal/listing/m3u8/rules/playlist/pattern_matcher"
 	"majmun/internal/listing/m3u8/store"
 	"majmun/internal/parser/m3u8"
+	"net/url"
 )
 
 type MergeDuplicatesProcessor struct {
@@ -44,10 +46,16 @@ func (p *MergeDuplicatesProcessor) processMergeGroups(groups map[string][]*store
 		}
 
 		if p.rule.FinalValue != nil {
+			var bestURL string
+			if best.URI() != nil {
+				bestURL = best.URI().String()
+			}
+
 			tmplMap := map[string]any{
 				"Channel": map[string]any{
 					"BaseName": baseName,
 					"Name":     best.Name(),
+					"URL":      bestURL,
 					"Attrs":    best.Attrs(),
 					"Tags":     best.Tags(),
 				},
@@ -67,6 +75,12 @@ func (p *MergeDuplicatesProcessor) processMergeGroups(groups map[string][]*store
 				switch p.rule.FinalValue.Selector.Type {
 				case common.SelectorName:
 					ch.SetName(finalValue)
+				case common.SelectorURL:
+					u, err := url.Parse(finalValue)
+					if err != nil {
+						return fmt.Errorf("merge_duplicates: invalid URL '%s': %w", finalValue, err)
+					}
+					ch.SetURI(u)
 				case common.SelectorAttr:
 					ch.SetAttr(p.rule.FinalValue.Selector.Value, finalValue)
 				case common.SelectorTag:

@@ -141,6 +141,11 @@ func (c *Channel) GetFieldValue(selector *common.Selector) (string, bool) {
 	switch selector.Type {
 	case common.SelectorName:
 		return c.Name(), true
+	case common.SelectorURL:
+		if c.URI() != nil {
+			return c.URI().String(), true
+		}
+		return "", false
 	case common.SelectorAttr:
 		if val, ok := c.GetAttr(selector.Value); ok {
 			return val, true

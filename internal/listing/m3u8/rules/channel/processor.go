@@ -7,6 +7,7 @@ import (
 	"majmun/internal/config/common"
 	"majmun/internal/config/rules/channel"
 	"majmun/internal/listing/m3u8/store"
+	"net/url"
 )
 
 type Processor struct {
@@ -55,9 +56,16 @@ func (p *Processor) processSetField(ch *store.Channel, rule *channel.SetFieldRul
 	}
 
 	pl := ch.Playlist()
+
+	var channelURL string
+	if ch.URI() != nil {
+		channelURL = ch.URI().String()
+	}
+
 	tmplMap := map[string]any{
 		"Channel": map[string]any{
 			"Name":  ch.Name(),
+			"URL":   channelURL,
 			"Attrs": ch.Attrs(),
 			"Tags":  ch.Tags(),
 		},
@@ -76,6 +84,12 @@ func (p *Processor) processSetField(ch *store.Channel, rule *channel.SetFieldRul
 	switch rule.Selector.Type {
 	case common.SelectorName:
 		ch.SetName(value)
+	case common.SelectorURL:
+		u, err := url.Parse(value)
+		if err != nil {
+			return fmt.Errorf("set_field: invalid URL '%s': %w", value, err)
+		}
+		ch.SetURI(u)
 	case common.SelectorAttr:
 		ch.SetAttr(rule.Selector.Value, value)
 	case common.SelectorTag:

@@ -11,6 +11,7 @@ const (
 	SelectorName SelectorType = "name"
 	SelectorAttr SelectorType = "attr"
 	SelectorTag  SelectorType = "tag"
+	SelectorURL  SelectorType = "url"
 )
 
 type Selector struct {
@@ -33,6 +34,12 @@ func (s *Selector) UnmarshalYAML(unmarshal func(any) error) error {
 		return nil
 	}
 
+	if raw == "url" {
+		s.Type = SelectorURL
+		s.Value = ""
+		return nil
+	}
+
 	if strings.HasPrefix(raw, "attr/") {
 		s.Type = SelectorAttr
 		s.Value = strings.TrimPrefix(raw, "attr/")
@@ -51,12 +58,12 @@ func (s *Selector) UnmarshalYAML(unmarshal func(any) error) error {
 		return nil
 	}
 
-	return fmt.Errorf("selector: invalid format '%s', expected 'name', 'attr/<value>', or 'tag/<value>'", raw)
+	return fmt.Errorf("selector: invalid format '%s', expected 'name', 'url', 'attr/<value>', or 'tag/<value>'", raw)
 }
 
 func (s *Selector) Validate() error {
 	switch s.Type {
-	case "", SelectorName:
+	case "", SelectorName, SelectorURL:
 		return nil
 	case SelectorAttr, SelectorTag:
 		if s.Value == "" {

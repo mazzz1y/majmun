@@ -2,10 +2,12 @@ package playlist
 
 import (
 	"bytes"
+	"fmt"
 	"majmun/internal/config/common"
 	"majmun/internal/config/rules/playlist"
 	"majmun/internal/listing/m3u8/rules/playlist/pattern_matcher"
 	"majmun/internal/listing/m3u8/store"
+	"net/url"
 )
 
 type RemoveDuplicatesProcessor struct {
@@ -40,10 +42,16 @@ func (p *RemoveDuplicatesProcessor) processDuplicateGroups(groups map[string][]*
 
 			if ch == best {
 				if p.rule.FinalValue != nil {
+					var chURL string
+					if ch.URI() != nil {
+						chURL = ch.URI().String()
+					}
+
 					tmplMap := map[string]any{
 						"Channel": map[string]any{
 							"BaseName": baseName,
 							"Name":     ch.Name(),
+							"URL":      chURL,
 							"Attrs":    ch.Attrs(),
 							"Tags":     ch.Tags(),
 						},
@@ -63,6 +71,12 @@ func (p *RemoveDuplicatesProcessor) processDuplicateGroups(groups map[string][]*
 						switch p.rule.FinalValue.Selector.Type {
 						case common.SelectorName:
 							ch.SetName(finalValue)
+						case common.SelectorURL:
+							u, err := url.Parse(finalValue)
+							if err != nil {
+								return fmt.Errorf("remove_duplicates: invalid URL '%s': %w", finalValue, err)
+							}
+							ch.SetURI(u)
 						case common.SelectorAttr:
 							ch.SetAttr(p.rule.FinalValue.Selector.Value, finalValue)
 						case common.SelectorTag:
