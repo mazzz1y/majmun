@@ -6,6 +6,7 @@ import (
 	"majmun/internal/config/common"
 	playlistconf "majmun/internal/config/rules/playlist"
 	"majmun/internal/listing/m3u8/store"
+	"slices"
 )
 
 type Processor struct {
@@ -51,10 +52,8 @@ func evaluateStoreCondition(condition *common.Condition, clientName string) bool
 	}
 
 	if len(condition.Clients) > 0 {
-		for _, client := range condition.Clients {
-			if clientName == client {
-				return !condition.Invert
-			}
+		if slices.Contains([]string(condition.Clients), clientName) {
+			return !condition.Invert
 		}
 		return condition.Invert
 	}

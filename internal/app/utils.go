@@ -3,7 +3,6 @@ package app
 import (
 	"majmun/internal/config/common"
 	"majmun/internal/config/proxy"
-	"strings"
 	"time"
 )
 
@@ -142,28 +141,4 @@ func mergePairs[T ~[]common.NameValue](result *T, handler T) {
 		merged = append(merged, common.NameValue{Name: name, Value: value})
 	}
 	*result = merged
-}
-
-func mergeNameValues(base []common.NameValue, override []common.NameValue) []common.NameValue {
-	if len(override) == 0 {
-		return base
-	}
-	if len(base) == 0 {
-		return override
-	}
-
-	m := make(map[string]common.NameValue, len(base)+len(override))
-
-	for _, nv := range base {
-		m[strings.ToLower(nv.Name)] = nv
-	}
-	for _, nv := range override {
-		m[strings.ToLower(nv.Name)] = nv
-	}
-
-	result := make([]common.NameValue, 0, len(m))
-	for _, nv := range m {
-		result = append(result, nv)
-	}
-	return result
 }

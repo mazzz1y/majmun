@@ -129,7 +129,7 @@ func (d *StreamPool) runSegmenter(ctx context.Context, req Request, seg *segment
 	pr, pw := io.Pipe()
 
 	go func() {
-		defer pw.Close()
+		defer func() { _ = pw.Close() }()
 		_, err := req.Streamer.RunWithStdout(segCtx, pw)
 		if err != nil && !errors.Is(err, context.Canceled) {
 			logging.Error(ctx, err, "upstream stream failed")

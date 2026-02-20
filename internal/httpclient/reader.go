@@ -256,37 +256,6 @@ func (r *Reader) newCachedReader() (io.ReadCloser, error) {
 	}
 }
 
-func (r *Reader) newDirectReader(ctx context.Context) (io.ReadCloser, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", r.URL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	resp, err := r.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch URL: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		_ = resp.Body.Close()
-		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-	}
-
-	r.originResponse = resp
-	r.contentType = resp.Header.Get("Content-Type")
-
-	if r.isGzippedContent(resp) {
-		gzipReader, err := gzip.NewReader(resp.Body)
-		if err != nil {
-			_ = resp.Body.Close()
-			return nil, fmt.Errorf("failed to create gzip reader: %w", err)
-		}
-		return ioutil.NewReaderWithCloser(gzipReader, gzipReader.Close), nil
-	} else {
-		return resp.Body, nil
-	}
-}
-
 func (r *Reader) newCachingReader(ctx context.Context) (io.ReadCloser, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", r.URL, nil)
 	if err != nil {

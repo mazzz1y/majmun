@@ -8,6 +8,7 @@ import (
 	"majmun/internal/config/rules/channel"
 	"majmun/internal/listing/m3u8/store"
 	"net/url"
+	"slices"
 )
 
 type Processor struct {
@@ -179,11 +180,11 @@ func (p *Processor) evaluateField(ch *store.Channel, condition common.Condition)
 		}
 	}
 
-	if len(condition.Clients) > 0 && !p.matchesExactStrings(p.clientName, condition.Clients) {
+	if len(condition.Clients) > 0 && !slices.Contains([]string(condition.Clients), p.clientName) {
 		return false
 	}
 
-	if len(condition.Playlists) > 0 && !p.matchesExactStrings(ch.Playlist().Name(), condition.Playlists) {
+	if len(condition.Playlists) > 0 && !slices.Contains([]string(condition.Playlists), ch.Playlist().Name()) {
 		return false
 	}
 
@@ -211,15 +212,6 @@ func (p *Processor) evaluateOr(ch *store.Channel, conditions []common.Condition)
 func (p *Processor) matchesRegexps(value string, regexps common.RegexpArr) bool {
 	for _, re := range regexps {
 		if re.MatchString(value) {
-			return true
-		}
-	}
-	return false
-}
-
-func (p *Processor) matchesExactStrings(value string, strings common.StringOrArr) bool {
-	for _, str := range strings {
-		if value == str {
 			return true
 		}
 	}

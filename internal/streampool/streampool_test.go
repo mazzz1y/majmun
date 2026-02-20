@@ -89,10 +89,7 @@ func (m *mockStreamer) RunWithStdout(ctx context.Context, w io.Writer) (int64, e
 
 	var total int64
 	buf := make([]byte, 64*1024)
-	for {
-		if ctx.Err() != nil {
-			break
-		}
+	for ctx.Err() == nil {
 		n, readErr := stdout.Read(buf)
 		if n > 0 {
 			written, writeErr := w.Write(buf[:n])
@@ -271,7 +268,7 @@ func TestGetReader_SingleClientReceivesData(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetReader failed: %v", err)
 	}
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 
 	buf := make([]byte, 64*1024)
 	n, err := reader.Read(buf)
@@ -302,13 +299,13 @@ func TestGetReader_TwoClientsShareOneSegmenter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetReader 1 failed: %v", err)
 	}
-	defer reader1.Close()
+	defer func() { _ = reader1.Close() }()
 
 	reader2, err := d.GetReader(ctx, req)
 	if err != nil {
 		t.Fatalf("GetReader 2 failed: %v", err)
 	}
-	defer reader2.Close()
+	defer func() { _ = reader2.Close() }()
 
 	var wg sync.WaitGroup
 	bytesRead := make([]int, 2)
@@ -389,9 +386,9 @@ func TestGetReader_SemaphoreBlocksSecondStream(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetReader 1 failed: %v", err)
 	}
-	defer reader1.Close()
+	defer func() { _ = reader1.Close() }()
 
-	go io.Copy(io.Discard, reader1)
+	go func() { _, _ = io.Copy(io.Discard, reader1) }()
 
 	ctx2, cancel2 := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel2()
@@ -431,13 +428,13 @@ func TestGetReader_JoiningExistingStreamDoesNotConsumeSemaphore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetReader 1 failed: %v", err)
 	}
-	defer reader1.Close()
+	defer func() { _ = reader1.Close() }()
 
 	reader2, err := d.GetReader(ctx, req)
 	if err != nil {
 		t.Fatalf("GetReader 2 failed: %v", err)
 	}
-	defer reader2.Close()
+	defer func() { _ = reader2.Close() }()
 }
 
 func TestStop_ReaderFailsAfterPoolStopped(t *testing.T) {

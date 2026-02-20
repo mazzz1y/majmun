@@ -9,6 +9,7 @@ import (
 	"majmun/internal/listing"
 	"majmun/internal/parser/xmltv"
 	"majmun/internal/urlgen"
+	"slices"
 )
 
 type Streamer struct {
@@ -205,10 +206,8 @@ func (s *Streamer) processChannel(channel *xmltv.Channel, sourceURL string) (all
 
 func (s *Streamer) channelNamesMatch(currentNames, existingNames []string) bool {
 	for _, currentName := range currentNames {
-		for _, existingName := range existingNames {
-			if currentName == existingName {
-				return true
-			}
+		if slices.Contains(existingNames, currentName) {
+			return true
 		}
 	}
 	return false
