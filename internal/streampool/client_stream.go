@@ -3,14 +3,12 @@ package streampool
 import (
 	"context"
 	"io"
-	"sync"
 )
 
 type clientStream struct {
 	pr     *io.PipeReader
 	cancel context.CancelFunc
 	done   chan struct{}
-	once   sync.Once
 }
 
 func newClientStream(ctx context.Context, streamer Streamer) *clientStream {
@@ -36,11 +34,8 @@ func (cs *clientStream) Read(p []byte) (int, error) {
 }
 
 func (cs *clientStream) Close() error {
-	var err error
-	cs.once.Do(func() {
-		cs.cancel()
-		err = cs.pr.Close()
-		<-cs.done
-	})
+	cs.cancel()
+	err := cs.pr.Close()
+	<-cs.done
 	return err
 }

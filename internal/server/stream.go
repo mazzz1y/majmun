@@ -51,6 +51,7 @@ func (s *Server) handleStreamProxy(ctx context.Context, w http.ResponseWriter, r
 				data.StreamData.Streams[0].ProviderInfo.ProviderName,
 			)
 			if playlist, ok := firstProvider.(*app.Playlist); ok && playlist != nil {
+				w.Header().Set("Content-Type", streamContentType)
 				_, err := playlist.LimitStreamer().RunWithStdout(ctx, w)
 				if err != nil {
 					logging.Error(ctx, err, "failed to stream limit response")
@@ -80,6 +81,7 @@ func (s *Server) handleStreamProxy(ctx context.Context, w http.ResponseWriter, r
 	}
 
 	if lastResult.hasLimitError && lastResult.defaultProvider != nil {
+		w.Header().Set("Content-Type", streamContentType)
 		_, err := lastResult.defaultProvider.LimitStreamer().RunWithStdout(ctx, w)
 		if err != nil {
 			logging.Error(ctx, err, "failed to stream limit response")
@@ -88,6 +90,7 @@ func (s *Server) handleStreamProxy(ctx context.Context, w http.ResponseWriter, r
 	}
 
 	if lastResult.hasUpstreamError && lastResult.defaultProvider != nil {
+		w.Header().Set("Content-Type", streamContentType)
 		_, err := lastResult.defaultProvider.UpstreamErrorStreamer().RunWithStdout(ctx, w)
 		if err != nil {
 			logging.Error(ctx, err, "failed to stream upstream error response")
