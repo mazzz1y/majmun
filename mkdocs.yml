@@ -32,19 +32,10 @@ nav:
   - Install: install.md
   - Configuration:
       - Overview: config.md
-      - Logs: config/logs.md
       - Server: config/server.md
-      - URL Generator: config/url_generator.md
-      - Proxy:
-          - Overview: config/proxy.md
-          - Stream: config/proxy/stream.md
-          - Segmenter: config/proxy/segmenter.md
-          - Error: config/proxy/error.md
-          - HTTP Client: config/proxy/http_client.md
+      - Logs: config/logs.md
       - Playlists: config/playlists.md
       - EPGs: config/epgs.md
-      - Clients: config/clients.md
-      - Shared Types: config/shared.md
       - Rules:
           - Overview: config/rules/index.md
           - Channel Rules:
@@ -60,5 +51,14 @@ nav:
               - Condition: config/rules/condition.md
               - Selector: config/rules/selector.md
               - Final Value: config/rules/final_value.md
+      - Proxy:
+          - Overview: config/proxy.md
+          - Stream: config/proxy/stream.md
+          - Segmenter: config/proxy/segmenter.md
+          - Error: config/proxy/error.md
+          - HTTP Client: config/proxy/http_client.md
+      - Clients: config/clients.md
+      - URL Generator: config/url_generator.md
+      - Shared Types: config/shared.md
   - Examples: examples.md
   - Metrics: metrics.md
