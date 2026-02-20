@@ -22,7 +22,6 @@ func newClientStream(ctx context.Context, playlistPath string) (*clientStream, e
 	cmd := exec.CommandContext(ctx,
 		"ffmpeg",
 		"-v", "fatal",
-		"-re",
 		"-live_start_index", "-1",
 		"-i", playlistPath,
 		"-c", "copy",
