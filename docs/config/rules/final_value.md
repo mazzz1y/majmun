@@ -2,11 +2,20 @@
 
 Final value allows customizing the result channel after merging/removing duplicates. Used in deduplication rules.
 
+## YAML Structure
+
 ```yaml
 final_value:
   selector: {}
   template: ""
 ```
+
+## Fields
+
+| Field      | Type                           | Required | Description                        |
+|------------|--------------------------------|----------|------------------------------------|
+| `selector` | [`Selector`](./selector.md)   | No       | Property to modify on the result   |
+| `template` | `gotemplate`                   | No       | Go template for the resulting value |
 
 ## Template Variables
 

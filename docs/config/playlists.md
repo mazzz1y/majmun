@@ -18,7 +18,7 @@ playlists:
 |-----------|---------------------|----------|-----------------------------------------------------------------|
 | `name`    | `string`            | Yes      | Unique name identifier for this playlist                        |
 | `sources` | `[]string`          | Yes      | List of playlist sources (URLs or file paths, M3U/M3U8 format). |
-| `proxy`   | [Proxy](./proxy.md) | No       | Playlist-specific proxy configuration                           |
+| `proxy`   | [`Proxy`](./proxy.md) | No       | Playlist-specific proxy configuration                           |
 
 ## Examples
 

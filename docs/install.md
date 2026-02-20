@@ -16,6 +16,10 @@ documentation.
 
 For configuration, see [Configuration](config.md) and [Examples](examples.md).
 
+!!! tip "tmpfs for Segments"
+
+    The HLS segmenter writes temporary segment files to `/tmp`. To avoid disk wear, mount `/tmp` as tmpfs.
+
 ```yaml
 services:
   majmun:
@@ -27,6 +31,8 @@ services:
     volumes:
       - ./config:/config:ro
       - majmun-cache:/cache
+    tmpfs:
+      - /tmp
     ports:
       - "8080:8080"
 

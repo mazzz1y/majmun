@@ -16,19 +16,19 @@ sort:
 
 ## Fields
 
-| Field     | Type                           | Required | Description                                                      |
-|-----------|--------------------------------|----------|------------------------------------------------------------------|
-| selector  | [`Selector`](../selector.md)   | No       | Property to use for sorting (attribute/tag/etc), default is name |
-| order     | `[]regex`                      | No       | Custom order of channels, regex patterns                         |
-| group_by  | [`GroupByRule`](#groupbyrule)  | No       | Group before sorting                                             |
-| condition | [`Condition`](../condition.md) | No       | Only `clients` field is allowed in sort condition                |
+| Field       | Type                           | Required | Description                                                      |
+|-------------|--------------------------------|----------|------------------------------------------------------------------|
+| `selector`  | [`Selector`](../selector.md)   | No       | Property to use for sorting (attribute/tag/etc), default is name |
+| `order`     | `[]regex`                      | No       | Custom order of channels, regex patterns                         |
+| `group_by`  | [`GroupByRule`](#groupbyrule)  | No       | Group before sorting                                             |
+| `condition` | [`Condition`](../condition.md) | No       | Only `clients` field is allowed in sort condition                |
 
 ### GroupByRule
 
-| Field       | Type                         | Required | Description                            |
-|-------------|------------------------------|----------|----------------------------------------|
-| selector    | [`Selector`](../selector.md) | Yes      | How to group (attribute/tag)           |
-| group_order | `[]regex`                    | No       | Custom order of groups, regex patterns |
+| Field         | Type                         | Required | Description                            |
+|---------------|------------------------------|----------|----------------------------------------|
+| `selector`    | [`Selector`](../selector.md) | Yes      | How to group (attribute/tag)           |
+| `group_order` | `[]regex`                    | No       | Custom order of groups, regex patterns |
 
 ## How It Works
 

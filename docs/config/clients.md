@@ -33,7 +33,7 @@ clients:
 | `secret`    | `string`   | Yes      | Authentication secret key for the client |
 | `playlists` | `[]string` | No       | List of playlist names for this client.   |
 | `epgs`      | `[]string` | No       | List of EPG names for this client.        |
-| `proxy`     | `object`   | No       | Optional per-client proxy config         |
+| `proxy`     | [`Proxy`](./proxy.md) | No       | Optional per-client proxy config         |
 
 ## Examples
 

@@ -138,3 +138,7 @@ func (ps *Playlist) UpstreamErrorStreamer() *shell.Streamer {
 func (ps *Playlist) ExpiredLinkStreamer() *shell.Streamer {
 	return ps.expiredLinkStreamer
 }
+
+func (ps *Playlist) SegmenterConfig() proxy.Segmenter {
+	return ps.proxyConfig.Segmenter
+}

@@ -82,6 +82,7 @@ func mergeProxies(proxies ...proxy.Proxy) proxy.Proxy {
 		}
 
 		result.Stream = mergeHandlers(result.Stream, p.Stream)
+		mergeSegmenter(&result.Segmenter, p.Segmenter)
 
 		result.Error.Handler = mergeHandlers(result.Error.Handler, p.Error.Handler)
 
@@ -109,6 +110,26 @@ func mergeHandlers(handlers ...proxy.Handler) proxy.Handler {
 	}
 
 	return result
+}
+
+func mergeSegmenter(dst *proxy.Segmenter, src proxy.Segmenter) {
+	if len(src.Command) > 0 {
+		dst.Command = src.Command
+	}
+	mergePairs(&dst.TemplateVars, src.TemplateVars)
+	mergePairs(&dst.EnvVars, src.EnvVars)
+	if src.SegmentDuration != nil {
+		dst.SegmentDuration = src.SegmentDuration
+	}
+	if src.MaxSegments != nil {
+		dst.MaxSegments = src.MaxSegments
+	}
+	if src.InitSegments != nil {
+		dst.InitSegments = src.InitSegments
+	}
+	if src.ReadyTimeout != nil {
+		dst.ReadyTimeout = src.ReadyTimeout
+	}
 }
 
 func mergePairs[T ~[]common.NameValue](result *T, handler T) {

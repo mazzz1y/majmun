@@ -13,7 +13,7 @@ mark_hidden:
 
 | Field     | Type                           | Required | Description                   |
 |-----------|--------------------------------|----------|-------------------------------|
-| condition | [`Condition`](../condition.md) | Yes      | Which channels will be hidden |
+| `condition` | [`Condition`](../condition.md) | Yes      | Which channels will be hidden |
 
 ## Example
 

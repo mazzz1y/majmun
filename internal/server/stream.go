@@ -51,7 +51,7 @@ func (s *Server) handleStreamProxy(ctx context.Context, w http.ResponseWriter, r
 				data.StreamData.Streams[0].ProviderInfo.ProviderName,
 			)
 			if playlist, ok := firstProvider.(*app.Playlist); ok && playlist != nil {
-				_, err := playlist.LimitStreamer().Stream(ctx, w)
+				_, err := playlist.LimitStreamer().RunWithStdout(ctx, w)
 				if err != nil {
 					logging.Error(ctx, err, "failed to stream limit response")
 				}
@@ -80,7 +80,7 @@ func (s *Server) handleStreamProxy(ctx context.Context, w http.ResponseWriter, r
 	}
 
 	if lastResult.hasLimitError && lastResult.defaultProvider != nil {
-		_, err := lastResult.defaultProvider.LimitStreamer().Stream(ctx, w)
+		_, err := lastResult.defaultProvider.LimitStreamer().RunWithStdout(ctx, w)
 		if err != nil {
 			logging.Error(ctx, err, "failed to stream limit response")
 		}
@@ -88,7 +88,7 @@ func (s *Server) handleStreamProxy(ctx context.Context, w http.ResponseWriter, r
 	}
 
 	if lastResult.hasUpstreamError && lastResult.defaultProvider != nil {
-		_, err := lastResult.defaultProvider.UpstreamErrorStreamer().Stream(ctx, w)
+		_, err := lastResult.defaultProvider.UpstreamErrorStreamer().RunWithStdout(ctx, w)
 		if err != nil {
 			logging.Error(ctx, err, "failed to stream upstream error response")
 		}
@@ -166,6 +166,7 @@ func (s *Server) tryStream(
 		StreamKey: streamKey,
 		Streamer:  streamSource,
 		Semaphore: playlist.Semaphore(),
+		Segmenter: playlist.SegmenterConfig(),
 	}
 
 	reader, err := s.streamPool.GetReader(ctx, streamReq)

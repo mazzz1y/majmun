@@ -38,11 +38,13 @@ nav:
       - Proxy:
           - Overview: config/proxy.md
           - Stream: config/proxy/stream.md
+          - Segmenter: config/proxy/segmenter.md
           - Error: config/proxy/error.md
           - HTTP Client: config/proxy/http_client.md
       - Playlists: config/playlists.md
       - EPGs: config/epgs.md
       - Clients: config/clients.md
+      - Shared Types: config/shared.md
       - Rules:
           - Overview: config/rules/index.md
           - Channel Rules:

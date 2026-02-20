@@ -49,6 +49,27 @@ func DefaultConfig() *Config {
 					{Name: "ffmpeg_log_level", Value: "fatal"},
 				},
 			},
+			Segmenter: proxy.Segmenter{
+				Command: common.StringOrArr{
+					"ffmpeg",
+					"-v", "{{ default \"fatal\" .ffmpeg_log_level }}",
+					"-i", "pipe:0",
+					"-c", "copy",
+					"-f", "hls",
+					"-hls_time", "{{ .segment_duration }}",
+					"-hls_list_size", "{{ .max_segments }}",
+					"-hls_flags", "delete_segments+append_list+independent_segments",
+					"-hls_segment_filename", "{{ .segment_path }}",
+					"{{ .playlist_path }}",
+				},
+				TemplateVars: []common.NameValue{
+					{Name: "ffmpeg_log_level", Value: "fatal"},
+				},
+				SegmentDuration: intPtr(2),
+				MaxSegments:     intPtr(15),
+				InitSegments:    intPtr(2),
+				ReadyTimeout:    durationPtr(30 * time.Second),
+			},
 			Error: proxy.Error{
 				Handler: proxy.Handler{
 					Command: common.StringOrArr{
@@ -89,6 +110,10 @@ func DefaultConfig() *Config {
 			},
 		},
 	}
+}
+
+func intPtr(i int) *int {
+	return &i
 }
 
 func boolPtr(b bool) *bool {

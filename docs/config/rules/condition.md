@@ -20,15 +20,15 @@ condition:
 
 ## Fields
 
-| Field      | Type                           | Description                                                         |
-|------------|--------------------------------|---------------------------------------------------------------------|
-| `selector` | [`Selector`](./selector.md)    | See selector docs for details on matching properties                |
-| `patterns` | `[]regex`                      | Array of regex patterns, matches channel name or other selector item |
-| `clients`  | `[]string`                     | Restrict to clients by name                                         |
-| `playlists`| `[]string`                     | Restrict to playlists by name                                       |
-| `and`      | [`[]Condition`](./condition.md) | All nested conditions must match                                    |
-| `or`       | [`[]Condition`](./condition.md) | At least one nested condition must match                            |
-| `invert`   | `boolean`                      | If true, invert the condition result                                |
+| Field       | Type                            | Required | Description                                                          |
+|-------------|---------------------------------|----------|----------------------------------------------------------------------|
+| `selector`  | [`Selector`](./selector.md)     | No       | See selector docs for details on matching properties                 |
+| `patterns`  | `[]regex`                       | No       | Array of regex patterns, matches channel name or other selector item |
+| `clients`   | `[]string`                      | No       | Restrict to clients by name                                          |
+| `playlists` | `[]string`                      | No       | Restrict to playlists by name                                        |
+| `and`       | [`[]Condition`](./condition.md) | No       | All nested conditions must match                                     |
+| `or`        | [`[]Condition`](./condition.md) | No       | At least one nested condition must match                             |
+| `invert`    | `boolean`                       | No       | If true, invert the condition result                                 |
 
 
 ## Examples

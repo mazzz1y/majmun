@@ -8,7 +8,7 @@ are defined globally and applied to all clients, with optional filtering by clie
 Rules are organized into two categories:
 
 - **Channel Rules** - Operate on individual channels (set_field, remove_field, remove_channel, mark_hidden)
-- **Playlist Rules** - Operate on the entire playlist/channel list (remove_duplicates, merge_channels, sort)
+- **Playlist Rules** - Operate on the entire playlist/channel list (remove_duplicates, merge_duplicates, sort)
 
 !!! note "Rule Processing"
 

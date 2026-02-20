@@ -20,18 +20,11 @@ proxy:
 
 ## Fields
 
-| Field                | Type                               | Required | Description                              |
-|----------------------|------------------------------------|----------|------------------------------------------|
-| `command`            | `gotemplate` or `[]gotemplate`     | No       | Command array to execute                 |
-| `template_variables` | [`[]NameValue`](#namevalue-object) | No       | Variables available in command templates |
-| `env_variables`      | [`[]NameValue`](#namevalue-object) | No       | Environment variables for the command    |
-
-### Name/Value Object
-
-| Field   | Type     | Required | Description                          |
-|---------|----------|----------|--------------------------------------|
-| `name`  | `string` | Yes      | Name identifier for the object       |
-| `value` | `string` | Yes      | Value associated with the given name |
+| Field                | Type                                          | Required | Description                              |
+|----------------------|-----------------------------------------------|----------|------------------------------------------|
+| `command`            | [`Command`](../shared.md#command)              | No       | Command array to execute                 |
+| `template_variables` | [`[]NameValue`](../shared.md#namevalue-object) | No       | Variables available in command templates |
+| `env_variables`      | [`[]NameValue`](../shared.md#namevalue-object) | No       | Environment variables for the command    |
 
 ### Available Template Variables
 
@@ -86,23 +79,17 @@ proxy:
 
 ### With Environment Variables
 
+Environment variables are passed to the command process. This is useful for commands that read configuration from the environment.
+
 ```yaml
 proxy:
   stream:
     command:
-      - "ffmpeg"
-      - "-v"
-      - "error"
-      - "-i"
+      - "/opt/scripts/stream.sh"
       - "{{ .url }}"
-      - "-c"
-      - "copy"
-      - "-f"
-      - "mpegts"
-      - "pipe:1"
     env_variables:
-      - name: FFMPEG_BINARY
-        value: "/usr/bin/ffmpeg"
-      - name: HWACCEL
-        value: "auto"
+      - name: STREAM_QUALITY
+        value: "high"
+      - name: LOG_DIR
+        value: "/var/log/streams"
 ```

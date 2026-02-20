@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"majmun/internal/config/proxy"
 	"majmun/internal/ctxutil"
 	"majmun/internal/logging"
 	"majmun/internal/metrics"
@@ -24,13 +25,14 @@ var (
 )
 
 type Streamer interface {
-	Stream(ctx context.Context, w io.Writer) (int64, error)
+	RunWithStdout(ctx context.Context, w io.Writer) (int64, error)
 }
 
 type Request struct {
 	StreamKey string
 	Streamer  Streamer
 	Semaphore *semaphore.Weighted
+	Segmenter proxy.Segmenter
 }
 
 type StreamPool struct {
@@ -58,7 +60,7 @@ func (d *StreamPool) GetReader(ctx context.Context, req Request) (io.ReadCloser,
 	clientCtx := ctxutil.WithStreamID(ctx, req.StreamKey)
 	streamCtx := context.WithoutCancel(clientCtx)
 
-	seg, isNew, err := d.pool.getOrCreate(req.StreamKey, streamCtx, d.baseDir)
+	seg, isNew, err := d.pool.getOrCreate(req.StreamKey, streamCtx, d.baseDir, req.Segmenter)
 	if err != nil {
 		return nil, err
 	}
@@ -128,7 +130,7 @@ func (d *StreamPool) runSegmenter(ctx context.Context, req Request, seg *segment
 
 	go func() {
 		defer pw.Close()
-		_, err := req.Streamer.Stream(segCtx, pw)
+		_, err := req.Streamer.RunWithStdout(segCtx, pw)
 		if err != nil && !errors.Is(err, context.Canceled) {
 			logging.Error(ctx, err, "upstream stream failed")
 		}

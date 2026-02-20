@@ -1,30 +1,26 @@
 package streampool
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"io"
-	"majmun/internal/logging"
+	"majmun/internal/config/proxy"
+	"majmun/internal/shell"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"time"
 )
 
-const (
-	hlsSegmentDuration = 2
-	hlsListSize        = 15
-	segmentReadyPoll   = 100 * time.Millisecond
-	segmentReadyMax    = 30 * time.Second
-)
+const segmentReadyPoll = 100 * time.Millisecond
 
 type segmenter struct {
 	streamKey   string
 	dir         string
 	playlistURL string
+	config      proxy.Segmenter
+	streamer    *shell.Streamer
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -33,22 +29,39 @@ type segmenter struct {
 	emptyChan   chan struct{}
 	emptyOnce   sync.Once
 
-	ready    chan struct{}
-	startErr error
+	ready     chan struct{}
+	readyOnce sync.Once
+	startErr  error
 }
 
-func newSegmenter(parentCtx context.Context, streamKey string, baseDir string) (*segmenter, error) {
+func newSegmenter(parentCtx context.Context, streamKey string, baseDir string, cfg proxy.Segmenter) (*segmenter, error) {
 	dir := filepath.Join(baseDir, streamKey)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return nil, fmt.Errorf("create segment dir: %w", err)
 	}
+
+	playlistURL := filepath.Join(dir, "stream.m3u8")
+
+	base, err := shell.NewShellStreamer(cfg.Command, cfg.EnvVars, cfg.TemplateVars)
+	if err != nil {
+		return nil, fmt.Errorf("parse segmenter command: %w", err)
+	}
+
+	streamer := base.WithTemplateVars(map[string]any{
+		"segment_duration": fmt.Sprintf("%d", *cfg.SegmentDuration),
+		"max_segments":     fmt.Sprintf("%d", *cfg.MaxSegments),
+		"segment_path":     filepath.Join(dir, "seg_%05d.ts"),
+		"playlist_path":    playlistURL,
+	})
 
 	ctx, cancel := context.WithCancel(parentCtx)
 
 	s := &segmenter{
 		streamKey:   streamKey,
 		dir:         dir,
-		playlistURL: filepath.Join(dir, "stream.m3u8"),
+		playlistURL: playlistURL,
+		config:      cfg,
+		streamer:    streamer,
 		ctx:         ctx,
 		cancel:      cancel,
 		emptyChan:   make(chan struct{}),
@@ -61,48 +74,23 @@ func newSegmenter(parentCtx context.Context, streamKey string, baseDir string) (
 }
 
 func (s *segmenter) start(upstream io.Reader) {
-	cmd := exec.CommandContext(s.ctx,
-		"ffmpeg",
-		"-v", "fatal",
-		"-i", "pipe:0",
-		"-c", "copy",
-		"-f", "hls",
-		"-hls_time", fmt.Sprintf("%d", hlsSegmentDuration),
-		"-hls_list_size", fmt.Sprintf("%d", hlsListSize),
-		"-hls_flags", "delete_segments+append_list+independent_segments",
-		"-hls_segment_filename", filepath.Join(s.dir, "seg_%05d.ts"),
-		s.playlistURL,
-	)
+	go s.waitForSegments()
 
-	cmd.Stdin = upstream
-
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		s.startErr = fmt.Errorf("stderr pipe: %w", err)
-		close(s.ready)
-		return
+	err := s.streamer.RunWithStdin(s.ctx, upstream)
+	if err != nil && s.ctx.Err() == nil {
+		s.startErr = fmt.Errorf("segmenter process: %w", err)
 	}
-
-	if err := cmd.Start(); err != nil {
-		s.startErr = fmt.Errorf("start segmenter: %w", err)
-		close(s.ready)
-		return
-	}
-
-	go func() {
-		scanner := bufio.NewScanner(stderr)
-		for scanner.Scan() {
-			logging.Debug(s.ctx, "segmenter ffmpeg", "stream", s.streamKey, "msg", scanner.Text())
-		}
-	}()
-
-	s.waitForPlaylist()
-
-	_ = cmd.Wait()
+	s.closeReady()
 }
 
-func (s *segmenter) waitForPlaylist() {
-	deadline := time.After(segmentReadyMax)
+func (s *segmenter) closeReady() {
+	s.readyOnce.Do(func() {
+		close(s.ready)
+	})
+}
+
+func (s *segmenter) waitForSegments() {
+	deadline := time.After(time.Duration(*s.config.ReadyTimeout))
 	ticker := time.NewTicker(segmentReadyPoll)
 	defer ticker.Stop()
 
@@ -110,19 +98,33 @@ func (s *segmenter) waitForPlaylist() {
 		select {
 		case <-s.ctx.Done():
 			s.startErr = s.ctx.Err()
-			close(s.ready)
+			s.closeReady()
 			return
 		case <-deadline:
-			s.startErr = fmt.Errorf("timeout waiting for first segment")
-			close(s.ready)
+			s.startErr = fmt.Errorf("timeout waiting for segments")
+			s.closeReady()
 			return
 		case <-ticker.C:
-			if _, err := os.Stat(s.playlistURL); err == nil {
-				close(s.ready)
+			if s.countSegments() >= *s.config.InitSegments {
+				s.closeReady()
 				return
 			}
 		}
 	}
+}
+
+func (s *segmenter) countSegments() int {
+	entries, err := os.ReadDir(s.dir)
+	if err != nil {
+		return 0
+	}
+	count := 0
+	for _, e := range entries {
+		if !e.IsDir() && filepath.Ext(e.Name()) == ".ts" {
+			count++
+		}
+	}
+	return count
 }
 
 func (s *segmenter) addClient() {

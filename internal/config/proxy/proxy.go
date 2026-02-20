@@ -12,6 +12,7 @@ type Proxy struct {
 	ConcurrentStreams int64             `yaml:"concurrency"`
 	HTTPClient        common.HTTPClient `yaml:"http_client,omitempty"`
 	Stream            Handler           `yaml:"stream,omitempty"`
+	Segmenter         Segmenter         `yaml:"segmenter,omitempty"`
 	Error             Error             `yaml:"error,omitempty"`
 }
 
@@ -21,6 +22,9 @@ func (p *Proxy) ValidateGlobal() error {
 	}
 	if err := p.Stream.Validate(); err != nil {
 		return fmt.Errorf("stream: %w", err)
+	}
+	if err := p.Segmenter.Validate(); err != nil {
+		return fmt.Errorf("segmenter: %w", err)
 	}
 	if err := p.HTTPClient.ValidateProxyGlobal(); err != nil {
 		return fmt.Errorf("http_client: %w", err)
@@ -37,6 +41,9 @@ func (p *Proxy) ValidateOverride() error {
 	}
 	if err := p.Stream.Validate(); err != nil {
 		return fmt.Errorf("stream: %w", err)
+	}
+	if err := p.Segmenter.Validate(); err != nil {
+		return fmt.Errorf("segmenter: %w", err)
 	}
 	if err := p.HTTPClient.ValidateProxyOverride(); err != nil {
 		return fmt.Errorf("http_client: %w", err)

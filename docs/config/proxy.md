@@ -45,6 +45,14 @@ proxy:
     command: []
     template_variables: []
     env_variables: []
+  segmenter:
+    command: []
+    template_variables: []
+    env_variables: []
+    segment_duration: 2
+    max_segments: 15
+    init_segments: 2
+    ready_timeout: 30s
   error:
     command: []
     template_variables: []
@@ -71,13 +79,15 @@ proxy:
 |---------------|----------------------------------------|----------|----------------------------------------------------|
 | `enabled`     | `bool`                                 | No       | Enable or disable proxy functionality              |
 | `concurrency` | `int`                                  | No       | Maximum concurrent streams (0 = unlimited)         |
-| `http_client` | [`HTTPClient`](./proxy/http_client.md) | No       | HTTP client configuration overrides for this proxy |
-| `stream`      | `command`                              | No       | Command configuration for stream processing        |
-| `error`       | `command`                              | No       | Default error handling configuration               |
+| `http_client` | [`HTTPClient`](./proxy/http_client.md)  | No       | HTTP client configuration overrides for this proxy |
+| `stream`      | [`Stream`](./proxy/stream.md)          | No       | Command configuration for stream processing        |
+| `segmenter`   | [`Segmenter`](./proxy/segmenter.md)    | No       | HLS segmenter configuration for stream pooling     |
+| `error`       | [`Error`](./proxy/error.md)            | No       | Default error handling configuration               |
 
 ### Related Documentation
 
 - [Stream Processing](./proxy/stream.md) - Configure stream remuxing commands
+- [Segmenter](./proxy/segmenter.md) - Configure HLS segmenter for stream pooling
 - [Error Handling](./proxy/error.md) - Configure error fallback content
 - [HTTP Client](./proxy/http_client.md) - Configure HTTP request settings
 

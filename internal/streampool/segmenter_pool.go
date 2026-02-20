@@ -3,6 +3,7 @@ package streampool
 import (
 	"context"
 	"fmt"
+	"majmun/internal/config/proxy"
 	"sync"
 )
 
@@ -17,7 +18,7 @@ func newSegmenterPool() *segmenterPool {
 	}
 }
 
-func (p *segmenterPool) getOrCreate(streamKey string, ctx context.Context, baseDir string) (*segmenter, bool, error) {
+func (p *segmenterPool) getOrCreate(streamKey string, ctx context.Context, baseDir string, cfg proxy.Segmenter) (*segmenter, bool, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -25,7 +26,7 @@ func (p *segmenterPool) getOrCreate(streamKey string, ctx context.Context, baseD
 		return seg, false, nil
 	}
 
-	seg, err := newSegmenter(ctx, streamKey, baseDir)
+	seg, err := newSegmenter(ctx, streamKey, baseDir, cfg)
 	if err != nil {
 		return nil, false, fmt.Errorf("create segmenter: %w", err)
 	}
