@@ -26,11 +26,6 @@ type Streamer struct {
 	tmplVars map[string]any
 }
 
-type startedCmd struct {
-	proc   *exec.Cmd
-	stdout io.ReadCloser
-}
-
 func NewShellStreamer(command []string, envVars []common.NameValue, tmplVars []common.NameValue) (*Streamer, error) {
 	cmdTmpl := make([]*template.Template, 0, len(command))
 
@@ -83,77 +78,89 @@ func (s *Streamer) WithTemplateVars(templateVars map[string]any) *Streamer {
 	return clone
 }
 
-func (s *Streamer) RunWithStdout(ctx context.Context, w io.Writer) (int64, error) {
-	cmd, err := s.startCommand(ctx, nil)
-	if err != nil {
-		return 0, err
-	}
-
-	buf := make([]byte, bufferSize)
-	bytesWritten := int64(0)
-
-	for {
-		if ctx.Err() != nil {
-			return bytesWritten, nil
-		}
-
-		n, readErr := cmd.stdout.Read(buf)
-		if readErr != nil {
-			return bytesWritten, nil
-		}
-
-		if n > 0 {
-			bytesWritten += int64(n)
-			if _, writeErr := w.Write(buf[:n]); writeErr != nil {
-				return bytesWritten, nil
-			}
-		}
-	}
-}
-
-func (s *Streamer) RunWithStdin(ctx context.Context, stdin io.Reader) error {
-	cmd, err := s.startCommand(ctx, stdin)
-	if err != nil {
-		return err
-	}
-	return cmd.proc.Wait()
-}
-
-func (s *Streamer) startCommand(ctx context.Context, stdin io.Reader) (*startedCmd, error) {
+func (s *Streamer) Run(ctx context.Context) error {
 	commandParts, err := s.renderCommand(s.tmplVars)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	run := exec.CommandContext(ctx, commandParts[0], commandParts[1:]...)
 	run.Env = s.envVars
-	run.Stdin = stdin
 
-	var stdout io.ReadCloser
-	if stdin == nil {
-		stdout, err = run.StdoutPipe()
-		if err != nil {
-			return nil, err
-		}
+	stderr, err := run.StderrPipe()
+	if err != nil {
+		return err
+	}
+
+	if err := run.Start(); err != nil {
+		return err
+	}
+
+	go s.drainStderr(ctx, stderr)
+
+	return run.Wait()
+}
+
+func (s *Streamer) RunWithStdout(ctx context.Context, w io.Writer) (int64, error) {
+	commandParts, err := s.renderCommand(s.tmplVars)
+	if err != nil {
+		return 0, err
+	}
+
+	run := exec.CommandContext(ctx, commandParts[0], commandParts[1:]...)
+	run.Env = s.envVars
+
+	stdout, err := run.StdoutPipe()
+	if err != nil {
+		return 0, err
 	}
 
 	stderr, err := run.StderrPipe()
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 
 	if err := run.Start(); err != nil {
-		return nil, err
+		return 0, err
 	}
 
-	go func() {
-		scanner := bufio.NewScanner(stderr)
-		for scanner.Scan() {
-			logging.Debug(ctx, "command output", "msg", scanner.Text())
-		}
-	}()
+	go s.drainStderr(ctx, stderr)
 
-	return &startedCmd{proc: run, stdout: stdout}, nil
+	buf := make([]byte, bufferSize)
+	var bytesWritten int64
+	var loopErr error
+
+	for loopErr == nil {
+		n, readErr := stdout.Read(buf)
+		if n > 0 {
+			if _, writeErr := w.Write(buf[:n]); writeErr != nil {
+				loopErr = writeErr
+			}
+			bytesWritten += int64(n)
+		}
+		if readErr != nil {
+			if readErr != io.EOF {
+				loopErr = readErr
+			}
+			break
+		}
+	}
+
+	waitErr := run.Wait()
+	if loopErr != nil {
+		return bytesWritten, loopErr
+	}
+	if ctx.Err() != nil {
+		return bytesWritten, ctx.Err()
+	}
+	return bytesWritten, waitErr
+}
+
+func (s *Streamer) drainStderr(ctx context.Context, stderr io.ReadCloser) {
+	scanner := bufio.NewScanner(stderr)
+	for scanner.Scan() {
+		logging.Debug(ctx, "command output", "msg", scanner.Text())
+	}
 }
 
 func (s *Streamer) renderCommand(tmplVars map[string]any) ([]string, error) {

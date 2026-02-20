@@ -15,12 +15,18 @@ import (
 	"golang.org/x/sync/semaphore"
 )
 
+const testStreamURL = "testsrc=duration=60:size=320x240:rate=10"
+
 var testSegmenterCfg = proxy.Segmenter{
 	Command: common.StringOrArr{
 		"ffmpeg",
 		"-v", "fatal",
-		"-i", "pipe:0",
-		"-c", "copy",
+		"-f", "lavfi",
+		"-i", "{{ .url }}",
+		"-c:v", "libx264",
+		"-preset", "ultrafast",
+		"-tune", "zerolatency",
+		"-g", "10",
 		"-f", "hls",
 		"-hls_time", "{{ .segment_duration }}",
 		"-hls_list_size", "{{ .max_segments }}",
@@ -42,39 +48,22 @@ func durationPtr(d time.Duration) *common.Duration {
 	return &cd
 }
 
-func ffmpegAvailable() bool {
-	_, err := exec.LookPath("ffmpeg")
-	return err == nil
+var testClientStreamer = ClientStreamerFunc(func(playlistPath string) Streamer {
+	return &mockClientStreamer{playlistPath: playlistPath}
+})
+
+type mockClientStreamer struct {
+	playlistPath string
 }
 
-func skipWithoutFFmpeg(t *testing.T) {
-	t.Helper()
-	if !ffmpegAvailable() {
-		t.Skip("ffmpeg not available")
-	}
-}
-
-type mockStreamer struct {
-	duration time.Duration
-}
-
-func (m *mockStreamer) RunWithStdout(ctx context.Context, w io.Writer) (int64, error) {
-	dur := m.duration
-	if dur == 0 {
-		dur = 30 * time.Second
-	}
-
+func (m *mockClientStreamer) RunWithStdout(ctx context.Context, w io.Writer) (int64, error) {
 	cmd := exec.CommandContext(ctx,
 		"ffmpeg",
 		"-v", "fatal",
-		"-f", "lavfi",
-		"-i", "testsrc=duration=60:size=320x240:rate=10",
-		"-c:v", "libx264",
-		"-preset", "ultrafast",
-		"-tune", "zerolatency",
-		"-g", "10",
+		"-live_start_index", "-1",
+		"-i", m.playlistPath,
+		"-c", "copy",
 		"-f", "mpegts",
-		"-t", dur.String(),
 		"pipe:1",
 	)
 
@@ -107,12 +96,24 @@ func (m *mockStreamer) RunWithStdout(ctx context.Context, w io.Writer) (int64, e
 	return total, ctx.Err()
 }
 
+func ffmpegAvailable() bool {
+	_, err := exec.LookPath("ffmpeg")
+	return err == nil
+}
+
+func skipWithoutFFmpeg(t *testing.T) {
+	t.Helper()
+	if !ffmpegAvailable() {
+		t.Skip("ffmpeg not available")
+	}
+}
+
 func TestSegmenterPool_CreateAndRemove(t *testing.T) {
 	pool := newSegmenterPool()
 	ctx := context.Background()
 	dir := t.TempDir()
 
-	seg1, isNew, err := pool.getOrCreate("stream-1", ctx, dir, testSegmenterCfg)
+	seg1, isNew, err := pool.getOrCreate("stream-1", ctx, dir, testSegmenterCfg, testStreamURL)
 	if err != nil {
 		t.Fatalf("getOrCreate failed: %v", err)
 	}
@@ -123,7 +124,7 @@ func TestSegmenterPool_CreateAndRemove(t *testing.T) {
 		t.Fatal("expected non-nil segmenter")
 	}
 
-	seg2, isNew2, err := pool.getOrCreate("stream-1", ctx, dir, testSegmenterCfg)
+	seg2, isNew2, err := pool.getOrCreate("stream-1", ctx, dir, testSegmenterCfg, testStreamURL)
 	if err != nil {
 		t.Fatalf("getOrCreate failed: %v", err)
 	}
@@ -136,7 +137,7 @@ func TestSegmenterPool_CreateAndRemove(t *testing.T) {
 
 	pool.remove("stream-1")
 
-	seg3, isNew3, err := pool.getOrCreate("stream-1", ctx, dir, testSegmenterCfg)
+	seg3, isNew3, err := pool.getOrCreate("stream-1", ctx, dir, testSegmenterCfg, testStreamURL)
 	if err != nil {
 		t.Fatalf("getOrCreate failed: %v", err)
 	}
@@ -153,8 +154,8 @@ func TestSegmenterPool_StopAllClearsMap(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
 
-	_, _, _ = pool.getOrCreate("stream-1", ctx, dir, testSegmenterCfg)
-	_, _, _ = pool.getOrCreate("stream-2", ctx, dir, testSegmenterCfg)
+	_, _, _ = pool.getOrCreate("stream-1", ctx, dir, testSegmenterCfg, testStreamURL)
+	_, _, _ = pool.getOrCreate("stream-2", ctx, dir, testSegmenterCfg, testStreamURL)
 
 	pool.stopAll()
 
@@ -171,7 +172,7 @@ func TestSegmenter_InitialClientCountIsOne(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	seg, err := newSegmenter(ctx, "test", t.TempDir(), testSegmenterCfg)
+	seg, err := newSegmenter(ctx, "test", t.TempDir(), testSegmenterCfg, testStreamURL)
 	if err != nil {
 		t.Fatalf("newSegmenter failed: %v", err)
 	}
@@ -185,7 +186,7 @@ func TestSegmenter_EmptySignalOnLastClientRemoved(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	seg, err := newSegmenter(ctx, "test", t.TempDir(), testSegmenterCfg)
+	seg, err := newSegmenter(ctx, "test", t.TempDir(), testSegmenterCfg, testStreamURL)
 	if err != nil {
 		t.Fatalf("newSegmenter failed: %v", err)
 	}
@@ -220,7 +221,7 @@ func TestSegmenter_DirCreatedOnInit(t *testing.T) {
 	defer cancel()
 
 	baseDir := t.TempDir()
-	_, err := newSegmenter(ctx, "test-stream", baseDir, testSegmenterCfg)
+	_, err := newSegmenter(ctx, "test-stream", baseDir, testSegmenterCfg, testStreamURL)
 	if err != nil {
 		t.Fatalf("newSegmenter failed: %v", err)
 	}
@@ -236,7 +237,7 @@ func TestSegmenter_CleanupRemovesDir(t *testing.T) {
 	defer cancel()
 
 	baseDir := t.TempDir()
-	seg, err := newSegmenter(ctx, "test-stream", baseDir, testSegmenterCfg)
+	seg, err := newSegmenter(ctx, "test-stream", baseDir, testSegmenterCfg, testStreamURL)
 	if err != nil {
 		t.Fatalf("newSegmenter failed: %v", err)
 	}
@@ -259,9 +260,10 @@ func TestGetReader_SingleClientReceivesData(t *testing.T) {
 	defer cancel()
 
 	req := Request{
-		StreamKey: "test-single",
-		Streamer:  &mockStreamer{duration: 15 * time.Second},
-		Segmenter: testSegmenterCfg,
+		StreamKey:      "test-single",
+		StreamURL:      testStreamURL,
+		ClientStreamer: testClientStreamer,
+		Segmenter:      testSegmenterCfg,
 	}
 
 	reader, err := d.GetReader(ctx, req)
@@ -290,9 +292,10 @@ func TestGetReader_TwoClientsShareOneSegmenter(t *testing.T) {
 	defer cancel()
 
 	req := Request{
-		StreamKey: "test-multi",
-		Streamer:  &mockStreamer{duration: 15 * time.Second},
-		Segmenter: testSegmenterCfg,
+		StreamKey:      "test-multi",
+		StreamURL:      testStreamURL,
+		ClientStreamer: testClientStreamer,
+		Segmenter:      testSegmenterCfg,
 	}
 
 	reader1, err := d.GetReader(ctx, req)
@@ -340,9 +343,10 @@ func TestGetReader_ReadFailsAfterClose(t *testing.T) {
 	defer cancel()
 
 	req := Request{
-		StreamKey: "test-disconnect",
-		Streamer:  &mockStreamer{duration: 15 * time.Second},
-		Segmenter: testSegmenterCfg,
+		StreamKey:      "test-disconnect",
+		StreamURL:      testStreamURL,
+		ClientStreamer: testClientStreamer,
+		Segmenter:      testSegmenterCfg,
 	}
 
 	reader, err := d.GetReader(ctx, req)
@@ -376,10 +380,11 @@ func TestGetReader_SemaphoreBlocksSecondStream(t *testing.T) {
 	defer cancel1()
 
 	req1 := Request{
-		StreamKey: "sem-stream-1",
-		Streamer:  &mockStreamer{duration: 15 * time.Second},
-		Semaphore: sem,
-		Segmenter: testSegmenterCfg,
+		StreamKey:      "sem-stream-1",
+		StreamURL:      testStreamURL,
+		ClientStreamer: testClientStreamer,
+		Semaphore:      sem,
+		Segmenter:      testSegmenterCfg,
 	}
 
 	reader1, err := d.GetReader(ctx1, req1)
@@ -394,10 +399,11 @@ func TestGetReader_SemaphoreBlocksSecondStream(t *testing.T) {
 	defer cancel2()
 
 	req2 := Request{
-		StreamKey: "sem-stream-2",
-		Streamer:  &mockStreamer{duration: 15 * time.Second},
-		Semaphore: sem,
-		Segmenter: testSegmenterCfg,
+		StreamKey:      "sem-stream-2",
+		StreamURL:      testStreamURL,
+		ClientStreamer: testClientStreamer,
+		Semaphore:      sem,
+		Segmenter:      testSegmenterCfg,
 	}
 
 	_, err = d.GetReader(ctx2, req2)
@@ -418,10 +424,11 @@ func TestGetReader_JoiningExistingStreamDoesNotConsumeSemaphore(t *testing.T) {
 	defer cancel()
 
 	req := Request{
-		StreamKey: "sem-shared",
-		Streamer:  &mockStreamer{duration: 15 * time.Second},
-		Semaphore: sem,
-		Segmenter: testSegmenterCfg,
+		StreamKey:      "sem-shared",
+		StreamURL:      testStreamURL,
+		ClientStreamer: testClientStreamer,
+		Semaphore:      sem,
+		Segmenter:      testSegmenterCfg,
 	}
 
 	reader1, err := d.GetReader(ctx, req)
@@ -446,9 +453,10 @@ func TestStop_ReaderFailsAfterPoolStopped(t *testing.T) {
 	defer cancel()
 
 	req := Request{
-		StreamKey: "test-stop",
-		Streamer:  &mockStreamer{duration: 15 * time.Second},
-		Segmenter: testSegmenterCfg,
+		StreamKey:      "test-stop",
+		StreamURL:      testStreamURL,
+		ClientStreamer: testClientStreamer,
+		Segmenter:      testSegmenterCfg,
 	}
 
 	reader, err := d.GetReader(ctx, req)

@@ -28,11 +28,14 @@ type Streamer interface {
 	RunWithStdout(ctx context.Context, w io.Writer) (int64, error)
 }
 
+type ClientStreamerFunc func(playlistPath string) Streamer
+
 type Request struct {
-	StreamKey string
-	Streamer  Streamer
-	Semaphore *semaphore.Weighted
-	Segmenter proxy.Segmenter
+	StreamKey      string
+	StreamURL      string
+	ClientStreamer ClientStreamerFunc
+	Semaphore      *semaphore.Weighted
+	Segmenter      proxy.Segmenter
 }
 
 type StreamPool struct {
@@ -60,7 +63,7 @@ func (d *StreamPool) GetReader(ctx context.Context, req Request) (io.ReadCloser,
 	clientCtx := ctxutil.WithStreamID(ctx, req.StreamKey)
 	streamCtx := context.WithoutCancel(clientCtx)
 
-	seg, isNew, err := d.pool.getOrCreate(req.StreamKey, streamCtx, d.baseDir, req.Segmenter)
+	seg, isNew, err := d.pool.getOrCreate(req.StreamKey, streamCtx, d.baseDir, req.Segmenter, req.StreamURL)
 	if err != nil {
 		return nil, err
 	}
@@ -91,11 +94,7 @@ func (d *StreamPool) GetReader(ctx context.Context, req Request) (io.ReadCloser,
 		return nil, fmt.Errorf("%w: %v", ErrSegmenterFailed, seg.startErr)
 	}
 
-	cs, err := newClientStream(clientCtx, seg.playlistURL)
-	if err != nil {
-		seg.removeClient()
-		return nil, fmt.Errorf("start client stream: %w", err)
-	}
+	cs := newClientStream(clientCtx, req.ClientStreamer(seg.playlistPath))
 
 	return &clientReader{
 		clientStream: cs,
@@ -126,18 +125,7 @@ func (d *StreamPool) runSegmenter(ctx context.Context, req Request, seg *segment
 		}
 	}()
 
-	pr, pw := io.Pipe()
-
-	go func() {
-		defer func() { _ = pw.Close() }()
-		_, err := req.Streamer.RunWithStdout(segCtx, pw)
-		if err != nil && !errors.Is(err, context.Canceled) {
-			logging.Error(ctx, err, "upstream stream failed")
-		}
-	}()
-
-	seg.start(pr)
-	_ = pr.Close()
+	seg.start(segCtx)
 
 	<-seg.waitEmpty()
 }

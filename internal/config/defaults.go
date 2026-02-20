@@ -39,8 +39,8 @@ func DefaultConfig() *Config {
 			Stream: proxy.Handler{
 				Command: common.StringOrArr{
 					"ffmpeg",
-					"-v", "{{ default \"fatal\" .ffmpeg_log_level }}",
-					"-i", "{{.url}}",
+					"-v", "{{ .ffmpeg_log_level }}",
+					"-i", "{{ .input }}",
 					"-c", "copy",
 					"-f", "mpegts",
 					"pipe:1",
@@ -52,8 +52,8 @@ func DefaultConfig() *Config {
 			Segmenter: proxy.Segmenter{
 				Command: common.StringOrArr{
 					"ffmpeg",
-					"-v", "{{ default \"fatal\" .ffmpeg_log_level }}",
-					"-i", "pipe:0",
+					"-v", "{{ .ffmpeg_log_level }}",
+					"-i", "{{ .url }}",
 					"-c", "copy",
 					"-f", "hls",
 					"-hls_time", "{{ .segment_duration }}",
@@ -74,7 +74,7 @@ func DefaultConfig() *Config {
 				Handler: proxy.Handler{
 					Command: common.StringOrArr{
 						"ffmpeg",
-						"-v", "{{ default \"fatal\" .ffmpeg_log_level }}",
+						"-v", "{{ .ffmpeg_log_level }}",
 						"-f", "lavfi",
 						"-i", "color=#301934:size=1280x720:rate=1",
 						"-vf", "drawtext=text='{{.message}}':fontcolor=white:fontsize=36:x=(w-text_w)/2:y=(h-text_h)/2+(line_h/2):text_align=C+M",

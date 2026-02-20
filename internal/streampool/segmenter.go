@@ -3,7 +3,6 @@ package streampool
 import (
 	"context"
 	"fmt"
-	"io"
 	"majmun/internal/config/proxy"
 	"majmun/internal/shell"
 	"os"
@@ -16,11 +15,11 @@ import (
 const segmentReadyPoll = 100 * time.Millisecond
 
 type segmenter struct {
-	streamKey   string
-	dir         string
-	playlistURL string
-	config      proxy.Segmenter
-	streamer    *shell.Streamer
+	streamKey    string
+	dir          string
+	playlistPath string
+	config       proxy.Segmenter
+	streamer     *shell.Streamer
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -34,13 +33,13 @@ type segmenter struct {
 	startErr  error
 }
 
-func newSegmenter(parentCtx context.Context, streamKey string, baseDir string, cfg proxy.Segmenter) (*segmenter, error) {
+func newSegmenter(parentCtx context.Context, streamKey string, baseDir string, cfg proxy.Segmenter, streamURL string) (*segmenter, error) {
 	dir := filepath.Join(baseDir, streamKey)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return nil, fmt.Errorf("create segment dir: %w", err)
 	}
 
-	playlistURL := filepath.Join(dir, "stream.m3u8")
+	playlistPath := filepath.Join(dir, "stream.m3u8")
 
 	base, err := shell.NewShellStreamer(cfg.Command, cfg.EnvVars, cfg.TemplateVars)
 	if err != nil {
@@ -48,22 +47,23 @@ func newSegmenter(parentCtx context.Context, streamKey string, baseDir string, c
 	}
 
 	streamer := base.WithTemplateVars(map[string]any{
+		"url":           streamURL,
 		"segment_path":  filepath.Join(dir, "seg_%05d.ts"),
-		"playlist_path": playlistURL,
+		"playlist_path": playlistPath,
 	})
 
 	ctx, cancel := context.WithCancel(parentCtx)
 
 	s := &segmenter{
-		streamKey:   streamKey,
-		dir:         dir,
-		playlistURL: playlistURL,
-		config:      cfg,
-		streamer:    streamer,
-		ctx:         ctx,
-		cancel:      cancel,
-		emptyChan:   make(chan struct{}),
-		ready:       make(chan struct{}),
+		streamKey:    streamKey,
+		dir:          dir,
+		playlistPath: playlistPath,
+		config:       cfg,
+		streamer:     streamer,
+		ctx:          ctx,
+		cancel:       cancel,
+		emptyChan:    make(chan struct{}),
+		ready:        make(chan struct{}),
 	}
 
 	s.clientCount.Store(1)
@@ -71,18 +71,20 @@ func newSegmenter(parentCtx context.Context, streamKey string, baseDir string, c
 	return s, nil
 }
 
-func (s *segmenter) start(upstream io.Reader) {
+func (s *segmenter) start(ctx context.Context) {
 	go s.waitForSegments()
 
-	err := s.streamer.RunWithStdin(s.ctx, upstream)
-	if err != nil && s.ctx.Err() == nil {
-		s.startErr = fmt.Errorf("segmenter process: %w", err)
+	err := s.streamer.Run(ctx)
+	if err != nil && ctx.Err() == nil {
+		s.setReady(fmt.Errorf("segmenter process: %w", err))
+	} else {
+		s.setReady(nil)
 	}
-	s.closeReady()
 }
 
-func (s *segmenter) closeReady() {
+func (s *segmenter) setReady(err error) {
 	s.readyOnce.Do(func() {
+		s.startErr = err
 		close(s.ready)
 	})
 }
@@ -95,16 +97,14 @@ func (s *segmenter) waitForSegments() {
 	for {
 		select {
 		case <-s.ctx.Done():
-			s.startErr = s.ctx.Err()
-			s.closeReady()
+			s.setReady(s.ctx.Err())
 			return
 		case <-deadline:
-			s.startErr = fmt.Errorf("timeout waiting for segments")
-			s.closeReady()
+			s.setReady(fmt.Errorf("timeout waiting for segments"))
 			return
 		case <-ticker.C:
 			if s.countSegments() >= *s.config.InitSegments {
-				s.closeReady()
+				s.setReady(nil)
 				return
 			}
 		}

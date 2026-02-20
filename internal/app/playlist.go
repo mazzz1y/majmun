@@ -6,6 +6,7 @@ import (
 	"majmun/internal/config/rules/channel"
 	"majmun/internal/listing"
 	"majmun/internal/shell"
+	"majmun/internal/streampool"
 	"majmun/internal/urlgen"
 
 	"golang.org/x/sync/semaphore"
@@ -24,7 +25,7 @@ type Playlist struct {
 	proxyConfig proxy.Proxy
 	httpClient  listing.HTTPClient
 
-	linkStreamer          *shell.Streamer
+	streamer              *shell.Streamer
 	rateLimitStreamer     *shell.Streamer
 	upstreamErrorStreamer *shell.Streamer
 	expiredLinkStreamer   *shell.Streamer
@@ -80,7 +81,7 @@ func NewPlaylistProvider(
 		proxyConfig:           proxy,
 		httpClient:            httpClient,
 		rules:                 rules,
-		linkStreamer:          streamStreamer,
+		streamer:              streamStreamer,
 		rateLimitStreamer:     rateLimitStreamer,
 		upstreamErrorStreamer: upstreamErrorStreamer,
 		expiredLinkStreamer:   expiredLinkStreamer,
@@ -123,10 +124,6 @@ func (ps *Playlist) ProxyConfig() proxy.Proxy {
 	return ps.proxyConfig
 }
 
-func (ps *Playlist) LinkStreamer(streamURL string) *shell.Streamer {
-	return ps.linkStreamer.WithTemplateVars(map[string]any{"url": streamURL})
-}
-
 func (ps *Playlist) LimitStreamer() *shell.Streamer {
 	return ps.rateLimitStreamer
 }
@@ -137,6 +134,10 @@ func (ps *Playlist) UpstreamErrorStreamer() *shell.Streamer {
 
 func (ps *Playlist) ExpiredLinkStreamer() *shell.Streamer {
 	return ps.expiredLinkStreamer
+}
+
+func (ps *Playlist) ClientStreamer(playlistPath string) streampool.Streamer {
+	return ps.streamer.WithTemplateVars(map[string]any{"input": playlistPath})
 }
 
 func (ps *Playlist) SegmenterConfig() proxy.Segmenter {

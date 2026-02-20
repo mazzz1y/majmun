@@ -154,19 +154,12 @@ func (s *Server) tryStream(
 	streamURL := buildStreamURL(stream.URL, r.URL.RawQuery)
 	streamKey := buildStreamKey(stream.URL, r.URL.RawQuery)
 
-	streamSource := playlist.LinkStreamer(streamURL)
-	if streamSource == nil {
-		logging.Error(ctx,
-			errors.New("failed to create stream source"), "stream_index", streamIndex)
-
-		return streamResult{false, false, false}
-	}
-
 	streamReq := streampool.Request{
-		StreamKey: streamKey,
-		Streamer:  streamSource,
-		Semaphore: playlist.Semaphore(),
-		Segmenter: playlist.SegmenterConfig(),
+		StreamKey:      streamKey,
+		StreamURL:      streamURL,
+		ClientStreamer: playlist.ClientStreamer,
+		Semaphore:      playlist.Semaphore(),
+		Segmenter:      playlist.SegmenterConfig(),
 	}
 
 	reader, err := s.streamPool.GetReader(ctx, streamReq)

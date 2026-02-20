@@ -1,74 +1,46 @@
 package streampool
 
 import (
-	"bufio"
 	"context"
 	"io"
-	"majmun/internal/logging"
-	"os/exec"
 	"sync"
 )
 
 type clientStream struct {
-	cmd    *exec.Cmd
-	stdout io.ReadCloser
+	pr     *io.PipeReader
 	cancel context.CancelFunc
+	done   chan struct{}
 	once   sync.Once
 }
 
-func newClientStream(ctx context.Context, playlistPath string) (*clientStream, error) {
+func newClientStream(ctx context.Context, streamer Streamer) *clientStream {
 	ctx, cancel := context.WithCancel(ctx)
-
-	cmd := exec.CommandContext(ctx,
-		"ffmpeg",
-		"-v", "fatal",
-		"-live_start_index", "-1",
-		"-i", playlistPath,
-		"-c", "copy",
-		"-f", "mpegts",
-		"pipe:1",
-	)
-
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		cancel()
-		return nil, err
-	}
-
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		cancel()
-		return nil, err
-	}
-
-	if err := cmd.Start(); err != nil {
-		cancel()
-		return nil, err
-	}
+	pr, pw := io.Pipe()
+	done := make(chan struct{})
 
 	go func() {
-		scanner := bufio.NewScanner(stderr)
-		for scanner.Scan() {
-			logging.Debug(ctx, "client ffmpeg", "msg", scanner.Text())
-		}
+		defer close(done)
+		defer func() { _ = pw.Close() }()
+		_, _ = streamer.RunWithStdout(ctx, pw)
 	}()
 
 	return &clientStream{
-		cmd:    cmd,
-		stdout: stdout,
+		pr:     pr,
 		cancel: cancel,
-	}, nil
+		done:   done,
+	}
 }
 
 func (cs *clientStream) Read(p []byte) (int, error) {
-	return cs.stdout.Read(p)
+	return cs.pr.Read(p)
 }
 
 func (cs *clientStream) Close() error {
 	var err error
 	cs.once.Do(func() {
 		cs.cancel()
-		err = cs.cmd.Wait()
+		err = cs.pr.Close()
+		<-cs.done
 	})
 	return err
 }
