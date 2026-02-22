@@ -67,7 +67,7 @@ func DefaultConfig() *Config {
 					{Name: "segment_duration", Value: "2"},
 					{Name: "max_segments", Value: "15"},
 				},
-				InitSegments: intPtr(2),
+				InitSegments: intPtr(1),
 				ReadyTimeout: durationPtr(30 * time.Second),
 			},
 			Error: proxy.Error{
