@@ -2,22 +2,20 @@ package listing
 
 import (
 	"context"
-	"crypto/sha256"
-	"fmt"
+	"hash/fnv"
 	"io"
 	"net/http"
 	"net/url"
 	"os"
-	"strings"
+	"strconv"
 )
 
 func GenerateHashID(parts ...string) string {
-	var b strings.Builder
+	h := fnv.New32a()
 	for _, p := range parts {
-		b.WriteString(p)
+		h.Write([]byte(p))
 	}
-	hash := sha256.Sum256([]byte(b.String()))
-	return fmt.Sprintf("%x", hash[:4])
+	return strconv.FormatUint(uint64(h.Sum32()), 16)
 }
 
 func CreateReader(ctx context.Context, httpClient HTTPClient, resourceURL string) (io.ReadCloser, error) {

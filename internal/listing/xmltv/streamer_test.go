@@ -361,7 +361,7 @@ func TestChannelNameMatching(t *testing.T) {
 	}, httpClient)
 	require.NoError(t, err)
 
-	channels := map[string]string{"1f3d47da": "CNN Channel"}
+	channels := map[string]string{listing.GenerateHashID("CNN"): "CNN Channel"}
 	streamer := createStreamer([]listing.EPG{sub}, channels)
 
 	buf := &bytes.Buffer{}

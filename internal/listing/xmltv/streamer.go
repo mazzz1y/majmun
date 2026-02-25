@@ -10,6 +10,7 @@ import (
 	"majmun/internal/parser/xmltv"
 	"majmun/internal/urlgen"
 	"slices"
+	"strconv"
 )
 
 type Streamer struct {
@@ -225,7 +226,7 @@ func (s *Streamer) processProgramme(programme *xmltv.Programme, sourceURL string
 
 	key := programme.Channel
 	if programme.Start != nil {
-		key += programme.Start.Time.String()
+		key += strconv.FormatInt(programme.Start.Time.Unix(), 36)
 	}
 	if programme.ID != "" {
 		key += programme.ID
