@@ -86,6 +86,7 @@ func (c *Client) BuildPlaylistProvider(
 		nil,
 		sem,
 		httpClient,
+		playlistConf.SkipOnError,
 	)
 	if err != nil {
 		return err
@@ -105,6 +106,7 @@ func (c *Client) BuildEPGProvider(epgConf config.EPG, serverProxy proxy.Proxy) e
 		epgConf.Sources,
 		mergedProxy,
 		httpClient,
+		epgConf.SkipOnError,
 	)
 	if err != nil {
 		return err

@@ -10,15 +10,17 @@ epgs:
   - name: ""
     sources: []
     proxy: {}
+    skip_on_error: false
 ```
 
 ## Fields
 
-| Field     | Type                  | Required | Description                                                 |
-| --------- | --------------------- | -------- | ----------------------------------------------------------- |
-| `name`    | `string`              | Yes      | Unique name identifier for this EPG                         |
-| `sources` | `[]string`            | Yes      | List of EPG sources (URLs or file paths, XML or .gz).       |
-| `proxy`   | [`Proxy`](./proxy.md) | No       | EPG-specific proxy configuration, only enabled takes effect |
+| Field           | Type                  | Required | Description                                                                                                                                                                                                                                  |
+| --------------- | --------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`          | `string`              | Yes      | Unique name identifier for this EPG                                                                                                                                                                                                          |
+| `sources`       | `[]string`            | Yes      | List of EPG sources (URLs or file paths, XML or .gz).                                                                                                                                                                                        |
+| `proxy`         | [`Proxy`](./proxy.md) | No       | EPG-specific proxy configuration, only enabled takes effect                                                                                                                                                                                  |
+| `skip_on_error` | `bool`                | No       | When `true`, a source that errors (load failure, non-2xx, or mid-stream decode error) is logged and skipped instead of aborting the response. Channels and programmes read before the failure are kept; the remainder is dropped. Default `false`. |
 
 ## Examples
 
@@ -51,4 +53,21 @@ epgs:
       - "https://international-provider.com/epg.xml"
     proxy:
       enabled: true
+```
+
+### Skip Failing Sources
+
+When `skip_on_error: true` is set, an upstream EPG source that errors out (network failure,
+non-2xx status, decode error) is logged and skipped instead of aborting the whole response.
+Useful for non-priority or free EPG providers. Any channels/programmes read before a mid-stream
+failure are kept; the rest of that source is dropped. If all sources fail, the request still
+errors out with `no data in subscriptions`.
+
+```yaml
+epgs:
+  - name: combined-guide
+    sources:
+      - "https://reliable-provider.com/epg.xml"
+      - "https://flaky-provider.com/epg.xml"
+    skip_on_error: true
 ```

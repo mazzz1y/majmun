@@ -29,6 +29,7 @@ type Playlist interface {
 	Rules() []*channel.Rule
 	ProxyConfig() proxy.Proxy
 	IsProxied() bool
+	SkipOnError() bool
 }
 
 type EPG interface {
@@ -38,4 +39,5 @@ type EPG interface {
 	HTTPClient() HTTPClient
 	ProxyConfig() proxy.Proxy
 	IsProxied() bool
+	SkipOnError() bool
 }

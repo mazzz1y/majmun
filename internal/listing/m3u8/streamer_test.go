@@ -59,6 +59,25 @@ func createTestSubscription(name string, playlists []string, httpClient listing.
 		nil,
 		sem,
 		httpClient,
+		false,
+	)
+}
+
+func createTestSubscriptionWithSkip(name string, playlists []string, httpClient listing.HTTPClient) (*app.Playlist, error) {
+	sem := semaphore.NewWeighted(1)
+	generator, err := urlgen.NewGenerator("http://localhost", "secret", time.Hour, time.Hour)
+	if err != nil {
+		return nil, err
+	}
+	return app.NewPlaylistProvider(
+		name,
+		generator,
+		playlists,
+		proxy.Proxy{},
+		nil,
+		sem,
+		httpClient,
+		true,
 	)
 }
 
@@ -218,6 +237,76 @@ func TestStreamerErrorHandling(t *testing.T) {
 	_, err = streamer.WriteTo(ctx, buffer)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "connection failed")
+
+	httpClient.AssertExpectations(t)
+}
+
+func TestStreamerSkipsFailingSourceWhenSkipOnError(t *testing.T) {
+	ctx := context.Background()
+	httpClient := new(MockHTTPClient)
+
+	goodM3U := `#EXTM3U
+#EXTINF:-1 tvg-id="ok1" tvg-name="OK Channel", OK Channel
+http://example.com/ok`
+
+	httpClient.On("Do", mock.MatchedBy(func(req *http.Request) bool {
+		return req.URL.String() == "http://example.com/bad.m3u"
+	})).Return(nil, fmt.Errorf("connection failed"))
+
+	httpClient.On("Do", mock.MatchedBy(func(req *http.Request) bool {
+		return req.URL.String() == "http://example.com/good.m3u"
+	})).Return(&http.Response{
+		StatusCode: 200,
+		Body:       io.NopCloser(bytes.NewReader([]byte(goodM3U))),
+	}, nil)
+
+	badSub, err := createTestSubscriptionWithSkip(
+		"bad-sub",
+		[]string{"http://example.com/bad.m3u"},
+		httpClient,
+	)
+	require.NoError(t, err)
+
+	goodSub, err := createTestSubscriptionWithSkip(
+		"good-sub",
+		[]string{"http://example.com/good.m3u"},
+		httpClient,
+	)
+	require.NoError(t, err)
+
+	streamer := createStreamer([]listing.Playlist{badSub, goodSub}, "http://example.com/epg.xml")
+
+	buffer := &bytes.Buffer{}
+	_, err = streamer.WriteTo(ctx, buffer)
+	require.NoError(t, err)
+
+	output := buffer.String()
+	assert.Contains(t, output, "OK Channel")
+
+	httpClient.AssertExpectations(t)
+}
+
+func TestStreamerSkipOnErrorAllFailing(t *testing.T) {
+	ctx := context.Background()
+	httpClient := new(MockHTTPClient)
+
+	httpClient.On("Do", mock.MatchedBy(func(req *http.Request) bool {
+		return req.URL.String() == "http://example.com/bad.m3u"
+	})).Return(nil, fmt.Errorf("connection failed"))
+
+	badSub, err := createTestSubscriptionWithSkip(
+		"bad-sub",
+		[]string{"http://example.com/bad.m3u"},
+		httpClient,
+	)
+	require.NoError(t, err)
+
+	streamer := createStreamer([]listing.Playlist{badSub}, "http://example.com/epg.xml")
+
+	buffer := &bytes.Buffer{}
+	_, err = streamer.WriteTo(ctx, buffer)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "no channels found")
 
 	httpClient.AssertExpectations(t)
 }

@@ -13,17 +13,19 @@ type EPG struct {
 	urlGenerator *urlgen.Generator
 	proxyConfig  proxy.Proxy
 	httpClient   listing.HTTPClient
+	skipOnError  bool
 }
 
 func NewEPGProvider(
 	name string, urlGen *urlgen.Generator, sources []string, proxy proxy.Proxy,
-	httpClient listing.HTTPClient) (*EPG, error) {
+	httpClient listing.HTTPClient, skipOnError bool) (*EPG, error) {
 	return &EPG{
 		name:         name,
 		urlGenerator: urlGen,
 		sources:      sources,
 		proxyConfig:  proxy,
 		httpClient:   httpClient,
+		skipOnError:  skipOnError,
 	}, nil
 }
 
@@ -53,6 +55,10 @@ func (es *EPG) ProxyConfig() proxy.Proxy {
 
 func (es *EPG) IsProxied() bool {
 	return es.proxyConfig.Enabled != nil && *es.proxyConfig.Enabled
+}
+
+func (es *EPG) SkipOnError() bool {
+	return es.skipOnError
 }
 
 func (es *EPG) ExpiredLinkStreamer() *shell.Streamer {

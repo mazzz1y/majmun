@@ -8,6 +8,7 @@ import (
 	"majmun/internal/listing/m3u8/rules/channel"
 	"majmun/internal/listing/m3u8/rules/playlist"
 	"majmun/internal/listing/m3u8/store"
+	"majmun/internal/logging"
 	"majmun/internal/parser/m3u8"
 )
 
@@ -68,9 +69,11 @@ func (s *Streamer) fetchPlaylists(ctx context.Context) (*store.Store, error) {
 	st := store.NewStore()
 
 	var decoders []*decoderWrapper
+	var sourceURLs []string
 	for _, sub := range s.subscriptions {
 		for _, url := range sub.Playlists() {
 			decoders = append(decoders, newDecoderWrapper(sub, sub.HTTPClient(), url))
+			sourceURLs = append(sourceURLs, url)
 		}
 	}
 
@@ -82,15 +85,32 @@ func (s *Streamer) fetchPlaylists(ctx context.Context) (*store.Store, error) {
 		}
 	}()
 
-	for _, decoder := range decoders {
+	skipped := make([]bool, len(decoders))
+	for i, decoder := range decoders {
 		err := decoder.StartBuffering(ctx)
 		if err != nil {
+			if decoder.subscription.SkipOnError() {
+				logging.Error(ctx, err, "playlist source failed, skipping",
+					"provider", decoder.subscription.Name(),
+					"source", sourceURLs[i])
+				skipped[i] = true
+				continue
+			}
 			return nil, err
 		}
 	}
 
-	for _, decoder := range decoders {
+	for i, decoder := range decoders {
+		if skipped[i] {
+			continue
+		}
 		if err := s.processTracks(ctx, decoder, st); err != nil {
+			if decoder.subscription.SkipOnError() {
+				logging.Error(ctx, err, "playlist source failed mid-stream, skipping",
+					"provider", decoder.subscription.Name(),
+					"source", sourceURLs[i])
+				continue
+			}
 			return nil, err
 		}
 	}

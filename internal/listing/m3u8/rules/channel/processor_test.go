@@ -31,6 +31,8 @@ func (m mockPlaylist) HTTPClient() listing.HTTPClient { return nil }
 
 func (m mockPlaylist) IsProxied() bool { return false }
 
+func (m mockPlaylist) SkipOnError() bool { return false }
+
 func TestConditionLogic(t *testing.T) {
 	playlist := mockPlaylist{name: "pl1"}
 	processor := NewRulesProcessor("client1", nil)

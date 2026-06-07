@@ -46,6 +46,22 @@ func createTestProvider(name string, epgs []string, httpClient listing.HTTPClien
 		epgs,
 		proxy.Proxy{},
 		httpClient,
+		false,
+	)
+}
+
+func createTestProviderWithSkip(name string, epgs []string, httpClient listing.HTTPClient) (*app.EPG, error) {
+	generator, err := urlgen.NewGenerator("http://localhost", "secret", time.Hour, time.Hour)
+	if err != nil {
+		return nil, err
+	}
+	return app.NewEPGProvider(
+		name,
+		generator,
+		epgs,
+		proxy.Proxy{},
+		httpClient,
+		true,
 	)
 }
 
@@ -105,6 +121,84 @@ func TestStreamer_WriteTo(t *testing.T) {
 	assert.Contains(t, strings.ToLower(result), "<programme start=\"")
 	assert.Contains(t, result, "http://localhost/")
 	assert.Contains(t, result, "/f.png")
+}
+
+func TestStreamerSkipsFailingEPGWhenSkipOnError(t *testing.T) {
+	ctx := context.Background()
+	httpClient := new(MockHTTPClient)
+
+	goodXML := `<?xml version="1.0" encoding="UTF-8"?>
+<tv>
+  <channel id="channel1">
+	<display-name>Channel 1</display-name>
+  </channel>
+  <programme start="20230101120000 +0000" channel="channel1">
+	<title>OK Programme</title>
+  </programme>
+</tv>`
+
+	httpClient.On("Do", mock.MatchedBy(func(req *http.Request) bool {
+		return req.URL.String() == "http://example.com/bad.xml"
+	})).Return(nil, fmt.Errorf("connection failed"))
+
+	httpClient.On("Do", mock.MatchedBy(func(req *http.Request) bool {
+		return req.URL.String() == "http://example.com/good.xml"
+	})).Return(&http.Response{
+		StatusCode: 200,
+		Body:       io.NopCloser(strings.NewReader(goodXML)),
+	}, nil)
+
+	badSub, err := createTestProviderWithSkip(
+		"bad-sub",
+		[]string{"http://example.com/bad.xml"},
+		httpClient,
+	)
+	require.NoError(t, err)
+
+	goodSub, err := createTestProviderWithSkip(
+		"good-sub",
+		[]string{"http://example.com/good.xml"},
+		httpClient,
+	)
+	require.NoError(t, err)
+
+	channels := map[string]string{"channel1": "Channel One"}
+	streamer := createStreamer([]listing.EPG{badSub, goodSub}, channels)
+
+	buffer := &bytes.Buffer{}
+	_, err = streamer.WriteTo(ctx, buffer)
+	require.NoError(t, err)
+
+	output := buffer.String()
+	assert.Contains(t, output, "<channel id=\"channel1\">")
+	assert.Contains(t, output, "OK Programme")
+
+	httpClient.AssertExpectations(t)
+}
+
+func TestStreamerEPGFailsWithoutSkip(t *testing.T) {
+	ctx := context.Background()
+	httpClient := new(MockHTTPClient)
+
+	httpClient.On("Do", mock.MatchedBy(func(req *http.Request) bool {
+		return req.URL.String() == "http://example.com/bad.xml"
+	})).Return(nil, fmt.Errorf("connection failed"))
+
+	badSub, err := createTestProvider(
+		"bad-sub",
+		[]string{"http://example.com/bad.xml"},
+		httpClient,
+	)
+	require.NoError(t, err)
+
+	streamer := createStreamer([]listing.EPG{badSub}, map[string]string{})
+
+	buffer := &bytes.Buffer{}
+	_, err = streamer.WriteTo(ctx, buffer)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "connection failed")
+
+	httpClient.AssertExpectations(t)
 }
 
 func TestStreamerWithMultipleEPGSources(t *testing.T) {

@@ -25,6 +25,8 @@ type Playlist struct {
 	proxyConfig proxy.Proxy
 	httpClient  listing.HTTPClient
 
+	skipOnError bool
+
 	streamer              *shell.Streamer
 	rateLimitStreamer     *shell.Streamer
 	upstreamErrorStreamer *shell.Streamer
@@ -35,7 +37,8 @@ func NewPlaylistProvider(
 	name string, urlGen *urlgen.Generator,
 	sources []string,
 	proxy proxy.Proxy, rules []*channel.Rule, sem *semaphore.Weighted,
-	httpClient listing.HTTPClient) (*Playlist, error) {
+	httpClient listing.HTTPClient,
+	skipOnError bool) (*Playlist, error) {
 
 	streamStreamer, err := shell.NewShellStreamer(
 		proxy.Stream.Command,
@@ -81,6 +84,7 @@ func NewPlaylistProvider(
 		proxyConfig:           proxy,
 		httpClient:            httpClient,
 		rules:                 rules,
+		skipOnError:           skipOnError,
 		streamer:              streamStreamer,
 		rateLimitStreamer:     rateLimitStreamer,
 		upstreamErrorStreamer: upstreamErrorStreamer,
@@ -118,6 +122,10 @@ func (ps *Playlist) Semaphore() *semaphore.Weighted {
 
 func (ps *Playlist) IsProxied() bool {
 	return ps.proxyConfig.Enabled != nil && *ps.proxyConfig.Enabled
+}
+
+func (ps *Playlist) SkipOnError() bool {
+	return ps.skipOnError
 }
 
 func (ps *Playlist) ProxyConfig() proxy.Proxy {

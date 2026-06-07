@@ -7,9 +7,10 @@ import (
 )
 
 type Playlist struct {
-	Name    string             `yaml:"name"`
-	Sources common.StringOrArr `yaml:"sources"`
-	Proxy   proxy.Proxy        `yaml:"proxy,omitempty"`
+	Name        string             `yaml:"name"`
+	Sources     common.StringOrArr `yaml:"sources"`
+	Proxy       proxy.Proxy        `yaml:"proxy,omitempty"`
+	SkipOnError bool               `yaml:"skip_on_error,omitempty"`
 }
 
 func (p *Playlist) Validate() error {
@@ -24,7 +25,6 @@ func (p *Playlist) Validate() error {
 			return fmt.Errorf("sources[%d] cannot be empty", i)
 		}
 	}
-
 	if err := p.Proxy.ValidateOverride(); err != nil {
 		return fmt.Errorf("proxy: %w", err)
 	}

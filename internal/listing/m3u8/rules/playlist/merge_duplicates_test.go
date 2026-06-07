@@ -29,6 +29,7 @@ func (m mockPlaylist) HTTPClient() listing.HTTPClient { return nil }
 
 func (m mockPlaylist) ProxyConfig() proxy.Proxy { return proxy.Proxy{} }
 func (m mockPlaylist) IsProxied() bool          { return false }
+func (m mockPlaylist) SkipOnError() bool        { return false }
 
 func mustTemplate(tmpl string) *common.Template {
 	var t common.Template

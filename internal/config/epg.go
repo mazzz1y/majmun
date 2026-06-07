@@ -7,9 +7,10 @@ import (
 )
 
 type EPG struct {
-	Name    string             `yaml:"name"`
-	Sources common.StringOrArr `yaml:"sources"`
-	Proxy   proxy.Proxy        `yaml:"proxy,omitempty"`
+	Name        string             `yaml:"name"`
+	Sources     common.StringOrArr `yaml:"sources"`
+	Proxy       proxy.Proxy        `yaml:"proxy,omitempty"`
+	SkipOnError bool               `yaml:"skip_on_error,omitempty"`
 }
 
 func (e *EPG) Validate() error {

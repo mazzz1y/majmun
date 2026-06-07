@@ -7,6 +7,7 @@ import (
 	"io"
 	"majmun/internal/ioutil"
 	"majmun/internal/listing"
+	"majmun/internal/logging"
 	"majmun/internal/parser/xmltv"
 	"majmun/internal/urlgen"
 	"slices"
@@ -70,20 +71,48 @@ func (s *Streamer) WriteTo(ctx context.Context, w io.Writer) (int64, error) {
 		}
 	}()
 
-	for _, decoder := range decoders {
+	failed := make([]bool, len(decoders))
+	for i, decoder := range decoders {
 		if err := decoder.StartBuffering(ctx); err != nil {
+			if decoder.subscription.SkipOnError() {
+				logging.Error(ctx, err, "EPG source failed, skipping",
+					"provider", decoder.subscription.Name(),
+					"source", decoder.sourceURL)
+				failed[i] = true
+				continue
+			}
 			return bytesCounter.Count(), err
 		}
 	}
 
-	for _, decoder := range decoders {
+	for i, decoder := range decoders {
+		if failed[i] {
+			continue
+		}
 		if err := s.processChannels(ctx, decoder, encoder); err != nil {
+			if decoder.subscription.SkipOnError() {
+				logging.Error(ctx, err, "EPG source failed mid-stream, skipping",
+					"provider", decoder.subscription.Name(),
+					"source", decoder.sourceURL)
+				failed[i] = true
+				continue
+			}
 			return bytesCounter.Count(), err
 		}
 	}
 
-	for _, decoder := range decoders {
+	for i, decoder := range decoders {
+		if failed[i] {
+			continue
+		}
 		if err := s.processProgrammes(ctx, decoder, encoder); err != nil {
+			if decoder.subscription.SkipOnError() {
+				logging.Error(ctx, err, "EPG source failed mid-stream, skipping",
+					"provider", decoder.subscription.Name(),
+					"source", decoder.sourceURL)
+				failed[i] = true
+				continue
+			}
 			return bytesCounter.Count(), err
 		}
 	}
