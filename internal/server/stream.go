@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strings"
 	"syscall"
 	"time"
 
@@ -43,12 +44,24 @@ func (s *Server) handleStreamProxy(ctx context.Context, w http.ResponseWriter, r
 	ctx = ctxutil.WithRequestType(ctx, metrics.RequestTypePlaylist)
 	ctx = ctxutil.WithChannelName(ctx, data.StreamData.ChannelName)
 
+	if len(data.StreamData.Streams) == 1 &&
+		data.StreamData.Streams[0].ProviderInfo.ProviderType == urlgen.ProviderTypeChannel {
+		if !s.acquireSemaphores(ctx) {
+			logging.Error(ctx, errors.New("failed to acquire semaphores"), "channel stream failed")
+			http.Error(w, http.StatusText(http.StatusServiceUnavailable), http.StatusServiceUnavailable)
+			return
+		}
+		defer s.releaseSemaphores(ctx)
+		s.handleChannelStream(ctx, w, client, data.StreamData.Streams[0])
+		return
+	}
+
 	if !s.acquireSemaphores(ctx) {
 		logging.Error(ctx, errors.New("failed to acquire semaphores"), "stream proxy failed")
 		if len(data.StreamData.Streams) > 0 {
 			firstProvider := client.GetProvider(
 				data.StreamData.Streams[0].ProviderInfo.ProviderType,
-				data.StreamData.Streams[0].ProviderInfo.ProviderName,
+				data.StreamData.Streams[0].ProviderInfo.ProviderID,
 			)
 			if playlist, ok := firstProvider.(*app.Playlist); ok && playlist != nil {
 				w.Header().Set("Content-Type", streamContentType)
@@ -66,7 +79,7 @@ func (s *Server) handleStreamProxy(ctx context.Context, w http.ResponseWriter, r
 
 	var lastResult allStreamsResult
 
-	for attempt := 0; attempt < maxRetryAttempts; attempt++ {
+	for attempt := range maxRetryAttempts {
 		if attempt > 0 && lastResult.hasLimitError {
 			logging.Debug(ctx, "sleeping before retry attempt")
 			time.Sleep(retryTimeout)
@@ -101,6 +114,84 @@ func (s *Server) handleStreamProxy(ctx context.Context, w http.ResponseWriter, r
 	http.Error(w, http.StatusText(http.StatusBadGateway), http.StatusBadGateway)
 }
 
+func (s *Server) handleChannelStream(
+	ctx context.Context, w http.ResponseWriter, client *app.Client, stream urlgen.Stream) {
+
+	ctx = ctxutil.WithRequestType(ctx, metrics.RequestTypeChannel)
+	ctx = ctxutil.WithProviderType(ctx, metrics.RequestTypeChannel)
+
+	provider := client.GetProvider(stream.ProviderInfo.ProviderType, stream.ProviderInfo.ProviderID)
+	channel, ok := provider.(*app.Channel)
+	if !ok || channel == nil {
+		logging.Error(ctx, errors.New("channel provider not found"), "channel stream failed",
+			"provider_id", stream.ProviderInfo.ProviderID)
+		http.Error(w, http.StatusText(http.StatusBadGateway), http.StatusBadGateway)
+		return
+	}
+	// The token routes by hashed channel ID; logs and metrics labels carry the human names.
+	ctx = ctxutil.WithProviderName(ctx, channel.Playlist().Name())
+
+	res, ok := channel.Generator().Resolve(time.Now())
+	if !ok {
+		logging.Info(ctx, "channel not ready, serving placeholder")
+		w.Header().Set("Content-Type", streamContentType)
+		if _, err := channel.UpstreamErrorStreamer().RunWithStdout(ctx, w); err != nil {
+			logging.Error(ctx, err, "failed to stream placeholder response")
+		}
+		return
+	}
+
+	streamKey := channelStreamKey(channel.ID(), res.Fingerprint)
+	dir, err := s.streamPool.SegmentDir(streamKey)
+	if err != nil {
+		logging.Error(ctx, err, "failed to prepare channel segment dir")
+		http.Error(w, http.StatusText(http.StatusBadGateway), http.StatusBadGateway)
+		return
+	}
+
+	concatPath, err := res.WriteConcatList(dir)
+	if err != nil {
+		logging.Error(ctx, err, "failed to write channel concat list")
+		http.Error(w, http.StatusText(http.StatusBadGateway), http.StatusBadGateway)
+		return
+	}
+
+	streamReq := streampool.Request{
+		StreamKey:      streamKey,
+		ClientStreamer: channel.ClientStreamer,
+		Segmenter:      channel.Segmenter(),
+		ExtraVars: map[string]any{
+			"input": concatPath,
+			"Channel": map[string]any{
+				"Name": channel.Name(),
+				"Logo": channel.Logo(),
+			},
+			"Playlist": map[string]any{
+				"Name": channel.Playlist().Name(),
+			},
+		},
+	}
+
+	reader, err := s.streamPool.GetReader(ctx, streamReq)
+	if err != nil {
+		logging.Error(ctx, err, "failed to get channel stream")
+		http.Error(w, http.StatusText(http.StatusBadGateway), http.StatusBadGateway)
+		return
+	}
+	defer func() { _ = reader.Close() }()
+
+	s.streamToResponse(ctx, w, reader)
+}
+
+// channelStreamKey ties the segmenter identity to the schedule fingerprint, so a rebuilt
+// schedule spawns a fresh segmenter that reads the new concat list while the old one drains.
+func channelStreamKey(channelID, fingerprint string) string {
+	if fingerprint == "" {
+		return channelID
+	}
+	return channelID + "@" + strings.TrimPrefix(fingerprint, "sha256:")
+}
+
 func (s *Server) tryAllStreams(
 	ctx context.Context, w http.ResponseWriter, r *http.Request, client *app.Client, data *urlgen.Data) allStreamsResult {
 	var hasLimitError bool
@@ -110,11 +201,11 @@ func (s *Server) tryAllStreams(
 	for i, stream := range data.StreamData.Streams {
 		logging.Debug(ctx, "trying stream source", "index", i)
 
-		provider := client.GetProvider(stream.ProviderInfo.ProviderType, stream.ProviderInfo.ProviderName)
+		provider := client.GetProvider(stream.ProviderInfo.ProviderType, stream.ProviderInfo.ProviderID)
 		if provider == nil {
 			logging.Error(ctx, errors.New("provider not found"), "stream_index", i,
 				"provider_type", stream.ProviderInfo.ProviderType,
-				"provider_name", stream.ProviderInfo.ProviderName)
+				"provider_id", stream.ProviderInfo.ProviderID)
 			continue
 		}
 

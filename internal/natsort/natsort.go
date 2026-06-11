@@ -1,11 +1,11 @@
-package playlist
+package natsort
 
 import (
 	"strconv"
 	"unicode"
 )
 
-func naturalLess(a, b string) bool {
+func Less(a, b string) bool {
 	for {
 		if len(a) == 0 && len(b) == 0 {
 			return false

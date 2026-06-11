@@ -2,12 +2,14 @@ package app
 
 import (
 	"majmun/internal/config/proxy"
+	"majmun/internal/hashid"
 	"majmun/internal/listing"
 	"majmun/internal/shell"
 	"majmun/internal/urlgen"
 )
 
 type EPG struct {
+	id           string
 	name         string
 	sources      []string
 	urlGenerator *urlgen.Generator
@@ -20,6 +22,7 @@ func NewEPGProvider(
 	name string, urlGen *urlgen.Generator, sources []string, proxy proxy.Proxy,
 	httpClient listing.HTTPClient, skipOnError bool) (*EPG, error) {
 	return &EPG{
+		id:           hashid.New(name),
 		name:         name,
 		urlGenerator: urlGen,
 		sources:      sources,
@@ -27,6 +30,10 @@ func NewEPGProvider(
 		httpClient:   httpClient,
 		skipOnError:  skipOnError,
 	}, nil
+}
+
+func (es *EPG) ID() string {
+	return es.id
 }
 
 func (es *EPG) Name() string {

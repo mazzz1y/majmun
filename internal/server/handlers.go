@@ -2,15 +2,19 @@ package server
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"io"
 	"majmun/internal/app"
+	"mime"
 	"net/http"
+	"net/url"
+	"os"
+	"path/filepath"
+	"strconv"
 	"time"
 
 	"majmun/internal/ctxutil"
+	"majmun/internal/hashid"
 	"majmun/internal/listing/m3u8"
 	"majmun/internal/listing/xmltv"
 	"majmun/internal/logging"
@@ -48,6 +52,7 @@ func (s *Server) handlePlaylist(w http.ResponseWriter, r *http.Request) {
 
 	streamer := m3u8.NewStreamer(
 		client.PlaylistProviders(),
+		client.ChannelProviders(),
 		client.EPGLink(),
 		client.ChannelProcessor(),
 		client.PlaylistProcessor(),
@@ -137,6 +142,11 @@ func (s *Server) handleFileProxy(ctx context.Context, w http.ResponseWriter, dat
 
 	stream := data.File
 
+	if !isHTTPURL(stream.URL) {
+		s.serveLocalFile(ctx, w, stream.URL)
+		return
+	}
+
 	logging.Debug(ctx, "proxying file", "url", stream.URL)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, stream.URL, nil)
@@ -169,6 +179,41 @@ func (s *Server) handleFileProxy(ctx context.Context, w http.ResponseWriter, dat
 	}
 }
 
+func (s *Server) serveLocalFile(ctx context.Context, w http.ResponseWriter, path string) {
+	logging.Debug(ctx, "serving local file", "path", path)
+
+	file, err := os.Open(path)
+	if err != nil {
+		logging.Error(ctx, err, "failed to open local file")
+		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+		return
+	}
+	defer func() { _ = file.Close() }()
+
+	info, err := file.Stat()
+	if err != nil || info.IsDir() {
+		logging.Error(ctx, err, "local file not readable")
+		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+		return
+	}
+
+	if ctype := mime.TypeByExtension(filepath.Ext(path)); ctype != "" {
+		w.Header().Set("Content-Type", ctype)
+	}
+
+	if _, err := io.Copy(w, file); err != nil {
+		logging.Error(ctx, err, "local file copy failed")
+	}
+}
+
+func isHTTPURL(s string) bool {
+	u, err := url.Parse(s)
+	if err != nil {
+		return false
+	}
+	return u.Scheme == "http" || u.Scheme == "https"
+}
+
 func (s *Server) handleHealthz(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(http.StatusText(http.StatusOK)))
@@ -179,6 +224,7 @@ func (s *Server) prepareEPGStreamer(ctx context.Context) (*xmltv.Streamer, error
 
 	m3u8Streamer := m3u8.NewStreamer(
 		client.PlaylistProviders(),
+		client.ChannelProviders(),
 		"",
 		client.ChannelProcessor(),
 		client.PlaylistProcessor(),
@@ -189,7 +235,7 @@ func (s *Server) prepareEPGStreamer(ctx context.Context) (*xmltv.Streamer, error
 		logging.Error(ctx, err, "failed to get channels")
 		return nil, err
 	}
-	return xmltv.NewStreamer(client.EPGProviders(), channels), nil
+	return xmltv.NewStreamer(client.EPGProviders(), client.ChannelProviders(), channels), nil
 }
 
 func setHeaders(w http.ResponseWriter, headers responseHeaders) {
@@ -205,17 +251,13 @@ func buildStreamURL(baseURL, rawQuery string) string {
 	return baseURL
 }
 
+// buildStreamKey hashes the upstream URL into the stream identity so token-bearing provider
+// URLs never reach logs or metrics labels. Query-bearing URLs are additionally salted with the
+// current Unix second: their queries usually carry per-request tokens, so reuse is limited to
+// requests arriving within the same second.
 func buildStreamKey(baseURL, rawQuery string) string {
 	if rawQuery != "" {
-		return generateHash(baseURL+"?"+rawQuery, time.Now().Unix())
+		return hashid.New(baseURL+"?"+rawQuery, strconv.FormatInt(time.Now().Unix(), 10))
 	}
-	return generateHash(baseURL)
-}
-
-func generateHash(parts ...any) string {
-	h := sha256.New()
-	for _, part := range parts {
-		_, _ = fmt.Fprint(h, part)
-	}
-	return hex.EncodeToString(h.Sum(nil)[:4])
+	return hashid.New(baseURL)
 }

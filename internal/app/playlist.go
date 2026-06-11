@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"majmun/internal/config/proxy"
 	"majmun/internal/config/rules/channel"
+	"majmun/internal/hashid"
 	"majmun/internal/listing"
 	"majmun/internal/shell"
 	"majmun/internal/streampool"
@@ -13,6 +14,7 @@ import (
 )
 
 type Playlist struct {
+	id   string
 	name string
 
 	sources []string
@@ -77,6 +79,7 @@ func NewPlaylistProvider(
 	}
 
 	return &Playlist{
+		id:                    hashid.New(name),
 		name:                  name,
 		urlGenerator:          urlGen,
 		sources:               sources,
@@ -90,6 +93,10 @@ func NewPlaylistProvider(
 		upstreamErrorStreamer: upstreamErrorStreamer,
 		expiredLinkStreamer:   expiredLinkStreamer,
 	}, nil
+}
+
+func (ps *Playlist) ID() string {
+	return ps.id
 }
 
 func (ps *Playlist) Name() string {

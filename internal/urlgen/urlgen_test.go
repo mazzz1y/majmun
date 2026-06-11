@@ -136,12 +136,12 @@ func TestGenerator_CreateStreamURL(t *testing.T) {
 
 	streams := []Stream{
 		{
-			ProviderInfo: ProviderInfo{ProviderType: ProviderTypePlaylist, ProviderName: "test1"},
+			ProviderInfo: ProviderInfo{ProviderType: ProviderTypePlaylist, ProviderID: "test1"},
 			URL:          "https://stream1.example.com/video",
 			Hidden:       false,
 		},
 		{
-			ProviderInfo: ProviderInfo{ProviderType: ProviderTypePlaylist, ProviderName: "test2"},
+			ProviderInfo: ProviderInfo{ProviderType: ProviderTypePlaylist, ProviderID: "test2"},
 			URL:          "https://stream2.example.com/video",
 			Hidden:       true,
 		},
@@ -195,7 +195,7 @@ func TestGenerator_CreateFileURL(t *testing.T) {
 
 	fileURL := "https://file.example.com/document.pdf"
 
-	providerInfo := ProviderInfo{ProviderType: ProviderTypePlaylist, ProviderName: "test"}
+	providerInfo := ProviderInfo{ProviderType: ProviderTypePlaylist, ProviderID: "test"}
 	u, err := g.CreateFileURL(providerInfo, fileURL)
 	if err != nil {
 		t.Fatalf("CreateFileURL() failed: %v", err)

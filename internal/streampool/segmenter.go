@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"majmun/internal/config/proxy"
 	"majmun/internal/shell"
+	"maps"
 	"os"
 	"path/filepath"
 	"sync"
@@ -33,8 +34,8 @@ type segmenter struct {
 	startErr  error
 }
 
-func newSegmenter(parentCtx context.Context, streamKey string, baseDir string, cfg proxy.Segmenter, streamURL string) (*segmenter, error) {
-	dir := filepath.Join(baseDir, streamKey)
+func newSegmenter(parentCtx context.Context, streamKey string, baseDir string, cfg proxy.Segmenter, streamURL string, extraVars map[string]any) (*segmenter, error) {
+	dir := segmentDir(baseDir, streamKey)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return nil, fmt.Errorf("create segment dir: %w", err)
 	}
@@ -46,11 +47,14 @@ func newSegmenter(parentCtx context.Context, streamKey string, baseDir string, c
 		return nil, fmt.Errorf("parse segmenter command: %w", err)
 	}
 
-	streamer := base.WithTemplateVars(map[string]any{
+	vars := map[string]any{
 		"url":           streamURL,
 		"segment_path":  filepath.Join(dir, "seg_%05d.ts"),
 		"playlist_path": playlistPath,
-	})
+	}
+	maps.Copy(vars, extraVars)
+
+	streamer := base.WithTemplateVars(vars)
 
 	ctx, cancel := context.WithCancel(parentCtx)
 

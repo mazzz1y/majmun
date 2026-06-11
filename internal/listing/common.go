@@ -2,21 +2,11 @@ package listing
 
 import (
 	"context"
-	"hash/fnv"
 	"io"
 	"net/http"
 	"net/url"
 	"os"
-	"strconv"
 )
-
-func GenerateHashID(parts ...string) string {
-	h := fnv.New32a()
-	for _, p := range parts {
-		h.Write([]byte(p))
-	}
-	return strconv.FormatUint(uint64(h.Sum32()), 16)
-}
 
 func CreateReader(ctx context.Context, httpClient HTTPClient, resourceURL string) (io.ReadCloser, error) {
 	if isURL(resourceURL) {

@@ -13,6 +13,7 @@ type Config struct {
 	YamlSnippets  map[string]any     `yaml:",inline"`
 	Server        ServerConfig       `yaml:"server"`
 	Logs          Logs               `yaml:"logs"`
+	StateDir      string             `yaml:"state_dir"`
 	URLGenerator  URLGeneratorConfig `yaml:"url_generator"`
 	Proxy         proxy.Proxy        `yaml:"proxy"`
 	Clients       []Client           `yaml:"clients"`
@@ -70,6 +71,23 @@ func (c *Config) Validate() error {
 			}
 			epgNames[epg.Name] = true
 		}
+	}
+
+	hasChannels := false
+
+	for _, pl := range c.Playlists {
+		channelNames := make(map[string]bool)
+		for _, ch := range pl.Channels {
+			hasChannels = true
+			if channelNames[ch.Name] {
+				return fmt.Errorf("duplicate channel name %q in playlist %q", ch.Name, pl.Name)
+			}
+			channelNames[ch.Name] = true
+		}
+	}
+
+	if hasChannels && c.StateDir == "" {
+		return fmt.Errorf("state_dir is required when channels are configured")
 	}
 
 	clientNames := make(map[string]bool)

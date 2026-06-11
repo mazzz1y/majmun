@@ -41,7 +41,7 @@ func (e *M3UEncoder) writeHeader() error {
 		return nil
 	}
 
-	header := TagHeader
+	header := "#" + TagHeader
 
 	if len(e.headerAttrs) > 0 {
 		attrPairs := make([]string, 0, len(e.headerAttrs))

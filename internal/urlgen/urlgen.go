@@ -25,6 +25,7 @@ const (
 const (
 	ProviderTypePlaylist ProviderType = iota
 	ProviderTypeEPG
+	ProviderTypeChannel
 )
 
 var (
@@ -49,7 +50,7 @@ type Data struct {
 
 type ProviderInfo struct {
 	ProviderType ProviderType `json:"pt"`
-	ProviderName string       `json:"pn"`
+	ProviderID   string       `json:"pid"`
 }
 
 type StreamData struct {

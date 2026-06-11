@@ -5,6 +5,7 @@ import (
 	"majmun/internal/config/proxy"
 	"majmun/internal/config/rules/channel"
 	configrules "majmun/internal/config/rules/playlist"
+	"majmun/internal/hashid"
 	"majmun/internal/listing"
 	"majmun/internal/listing/m3u8/store"
 	"majmun/internal/parser/m3u8"
@@ -20,6 +21,7 @@ type mockPlaylist struct {
 	name string
 }
 
+func (m mockPlaylist) ID() string                      { return hashid.New(m.name) }
 func (m mockPlaylist) Name() string                    { return m.name }
 func (m mockPlaylist) Playlists() []string             { return nil }
 func (m mockPlaylist) URLGenerator() *urlgen.Generator { return nil }

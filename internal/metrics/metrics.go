@@ -18,6 +18,7 @@ const (
 	RequestTypePlaylist = "playlist"
 	RequestTypeEPG      = "epg"
 	RequestTypeFile     = "file"
+	RequestTypeChannel  = "channel"
 )
 
 const (
@@ -81,16 +82,16 @@ func IncPlaylistStreamsActive(ctx context.Context) {
 	if ctxutil.ChannelHidden(ctx) {
 		return
 	}
-	subscriptionName := ctxutil.ProviderName(ctx)
-	playlistStreamsActive.WithLabelValues(subscriptionName).Inc()
+	playlistName := ctxutil.ProviderName(ctx)
+	playlistStreamsActive.WithLabelValues(playlistName).Inc()
 }
 
 func DecPlaylistStreamsActive(ctx context.Context) {
 	if ctxutil.ChannelHidden(ctx) {
 		return
 	}
-	subscriptionName := ctxutil.ProviderName(ctx)
-	playlistStreamsActive.WithLabelValues(subscriptionName).Dec()
+	playlistName := ctxutil.ProviderName(ctx)
+	playlistStreamsActive.WithLabelValues(playlistName).Dec()
 }
 
 func SetPlaylistStreamsActive(playlistName string, value float64) {
@@ -102,10 +103,10 @@ func IncClientStreamsActive(ctx context.Context) {
 		return
 	}
 
-	channelID := ctxutil.ChannelName(ctx)
+	channelName := ctxutil.ChannelName(ctx)
 	clientName := ctxutil.ClientName(ctx)
 	playlistName := ctxutil.ProviderName(ctx)
-	clientStreamsActive.WithLabelValues(clientName, playlistName, channelID).Inc()
+	clientStreamsActive.WithLabelValues(clientName, playlistName, channelName).Inc()
 }
 
 func DecClientStreamsActive(ctx context.Context) {
@@ -113,19 +114,19 @@ func DecClientStreamsActive(ctx context.Context) {
 		return
 	}
 
-	channelID := ctxutil.ChannelName(ctx)
+	channelName := ctxutil.ChannelName(ctx)
 	clientName := ctxutil.ClientName(ctx)
 	playlistName := ctxutil.ProviderName(ctx)
-	clientStreamsActive.WithLabelValues(clientName, playlistName, channelID).Dec()
+	clientStreamsActive.WithLabelValues(clientName, playlistName, channelName).Dec()
 }
 
 func IncStreamsReused(ctx context.Context) {
 	if ctxutil.ChannelHidden(ctx) {
 		return
 	}
-	subscriptionName := ctxutil.ProviderName(ctx)
-	channelID := ctxutil.ChannelName(ctx)
-	streamsReusedTotal.WithLabelValues(subscriptionName, channelID).Inc()
+	playlistName := ctxutil.ProviderName(ctx)
+	channelName := ctxutil.ChannelName(ctx)
+	streamsReusedTotal.WithLabelValues(playlistName, channelName).Inc()
 }
 
 func IncStreamsFailures(ctx context.Context, reason string) {

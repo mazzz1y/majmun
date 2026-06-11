@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"io"
 	"majmun/internal/app"
+	"majmun/internal/config"
 	"majmun/internal/config/proxy"
+	"majmun/internal/hashid"
 	"majmun/internal/listing"
 	"majmun/internal/urlgen"
 	"net/http"
@@ -20,7 +22,7 @@ import (
 )
 
 func createStreamer(subscriptions []listing.EPG, channelIDToName map[string]string) *Streamer {
-	return NewStreamer(subscriptions, channelIDToName)
+	return NewStreamer(subscriptions, nil, channelIDToName)
 }
 
 type MockHTTPClient struct {
@@ -455,7 +457,7 @@ func TestChannelNameMatching(t *testing.T) {
 	}, httpClient)
 	require.NoError(t, err)
 
-	channels := map[string]string{listing.GenerateHashID("CNN"): "CNN Channel"}
+	channels := map[string]string{hashid.New("CNN"): "CNN Channel"}
 	streamer := createStreamer([]listing.EPG{sub}, channels)
 
 	buf := &bytes.Buffer{}
@@ -536,7 +538,7 @@ func TestTVGIDConflictIssue(t *testing.T) {
 	sub3, err := createTestProvider("source3", []string{"http://example.com/source3"}, httpClient)
 	require.NoError(t, err)
 
-	expectedTVGID := listing.GenerateHashID("CNN")
+	expectedTVGID := hashid.New("CNN")
 	channelMap := map[string]string{
 		expectedTVGID: "CNN",
 	}
@@ -602,8 +604,8 @@ func TestSameOriginalIDDifferentSources(t *testing.T) {
 	sub2, err := createTestProvider("source2", []string{"http://example.com/source2"}, httpClient)
 	require.NoError(t, err)
 
-	tvgID1 := listing.GenerateHashID("CNN US")
-	tvgID2 := listing.GenerateHashID("CNN International")
+	tvgID1 := hashid.New("CNN US")
+	tvgID2 := hashid.New("CNN International")
 	channelMap := map[string]string{
 		tvgID1: "CNN US",
 		tvgID2: "CNN International",
@@ -625,4 +627,59 @@ func TestSameOriginalIDDifferentSources(t *testing.T) {
 	assert.Contains(t, output, "CNN International")
 
 	httpClient.AssertExpectations(t)
+}
+
+type mockGenChannel struct {
+	name   string
+	id     string
+	logo   string
+	urlGen *urlgen.Generator
+	progs  []listing.Programme
+}
+
+func (m mockGenChannel) Name() string                    { return m.name }
+func (m mockGenChannel) ID() string                      { return m.id }
+func (m mockGenChannel) Playlist() listing.Playlist      { return nil }
+func (m mockGenChannel) Logo() string                    { return m.logo }
+func (m mockGenChannel) Fields() []config.ChannelField   { return nil }
+func (m mockGenChannel) URLGenerator() *urlgen.Generator { return m.urlGen }
+
+func (m mockGenChannel) Programmes(_ context.Context, _ time.Time) ([]listing.Programme, error) {
+	return m.progs, nil
+}
+
+func TestStreamerEmitsGeneratedChannelEPG(t *testing.T) {
+	start := time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC)
+	gen, err := urlgen.NewGenerator("http://localhost", "secret", time.Hour, time.Hour)
+	require.NoError(t, err)
+	ch := mockGenChannel{
+		name:   "Cartoons 24/7",
+		id:     "abc123",
+		logo:   "http://example.com/l.png",
+		urlGen: gen,
+		progs: []listing.Programme{
+			{Title: "ep01", Description: "A short synopsis.", Category: "Animation", Date: "20210608", Season: 1, Episode: 3, Start: start, Stop: start.Add(time.Hour)},
+			{Title: "ep02", Start: start.Add(time.Hour), Stop: start.Add(2 * time.Hour)},
+		},
+	}
+
+	streamer := NewStreamer(nil, []listing.Channel{ch}, nil)
+
+	var buf bytes.Buffer
+	_, err = streamer.WriteTo(context.Background(), &buf)
+	require.NoError(t, err)
+
+	output := buf.String()
+	assert.Contains(t, output, `<channel id="abc123">`)
+	assert.Contains(t, output, "Cartoons 24/7")
+	assert.NotContains(t, output, `src="http://example.com/l.png"`)
+	assert.Regexp(t, `src="http://localhost/[^"]+/f\.png"`, output)
+	assert.Contains(t, output, `channel="abc123"`)
+	assert.Contains(t, output, "ep01")
+	assert.Contains(t, output, "ep02")
+	assert.Contains(t, output, "<desc>A short synopsis.</desc>")
+	assert.Contains(t, output, "<category>Animation</category>")
+	assert.Contains(t, output, "<date>20210608</date>")
+	assert.Contains(t, output, `<episode-num system="xmltv_ns">0.2.</episode-num>`)
+	assert.Contains(t, output, `<episode-num system="onscreen">S01E03</episode-num>`)
 }

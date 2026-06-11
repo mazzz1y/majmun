@@ -3,7 +3,9 @@ package app
 import (
 	"context"
 	"fmt"
+	"majmun/internal/channelgen"
 	"majmun/internal/config"
+	"majmun/internal/hashid"
 	"majmun/internal/httpclient"
 	"majmun/internal/logging"
 	"majmun/internal/metrics"
@@ -20,6 +22,7 @@ type Manager struct {
 	secretToClient map[string]*Client
 	publicURLBase  string
 	cacheStore     *httpclient.Store
+	channelGens    map[string]*channelgen.Channel
 }
 
 func NewManager(cfg *config.Config) (*Manager, error) {
@@ -27,6 +30,7 @@ func NewManager(cfg *config.Config) (*Manager, error) {
 		config:         cfg,
 		secretToClient: make(map[string]*Client),
 		publicURLBase:  cfg.Server.PublicURL.String(),
+		channelGens:    make(map[string]*channelgen.Channel),
 	}
 
 	if cfg.Proxy.Enabled != nil && *cfg.Proxy.Enabled && cfg.Proxy.ConcurrentStreams > 0 {
@@ -48,11 +52,33 @@ func NewManager(cfg *config.Config) (*Manager, error) {
 		return nil, err
 	}
 
+	if cfg.StateDir != "" {
+		var ids []string
+		for _, pl := range cfg.Playlists {
+			for _, ch := range pl.Channels {
+				ids = append(ids, hashid.New(pl.Name, ch.Name))
+			}
+		}
+		if err := channelgen.PruneSchedules(cfg.StateDir, ids); err != nil {
+			logging.Error(context.Background(), err, "failed to prune orphaned channel schedules")
+		}
+	}
+
 	return m, nil
 }
 
 func (m *Manager) Client(secret string) *Client {
 	return m.secretToClient[secret]
+}
+
+func (m *Manager) WarmChannels(ctx context.Context) {
+	now := time.Now()
+	for _, gen := range m.channelGens {
+		if ctx.Err() != nil {
+			return
+		}
+		gen.WarmUp(ctx, now)
+	}
 }
 
 func (m *Manager) Clients() []*Client {
@@ -75,7 +101,7 @@ func (m *Manager) initClients() error {
 		m.clients = append(m.clients, clientInstance)
 		m.secretToClient[clientConf.Secret] = clientInstance
 
-		logging.Debug(context.TODO(), "client initialized", "name", clientConf.Name)
+		logging.Debug(context.Background(), "client initialized", "name", clientConf.Name)
 	}
 
 	return nil
@@ -149,11 +175,21 @@ func (m *Manager) addPlaylistProvider(cl *Client, playlistConf config.Playlist) 
 
 	metrics.SetPlaylistStreamsActive(playlistConf.Name, 0)
 
-	if err := cl.BuildPlaylistProvider(
-		playlistConf, m.config.Proxy, sem); err != nil {
+	pl, err := cl.BuildPlaylistProvider(
+		playlistConf, m.config.Proxy, sem)
+	if err != nil {
 		return fmt.Errorf(
 			"failed to build playlist subscription '%s' for client '%s': %w",
 			playlistConf.Name, cl.name, err)
+	}
+
+	for _, channelConf := range playlistConf.Channels {
+		gen := m.channelGenerator(playlistConf.Name, channelConf)
+		if err := cl.BuildChannelProvider(playlistConf, channelConf, m.config.Proxy, gen, pl); err != nil {
+			return fmt.Errorf(
+				"failed to build channel '%s' for client '%s': %w",
+				channelConf.Name, cl.name, err)
+		}
 	}
 
 	return nil
@@ -166,6 +202,25 @@ func (m *Manager) addEPGProvider(cl *Client, epgConf config.EPG) error {
 			epgConf.Name, cl.name, err)
 	}
 	return nil
+}
+
+func (m *Manager) channelGenerator(parentPlaylist string, channelConf config.Channel) *channelgen.Channel {
+	key := parentPlaylist + "/" + channelConf.Name
+	if gen, ok := m.channelGens[key]; ok {
+		return gen
+	}
+	gen := channelgen.NewChannel(
+		parentPlaylist,
+		channelConf.Name,
+		channelConf.Sources,
+		channelConf.ResolvedExtensions(),
+		channelConf.RandomOrder,
+		channelConf.ResolvedRefreshInterval(),
+		channelConf.ResolvedEPGDuration(),
+		m.config.StateDir,
+	)
+	m.channelGens[key] = gen
+	return gen
 }
 
 func (m *Manager) findPlaylist(name string) (config.Playlist, error) {

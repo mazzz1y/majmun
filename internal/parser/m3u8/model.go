@@ -26,9 +26,9 @@ const (
 )
 
 const (
-	TagHeader   = "#EXTM3U"
-	TagInf      = "#EXTINF"
-	TagGroup    = "#EXTGRP"
-	TagVLCOpt   = "#EXTVLCOPT"
-	TagKodiProp = "#KODIPROP"
+	TagHeader   = "EXTM3U"
+	TagInf      = "EXTINF"
+	TagGroup    = "EXTGRP"
+	TagVLCOpt   = "EXTVLCOPT"
+	TagKodiProp = "KODIPROP"
 )

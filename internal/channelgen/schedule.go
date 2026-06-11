@@ -1,0 +1,57 @@
+package channelgen
+
+type Item struct {
+	File        string  `json:"file"`
+	Title       string  `json:"title"`
+	Description string  `json:"description,omitempty"`
+	Category    string  `json:"category,omitempty"`
+	Date        string  `json:"date,omitempty"`
+	Season      int     `json:"season,omitempty"`
+	Episode     int     `json:"episode,omitempty"`
+	Size        int64   `json:"size"`
+	MTime       int64   `json:"mtime"`
+	Duration    float64 `json:"duration"`
+}
+
+type Schedule struct {
+	// Channel is the owning channel's hashid; it doubles as the schedule file's basename.
+	Channel     string `json:"channel"`
+	Seed        int64  `json:"seed"`
+	Fingerprint string `json:"fingerprint"`
+	Anchor      int64  `json:"anchor"`
+	Items       []Item `json:"items"`
+}
+
+func (s *Schedule) total() float64 {
+	var sum float64
+	for _, it := range s.Items {
+		sum += it.Duration
+	}
+	return sum
+}
+
+func (s *Schedule) isEmpty() bool {
+	return len(s.Items) == 0 || s.total() <= 0
+}
+
+func (s *Schedule) probeCache() map[probeKey]probeResult {
+	cache := make(map[probeKey]probeResult, len(s.Items))
+	for _, it := range s.Items {
+		cache[probeKey{file: it.File, size: it.Size, mtime: it.MTime}] = probeResult{
+			Duration:    it.Duration,
+			Title:       it.Title,
+			Description: it.Description,
+			Category:    it.Category,
+			Date:        it.Date,
+			Season:      it.Season,
+			Episode:     it.Episode,
+		}
+	}
+	return cache
+}
+
+type probeKey struct {
+	file  string
+	size  int64
+	mtime int64
+}

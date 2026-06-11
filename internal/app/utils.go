@@ -42,18 +42,6 @@ func httpClientOptions(pr proxy.Proxy) httpClientSettings {
 	}
 }
 
-func uniqueNames(names []string) []string {
-	seen := make(map[string]struct{})
-	var result []string
-	for _, n := range names {
-		if _, ok := seen[n]; !ok {
-			seen[n] = struct{}{}
-			result = append(result, n)
-		}
-	}
-	return result
-}
-
 func mergeProxies(proxies ...proxy.Proxy) proxy.Proxy {
 	result := proxy.Proxy{}
 	for _, p := range proxies {
@@ -82,6 +70,7 @@ func mergeProxies(proxies ...proxy.Proxy) proxy.Proxy {
 
 		result.Stream = mergeHandlers(result.Stream, p.Stream)
 		mergeSegmenter(&result.Segmenter, p.Segmenter)
+		mergeSegmenter(&result.Playout, p.Playout)
 
 		result.Error.Handler = mergeHandlers(result.Error.Handler, p.Error.Handler)
 

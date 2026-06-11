@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -113,7 +114,7 @@ func TestSegmenterPool_CreateAndRemove(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
 
-	seg1, isNew, err := pool.getOrCreate("stream-1", ctx, dir, testSegmenterCfg, testStreamURL)
+	seg1, isNew, err := pool.getOrCreate("stream-1", ctx, dir, testSegmenterCfg, testStreamURL, nil)
 	if err != nil {
 		t.Fatalf("getOrCreate failed: %v", err)
 	}
@@ -124,7 +125,7 @@ func TestSegmenterPool_CreateAndRemove(t *testing.T) {
 		t.Fatal("expected non-nil segmenter")
 	}
 
-	seg2, isNew2, err := pool.getOrCreate("stream-1", ctx, dir, testSegmenterCfg, testStreamURL)
+	seg2, isNew2, err := pool.getOrCreate("stream-1", ctx, dir, testSegmenterCfg, testStreamURL, nil)
 	if err != nil {
 		t.Fatalf("getOrCreate failed: %v", err)
 	}
@@ -137,7 +138,7 @@ func TestSegmenterPool_CreateAndRemove(t *testing.T) {
 
 	pool.remove("stream-1")
 
-	seg3, isNew3, err := pool.getOrCreate("stream-1", ctx, dir, testSegmenterCfg, testStreamURL)
+	seg3, isNew3, err := pool.getOrCreate("stream-1", ctx, dir, testSegmenterCfg, testStreamURL, nil)
 	if err != nil {
 		t.Fatalf("getOrCreate failed: %v", err)
 	}
@@ -154,8 +155,8 @@ func TestSegmenterPool_StopAllClearsMap(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
 
-	_, _, _ = pool.getOrCreate("stream-1", ctx, dir, testSegmenterCfg, testStreamURL)
-	_, _, _ = pool.getOrCreate("stream-2", ctx, dir, testSegmenterCfg, testStreamURL)
+	_, _, _ = pool.getOrCreate("stream-1", ctx, dir, testSegmenterCfg, testStreamURL, nil)
+	_, _, _ = pool.getOrCreate("stream-2", ctx, dir, testSegmenterCfg, testStreamURL, nil)
 
 	pool.stopAll()
 
@@ -172,7 +173,7 @@ func TestSegmenter_InitialClientCountIsOne(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	seg, err := newSegmenter(ctx, "test", t.TempDir(), testSegmenterCfg, testStreamURL)
+	seg, err := newSegmenter(ctx, "test", t.TempDir(), testSegmenterCfg, testStreamURL, nil)
 	if err != nil {
 		t.Fatalf("newSegmenter failed: %v", err)
 	}
@@ -186,7 +187,7 @@ func TestSegmenter_EmptySignalOnLastClientRemoved(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	seg, err := newSegmenter(ctx, "test", t.TempDir(), testSegmenterCfg, testStreamURL)
+	seg, err := newSegmenter(ctx, "test", t.TempDir(), testSegmenterCfg, testStreamURL, nil)
 	if err != nil {
 		t.Fatalf("newSegmenter failed: %v", err)
 	}
@@ -216,17 +217,38 @@ func TestSegmenter_EmptySignalOnLastClientRemoved(t *testing.T) {
 	}
 }
 
+func TestSegmentDir(t *testing.T) {
+	base := t.TempDir()
+
+	// Keys with URL- and filesystem-hostile characters map to flat hex dirs directly
+	// under baseDir; distinct keys get distinct dirs, same key is stable.
+	hostile := segmentDir(base, "playlist/chan? a? b?@abc")
+	if filepath.Dir(hostile) != base {
+		t.Errorf("expected flat dir under base, got %q", hostile)
+	}
+	if name := filepath.Base(hostile); strings.ContainsAny(name, "/?# ") {
+		t.Errorf("expected hostile-char-free dir name, got %q", name)
+	}
+
+	if again := segmentDir(base, "playlist/chan? a? b?@abc"); again != hostile {
+		t.Errorf("same key produced different dirs: %q vs %q", again, hostile)
+	}
+	if other := segmentDir(base, "playlist/other@abc"); other == hostile {
+		t.Errorf("distinct keys produced the same dir: %q", other)
+	}
+}
+
 func TestSegmenter_DirCreatedOnInit(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	baseDir := t.TempDir()
-	_, err := newSegmenter(ctx, "test-stream", baseDir, testSegmenterCfg, testStreamURL)
+	_, err := newSegmenter(ctx, "test-stream", baseDir, testSegmenterCfg, testStreamURL, nil)
 	if err != nil {
 		t.Fatalf("newSegmenter failed: %v", err)
 	}
 
-	expectedDir := filepath.Join(baseDir, "test-stream")
+	expectedDir := segmentDir(baseDir, "test-stream")
 	if _, err := os.Stat(expectedDir); os.IsNotExist(err) {
 		t.Error("expected segment directory to exist")
 	}
@@ -237,14 +259,14 @@ func TestSegmenter_CleanupRemovesDir(t *testing.T) {
 	defer cancel()
 
 	baseDir := t.TempDir()
-	seg, err := newSegmenter(ctx, "test-stream", baseDir, testSegmenterCfg, testStreamURL)
+	seg, err := newSegmenter(ctx, "test-stream", baseDir, testSegmenterCfg, testStreamURL, nil)
 	if err != nil {
 		t.Fatalf("newSegmenter failed: %v", err)
 	}
 
 	seg.cleanup()
 
-	expectedDir := filepath.Join(baseDir, "test-stream")
+	expectedDir := segmentDir(baseDir, "test-stream")
 	if _, err := os.Stat(expectedDir); !os.IsNotExist(err) {
 		t.Error("expected segment directory to be removed")
 	}

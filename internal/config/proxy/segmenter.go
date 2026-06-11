@@ -3,13 +3,8 @@ package proxy
 import (
 	"fmt"
 	"majmun/internal/config/common"
-	"slices"
+	"majmun/internal/shell"
 )
-
-var reservedSegmenterVars = []string{
-	"segment_path",
-	"playlist_path",
-}
 
 type Segmenter struct {
 	Command      common.StringOrArr `yaml:"command,omitempty"`
@@ -30,7 +25,7 @@ func (s *Segmenter) Validate() error {
 		if err := templateVar.Validate(); err != nil {
 			return fmt.Errorf("template_variables[%d]: %w", i, err)
 		}
-		if slices.Contains(reservedSegmenterVars, templateVar.Name) {
+		if shell.IsReservedVar(templateVar.Name) {
 			return fmt.Errorf("template_variables[%d]: %q is a reserved variable", i, templateVar.Name)
 		}
 	}

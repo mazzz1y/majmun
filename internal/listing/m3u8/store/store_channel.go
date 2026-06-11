@@ -14,11 +14,12 @@ type URLGenerator interface {
 }
 
 type Channel struct {
-	track    *m3u8.Track
-	playlist listing.Playlist
-	hidden   bool
-	removed  bool
-	priority int
+	track     *m3u8.Track
+	playlist  listing.Playlist
+	hidden    bool
+	removed   bool
+	priority  int
+	generated bool
 }
 
 func NewChannel(track *m3u8.Track, playlist listing.Playlist) *Channel {
@@ -26,6 +27,18 @@ func NewChannel(track *m3u8.Track, playlist listing.Playlist) *Channel {
 		track:    track,
 		playlist: playlist,
 	}
+}
+
+func NewGeneratedChannel(track *m3u8.Track, playlist listing.Playlist) *Channel {
+	return &Channel{
+		track:     track,
+		playlist:  playlist,
+		generated: true,
+	}
+}
+
+func (c *Channel) IsGenerated() bool {
+	return c.generated
 }
 
 func (c *Channel) Track() *m3u8.Track {

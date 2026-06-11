@@ -130,6 +130,32 @@ func TestMergeProxies(t *testing.T) {
 	}
 }
 
+func TestMergeProxiesPlayoutCascade(t *testing.T) {
+	global := proxy.Proxy{
+		Playout: proxy.Segmenter{
+			Command:      common.StringOrArr{"ffmpeg", "global"},
+			TemplateVars: []common.NameValue{{Name: "ffmpeg_log_level", Value: "fatal"}},
+		},
+	}
+	playlist := proxy.Proxy{
+		Playout: proxy.Segmenter{
+			Command:      common.StringOrArr{"ffmpeg", "playlist"},
+			TemplateVars: []common.NameValue{{Name: "segment_duration", Value: "4"}},
+		},
+	}
+
+	result := mergeProxies(global, playlist)
+	if !reflect.DeepEqual([]string(result.Playout.Command), []string{"ffmpeg", "playlist"}) {
+		t.Errorf("expected playlist playout command to override, got %v", result.Playout.Command)
+	}
+	if !nameValueSlicesEqual(result.Playout.TemplateVars, []common.NameValue{
+		{Name: "ffmpeg_log_level", Value: "fatal"},
+		{Name: "segment_duration", Value: "4"},
+	}) {
+		t.Errorf("expected accumulated playout template vars, got %v", result.Playout.TemplateVars)
+	}
+}
+
 func TestMergeHandlers(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -340,59 +366,6 @@ func durationPtr(s string) *common.Duration {
 		panic(err)
 	}
 	return &d
-}
-
-func TestUniqueNames(t *testing.T) {
-	tests := []struct {
-		name     string
-		names    []string
-		expected []string
-	}{
-		{
-			name:     "empty",
-			names:    []string{},
-			expected: nil,
-		},
-		{
-			name:     "single names",
-			names:    []string{"a", "b", "c"},
-			expected: []string{"a", "b", "c"},
-		},
-		{
-			name:     "no duplicates",
-			names:    []string{"a", "b", "c", "d", "e"},
-			expected: []string{"a", "b", "c", "d", "e"},
-		},
-		{
-			name:     "with duplicates - first occurrence wins",
-			names:    []string{"a", "b", "b", "c", "c", "d"},
-			expected: []string{"a", "b", "c", "d"},
-		},
-		{
-			name:     "all duplicates",
-			names:    []string{"x", "y", "y", "x", "x"},
-			expected: []string{"x", "y"},
-		},
-		{
-			name:     "preset then client pattern",
-			names:    []string{"preset1", "preset2", "client1", "preset1"},
-			expected: []string{"preset1", "preset2", "client1"},
-		},
-		{
-			name:     "complex scenario",
-			names:    []string{"base", "sports", "premium", "base", "movies", "sports", "news"},
-			expected: []string{"base", "sports", "premium", "movies", "news"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := uniqueNames(tt.names)
-			if !reflect.DeepEqual(result, tt.expected) {
-				t.Errorf("uniqueNames() = %v, expected %v", result, tt.expected)
-			}
-		})
-	}
 }
 
 func nameValueSlicesEqual(a, b []common.NameValue) bool {

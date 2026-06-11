@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"majmun/internal/channelgen"
 	"majmun/internal/config"
 	"majmun/internal/config/proxy"
 	channelconf "majmun/internal/config/rules/channel"
@@ -22,6 +23,7 @@ type Client struct {
 	semaphore         *semaphore.Weighted
 	playlistProviders []*Playlist
 	epgProviders      []*EPG
+	channelProviders  []*Channel
 	proxy             proxy.Proxy
 	channelProcessor  *channel.Processor
 	playlistProcessor *playlist.Processor
@@ -32,6 +34,7 @@ type Client struct {
 }
 
 type Provider interface {
+	ID() string
 	Name() string
 	Type() string
 	URLGenerator() *urlgen.Generator
@@ -74,7 +77,7 @@ func (c *Client) BuildPlaylistProvider(
 	playlistConf config.Playlist,
 	serverProxy proxy.Proxy,
 	sem *semaphore.Weighted,
-) error {
+) (*Playlist, error) {
 	mergedProxy := mergeProxies(serverProxy, playlistConf.Proxy, c.proxy)
 	httpClient := c.newHTTPClient(mergedProxy)
 
@@ -89,10 +92,23 @@ func (c *Client) BuildPlaylistProvider(
 		playlistConf.SkipOnError,
 	)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	c.playlistProviders = append(c.playlistProviders, pr)
+	return pr, nil
+}
+
+func (c *Client) BuildChannelProvider(playlistConf config.Playlist, channelConf config.Channel, serverProxy proxy.Proxy, gen *channelgen.Channel, playlist listing.Playlist) error {
+	mergedProxy := mergeProxies(serverProxy, playlistConf.Proxy, c.proxy)
+	httpClient := c.newHTTPClient(mergedProxy)
+
+	pr, err := NewChannelProvider(playlist, channelConf, c.urlGen, gen, httpClient, mergedProxy)
+	if err != nil {
+		return err
+	}
+
+	c.channelProviders = append(c.channelProviders, pr)
 	return nil
 }
 
@@ -145,18 +161,32 @@ func (c *Client) EPGProviders() []listing.EPG {
 	return result
 }
 
-func (c *Client) GetProvider(prType urlgen.ProviderType, prName string) Provider {
+func (c *Client) ChannelProviders() []listing.Channel {
+	result := make([]listing.Channel, 0, len(c.channelProviders))
+	for _, ch := range c.channelProviders {
+		result = append(result, ch)
+	}
+	return result
+}
+
+func (c *Client) GetProvider(prType urlgen.ProviderType, providerID string) Provider {
 	switch prType {
 	case urlgen.ProviderTypePlaylist:
 		for _, ps := range c.playlistProviders {
-			if prName == ps.Name() {
+			if providerID == ps.ID() {
 				return ps
 			}
 		}
 	case urlgen.ProviderTypeEPG:
 		for _, ps := range c.epgProviders {
-			if prName == ps.Name() {
+			if providerID == ps.ID() {
 				return ps
+			}
+		}
+	case urlgen.ProviderTypeChannel:
+		for _, ch := range c.channelProviders {
+			if providerID == ch.ID() {
+				return ch
 			}
 		}
 	}

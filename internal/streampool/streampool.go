@@ -7,6 +7,7 @@ import (
 	"io"
 	"majmun/internal/config/proxy"
 	"majmun/internal/ctxutil"
+	"majmun/internal/hashid"
 	"majmun/internal/logging"
 	"majmun/internal/metrics"
 	"majmun/internal/utils"
@@ -33,6 +34,7 @@ type ClientStreamerFunc func(playlistPath string) Streamer
 type Request struct {
 	StreamKey      string
 	StreamURL      string
+	ExtraVars      map[string]any
 	ClientStreamer ClientStreamerFunc
 	Semaphore      *semaphore.Weighted
 	Segmenter      proxy.Segmenter
@@ -59,11 +61,20 @@ func (d *StreamPool) Stop() {
 	_ = os.RemoveAll(d.baseDir)
 }
 
+func (d *StreamPool) SegmentDir(streamKey string) (string, error) {
+	dir := segmentDir(d.baseDir, streamKey)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return "", err
+	}
+	return dir, nil
+}
+
 func (d *StreamPool) GetReader(ctx context.Context, req Request) (io.ReadCloser, error) {
-	clientCtx := ctxutil.WithStreamID(ctx, req.StreamKey)
+	clientCtx := ctxutil.WithStreamID(ctx, hashid.New(req.StreamKey))
 	streamCtx := context.WithoutCancel(clientCtx)
 
-	seg, isNew, err := d.pool.getOrCreate(req.StreamKey, streamCtx, d.baseDir, req.Segmenter, req.StreamURL)
+	seg, isNew, err := d.pool.getOrCreate(
+		req.StreamKey, streamCtx, d.baseDir, req.Segmenter, req.StreamURL, req.ExtraVars)
 	if err != nil {
 		return nil, err
 	}
@@ -128,4 +139,8 @@ func (d *StreamPool) runSegmenter(ctx context.Context, req Request, seg *segment
 	seg.start(segCtx)
 
 	<-seg.waitEmpty()
+}
+
+func segmentDir(baseDir, streamKey string) string {
+	return filepath.Join(baseDir, hashid.New(streamKey))
 }

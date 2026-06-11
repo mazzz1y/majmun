@@ -1,6 +1,6 @@
 package store
 
-import "majmun/internal/listing"
+import "majmun/internal/hashid"
 
 type Store struct {
 	channels []*Channel
@@ -37,8 +37,8 @@ func ensureTvgID(ch *Channel) {
 		return
 	}
 	if tvgName, exists := ch.GetAttr("tvg-name"); exists && tvgName != "" {
-		ch.SetAttr("tvg-id", listing.GenerateHashID(tvgName))
+		ch.SetAttr("tvg-id", hashid.New(tvgName))
 	} else {
-		ch.SetAttr("tvg-id", listing.GenerateHashID(ch.Name()))
+		ch.SetAttr("tvg-id", hashid.New(ch.Name()))
 	}
 }

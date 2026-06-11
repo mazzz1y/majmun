@@ -20,6 +20,8 @@ markdown_extensions:
   - pymdownx.superfences
   - pymdownx.snippets
   - pymdownx.details
+  - pymdownx.tabbed:
+      alternate_style: true
   - attr_list
   - md_in_html
   - admonition
@@ -34,7 +36,9 @@ nav:
       - Overview: config.md
       - Server: config/server.md
       - Logs: config/logs.md
-      - Playlists: config/playlists.md
+      - Playlists:
+          - Overview: config/playlists.md
+          - Channels: config/channels.md
       - EPGs: config/epgs.md
       - Rules:
           - Overview: config/rules/index.md
@@ -55,6 +59,7 @@ nav:
           - Overview: config/proxy.md
           - Stream: config/proxy/stream.md
           - Segmenter: config/proxy/segmenter.md
+          - Playout: config/proxy/playout.md
           - Error: config/proxy/error.md
           - HTTP Client: config/proxy/http_client.md
       - Clients: config/clients.md

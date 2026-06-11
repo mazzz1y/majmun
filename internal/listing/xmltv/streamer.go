@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"majmun/internal/hashid"
 	"majmun/internal/ioutil"
 	"majmun/internal/listing"
 	"majmun/internal/logging"
@@ -12,10 +13,12 @@ import (
 	"majmun/internal/urlgen"
 	"slices"
 	"strconv"
+	"time"
 )
 
 type Streamer struct {
 	subscriptions    []listing.EPG
+	channels         []listing.Channel
 	channelIDToName  map[string]string
 	addedChannels    map[string][]string
 	addedProgrammes  map[string]bool
@@ -28,13 +31,14 @@ type Encoder interface {
 	Close() error
 }
 
-func NewStreamer(subs []listing.EPG, channelIDToName map[string]string) *Streamer {
+func NewStreamer(subs []listing.EPG, channels []listing.Channel, channelIDToName map[string]string) *Streamer {
 	subscriptions := subs
 	channelLen := len(channelIDToName)
 	approxProgrammeLen := 300 * channelLen
 
 	return &Streamer{
 		subscriptions:    subscriptions,
+		channels:         channels,
 		channelIDToName:  channelIDToName,
 		channelIDMapping: make(map[string]string, channelLen),
 		addedProgrammes:  make(map[string]bool, approxProgrammeLen),
@@ -49,7 +53,7 @@ func (s *Streamer) WriteToGzip(ctx context.Context, w io.Writer) (int64, error) 
 }
 
 func (s *Streamer) WriteTo(ctx context.Context, w io.Writer) (int64, error) {
-	if len(s.subscriptions) == 0 {
+	if len(s.subscriptions) == 0 && len(s.channels) == 0 {
 		return 0, fmt.Errorf("no EPG sources found")
 	}
 
@@ -101,6 +105,10 @@ func (s *Streamer) WriteTo(ctx context.Context, w io.Writer) (int64, error) {
 		}
 	}
 
+	if err := s.writeGeneratedChannels(encoder); err != nil {
+		return bytesCounter.Count(), err
+	}
+
 	for i, decoder := range decoders {
 		if failed[i] {
 			continue
@@ -117,12 +125,99 @@ func (s *Streamer) WriteTo(ctx context.Context, w io.Writer) (int64, error) {
 		}
 	}
 
+	if err := s.writeGeneratedProgrammes(ctx, encoder); err != nil {
+		return bytesCounter.Count(), err
+	}
+
 	count := bytesCounter.Count()
 	if count == 0 {
 		return count, fmt.Errorf("no data in subscriptions")
 	}
 
 	return count, encoder.WriteFooter()
+}
+
+func (s *Streamer) writeGeneratedChannels(encoder Encoder) error {
+	for _, ch := range s.channels {
+		channel := xmltv.Channel{
+			ID:           ch.ID(),
+			DisplayNames: []xmltv.CommonElement{{Value: ch.Name()}},
+		}
+		logo, err := listing.ChannelLogoURL(ch)
+		if err != nil {
+			return err
+		}
+		if logo != "" {
+			channel.Icons = []xmltv.Icon{{Source: logo}}
+		}
+		if err := encoder.Encode(channel); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Streamer) writeGeneratedProgrammes(ctx context.Context, encoder Encoder) error {
+	now := time.Now()
+	for _, ch := range s.channels {
+		programmes, err := ch.Programmes(ctx, now)
+		if err != nil {
+			logging.Error(ctx, err, "failed to build channel EPG", "channel_name", ch.Name())
+			continue
+		}
+		for _, p := range programmes {
+			programme := xmltv.Programme{
+				Channel: ch.ID(),
+				Titles:  []xmltv.CommonElement{{Value: p.Title}},
+				Start:   &xmltv.Time{Time: p.Start},
+				Stop:    &xmltv.Time{Time: p.Stop},
+			}
+			if p.Description != "" {
+				programme.Descriptions = []xmltv.CommonElement{{Value: p.Description}}
+			}
+			if p.Category != "" {
+				programme.Categories = []xmltv.CommonElement{{Value: p.Category}}
+			}
+			if d, ok := parseProgrammeDate(p.Date); ok {
+				programme.Date = &d
+			}
+			programme.EpisodeNums = episodeNums(p.Season, p.Episode)
+			if err := encoder.Encode(programme); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func parseProgrammeDate(date string) (xmltv.Date, bool) {
+	if date == "" {
+		return xmltv.Date{}, false
+	}
+	t, err := time.Parse("20060102", date)
+	if err != nil {
+		return xmltv.Date{}, false
+	}
+	return xmltv.Date(t), true
+}
+
+func episodeNums(season, episode int) []xmltv.EpisodeNum {
+	if episode <= 0 {
+		return nil
+	}
+	nums := make([]xmltv.EpisodeNum, 0, 2)
+	if season > 0 {
+		nums = append(nums,
+			xmltv.EpisodeNum{System: "xmltv_ns", Value: fmt.Sprintf("%d.%d.", season-1, episode-1)},
+			xmltv.EpisodeNum{System: "onscreen", Value: fmt.Sprintf("S%02dE%02d", season, episode)},
+		)
+	} else {
+		nums = append(nums,
+			xmltv.EpisodeNum{System: "xmltv_ns", Value: fmt.Sprintf(".%d.", episode-1)},
+			xmltv.EpisodeNum{System: "onscreen", Value: fmt.Sprintf("E%02d", episode)},
+		)
+	}
+	return nums
 }
 
 func (s *Streamer) processChannels(ctx context.Context, decoder *decoderWrapper, encoder Encoder) error {
@@ -195,7 +290,7 @@ func (s *Streamer) processProgrammes(ctx context.Context, decoder *decoderWrappe
 
 func (s *Streamer) processChannel(channel *xmltv.Channel, sourceURL string) (allowed bool) {
 	originalID := channel.ID
-	compositeKey := listing.GenerateHashID(originalID, sourceURL)
+	compositeKey := hashid.New(originalID, sourceURL)
 
 	candidateIDs := make([]string, 0, 1+len(channel.DisplayNames))
 	candidateIDs = append(candidateIDs, originalID)
@@ -203,7 +298,7 @@ func (s *Streamer) processChannel(channel *xmltv.Channel, sourceURL string) (all
 	currentChannelNames := make([]string, 0, len(channel.DisplayNames))
 	for _, displayName := range channel.DisplayNames {
 		currentChannelNames = append(currentChannelNames, displayName.Value)
-		tvgID := listing.GenerateHashID(displayName.Value)
+		tvgID := hashid.New(displayName.Value)
 		candidateIDs = append(candidateIDs, tvgID)
 	}
 
@@ -244,7 +339,7 @@ func (s *Streamer) channelNamesMatch(currentNames, existingNames []string) bool 
 }
 
 func (s *Streamer) processProgramme(programme *xmltv.Programme, sourceURL string) (allowed bool) {
-	compositeKey := listing.GenerateHashID(programme.Channel, sourceURL)
+	compositeKey := hashid.New(programme.Channel, sourceURL)
 
 	mappedChannel, exists := s.channelIDMapping[compositeKey]
 	if !exists {
@@ -299,7 +394,7 @@ func (s *Streamer) processIcons(sub listing.EPG, icons []xmltv.Icon) []xmltv.Ico
 		link, err := gen.CreateFileURL(
 			urlgen.ProviderInfo{
 				ProviderType: urlgen.ProviderTypeEPG,
-				ProviderName: sub.Name(),
+				ProviderID:   sub.ID(),
 			}, icons[i].Source)
 		if err != nil {
 			continue

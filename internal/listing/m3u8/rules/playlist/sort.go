@@ -3,6 +3,7 @@ package playlist
 import (
 	"majmun/internal/config/rules/playlist"
 	"majmun/internal/listing/m3u8/store"
+	"majmun/internal/natsort"
 	"sort"
 )
 
@@ -35,7 +36,7 @@ func (sp *SortProcessor) Apply(st *store.Store) {
 			if !jOk {
 				return true
 			}
-			return naturalLess(iVal, jVal)
+			return natsort.Less(iVal, jVal)
 		})
 		st.Replace(channels)
 		return
@@ -59,7 +60,7 @@ func (sp *SortProcessor) Apply(st *store.Store) {
 		if iPriority != jPriority {
 			return iPriority < jPriority
 		}
-		return naturalLess(groupNames[i], groupNames[j])
+		return natsort.Less(groupNames[i], groupNames[j])
 	})
 
 	for _, groupName := range groupNames {
@@ -78,7 +79,7 @@ func (sp *SortProcessor) Apply(st *store.Store) {
 			if !jOk {
 				return true
 			}
-			return naturalLess(iVal, jVal)
+			return natsort.Less(iVal, jVal)
 		})
 		sortedChannels = append(sortedChannels, groupChannels...)
 	}

@@ -120,5 +120,5 @@ func (s *Server) getProviderFromData(client *app.Client, data *urlgen.Data) app.
 		return nil
 	}
 
-	return client.GetProvider(providerInfo.ProviderType, providerInfo.ProviderName)
+	return client.GetProvider(providerInfo.ProviderType, providerInfo.ProviderID)
 }

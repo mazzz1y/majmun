@@ -63,6 +63,8 @@ func NewServer(cfg *config.Config) (*Server, error) {
 func (s *Server) Start() error {
 	s.setupRoutes()
 
+	go s.manager.WarmChannels(s.ctx)
+
 	if s.metricsServer != nil {
 		go func() {
 			logging.Info(s.ctx, "starting metrics server", "address", s.metricsServer.Addr)

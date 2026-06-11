@@ -8,8 +8,10 @@ import (
 	"io"
 	"majmun/internal/config/common"
 	"majmun/internal/logging"
+	"maps"
 	"os"
 	"os/exec"
+	"slices"
 	"text/template"
 
 	"github.com/Masterminds/sprig/v3"
@@ -19,6 +21,24 @@ const (
 	maxRenderIterations = 10
 	bufferSize          = 64 * 1024
 )
+
+// reservedVars are template variable names injected at runtime into segmenter/playout
+// commands: url, segment_path and playlist_path by streampool's segmenter, input and the
+// Channel/Playlist namespaces by the server's channel stream handler. Config validation
+// rejects user-defined variables with these names.
+var reservedVars = []string{
+	"input",
+	"url",
+	"segment_path",
+	"playlist_path",
+	"Channel",
+	"Playlist",
+}
+
+// IsReservedVar reports whether name collides with a variable injected at runtime.
+func IsReservedVar(name string) bool {
+	return slices.Contains(reservedVars, name)
+}
 
 type Streamer struct {
 	cmdTmpl  []*template.Template
@@ -65,15 +85,8 @@ func (s *Streamer) WithTemplateVars(templateVars map[string]any) *Streamer {
 		tmplVars: make(map[string]any),
 	}
 
-	if s.tmplVars != nil {
-		for k, v := range s.tmplVars {
-			clone.tmplVars[k] = v
-		}
-	}
-
-	for k, v := range templateVars {
-		clone.tmplVars[k] = v
-	}
+	maps.Copy(clone.tmplVars, s.tmplVars)
+	maps.Copy(clone.tmplVars, templateVars)
 
 	return clone
 }
@@ -160,6 +173,9 @@ func (s *Streamer) drainStderr(ctx context.Context, stderr io.ReadCloser) {
 	scanner := bufio.NewScanner(stderr)
 	for scanner.Scan() {
 		logging.Debug(ctx, "command output", "msg", scanner.Text())
+	}
+	if err := scanner.Err(); err != nil {
+		logging.Debug(ctx, "command output scan error", "error", err)
 	}
 }
 

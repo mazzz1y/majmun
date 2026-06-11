@@ -46,7 +46,7 @@ func (p *Processor) Process(
 			continue
 		}
 
-		if ch.Playlist().IsProxied() {
+		if !ch.IsGenerated() && ch.Playlist().IsProxied() {
 			if err := p.proxyChannelAttributes(ch); err != nil {
 				return nil, err
 			}
@@ -62,7 +62,7 @@ func (p *Processor) Process(
 	}
 
 	for ch := range p.channelStreams {
-		if ch.Playlist().IsProxied() && len(p.channelStreams[ch]) > 0 {
+		if !ch.IsGenerated() && ch.Playlist().IsProxied() && len(p.channelStreams[ch]) > 0 {
 			p.updateChannelURI(ch)
 		}
 	}
@@ -91,7 +91,7 @@ func (p *Processor) createStream(ch *store.Channel) urlgen.Stream {
 	return urlgen.Stream{
 		ProviderInfo: urlgen.ProviderInfo{
 			ProviderType: urlgen.ProviderTypePlaylist,
-			ProviderName: ch.Playlist().Name(),
+			ProviderID:   ch.Playlist().ID(),
 		},
 		URL:    ch.URI().String(),
 		Hidden: ch.IsHidden(),
@@ -125,7 +125,7 @@ func (p *Processor) proxyChannelAttributes(ch *store.Channel) error {
 	urlGen := ch.Playlist().URLGenerator()
 	providerInfo := urlgen.ProviderInfo{
 		ProviderType: urlgen.ProviderTypePlaylist,
-		ProviderName: ch.Playlist().Name(),
+		ProviderID:   ch.Playlist().ID(),
 	}
 
 	for key, value := range ch.Attrs() {
