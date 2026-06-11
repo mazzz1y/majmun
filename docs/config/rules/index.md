@@ -21,3 +21,19 @@ Rules are organized into two categories:
 channel_rules: []
 playlist_rules: []
 ```
+
+## Example
+
+Set a group attribute on news channels and sort the playlist:
+
+```yaml
+channel_rules:
+  - set_field:
+      selector: attr/group-title
+      template: "News"
+      condition:
+        patterns: ["^CNN.*", "^BBC.*"]
+
+playlist_rules:
+  - sort: {}
+```

@@ -1,10 +1,15 @@
 # Condition Blocks
 
-The `condition` block controls when a rule is applied, based on channel properties, client, playlist, and more
+The `condition` block controls when a rule is applied, based on channel properties, client, playlist, and more.
 
-!!! note
+All fields are optional. Multiple fields in one block must all match (implicit AND): for example, `patterns` together
+with `clients` matches only when both do. For explicit combinations use `and` or `or`, which take arrays of nested
+condition blocks.
 
-    All fields are optional. To combine criteria use `and` or `or`, which take arrays of condition blocks.
+!!! note "Generated channels"
+
+    A [generated channel](../channels.md) belongs to its parent playlist, so `playlists` matches it by the **parent
+    playlist name**, not the channel name.
 
 ## YAML Structure
 

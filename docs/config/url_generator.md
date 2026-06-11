@@ -1,6 +1,8 @@
 # URL Generator
 
-The URL generator configuration manages the creation and encryption of streaming URLs.
+When proxying is enabled, the playlists Majmun serves don't contain the provider's original URLs. Every stream link
+and every proxied asset link (channel logos, for example) is replaced with an encrypted token pointing at your
+`public_url`. The URL generator controls how these tokens are created and how long they stay valid.
 
 ## YAML Structure
 
@@ -13,20 +15,23 @@ url_generator:
 
 ## Fields
 
-| Field        | Type                             | Required | Default             | Description                                         |
-| ------------ | -------------------------------- | -------- | ------------------- | --------------------------------------------------- |
-| `secret`     | `string`                         | Yes      | ``                  | Secret salt used for URL encryption                 |
-| `stream_ttl` | [`duration`](shared.md#duration) | No       | `7 days`            | Time-to-live for streaming URLs (0 = no expiration) |
-| `file_ttl`   | [`duration`](shared.md#duration) | No       | `0 (no expiration)` | Time-to-live for file URLs (0 = no expiration)      |
+| Field        | Type                             | Required | Default             | Description                                          |
+| ------------ | -------------------------------- | -------- | ------------------- | ---------------------------------------------------- |
+| `secret`     | `string`                         | Yes      | ``                  | Server-side salt for URL encryption                  |
+| `stream_ttl` | [`duration`](shared.md#duration) | No       | `30 days`           | Time-to-live for stream links (0 = no expiration)    |
+| `file_ttl`   | [`duration`](shared.md#duration) | No       | `0 (no expiration)` | Time-to-live for asset links (0 = no expiration)     |
 
 !!! note "Secret Key"
 
-    This is a salt added to the user's secrets. Changing it will invalidate all links.
+    The `secret` is combined with each client's own secret to encrypt URLs. Changing it invalidates every link ever
+    generated — all TVs will need to refresh their playlists.
 
-!!! note "TTL"
+!!! note "How TTL behaves"
 
-    Setting TTL > 0 will cause links to regenerate each time they're accessed. By default, it's 0, since it's usually
-    unnecessary for non-sensitive files.
+    Links carry their expiration inside the encrypted token, so each playlist fetch produces fresh links valid for
+    the full TTL. A TV that refreshes its playlist regularly never sees an expired link; a stale playlist serves
+    the [`link_expired`](proxy/error.md) error video once `stream_ttl` passes. `file_ttl` defaults to `0` (never
+    expires) since assets like logos aren't sensitive.
 
 ## URL Generation
 

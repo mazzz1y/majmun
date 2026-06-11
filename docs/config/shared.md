@@ -16,6 +16,9 @@ Duration values support the following units:
 
 Examples: `30s`, `5m`, `2h`, `1d`, `2w`
 
+A bare `0` (no unit) is also accepted; fields document what `0` means for them (usually "disabled" or "never
+expires").
+
 ## Name/Value Object
 
 A key-value pair used for template variables, environment variables, and HTTP headers.
@@ -45,3 +48,9 @@ command:
 ```yaml
 command: "ffmpeg -v {{ .log_level }} -i {{ .input }} -c copy -f mpegts pipe:1"
 ```
+
+!!! warning "String form and shell interpretation"
+
+    In string form the whole line goes through the shell, so template values are subject to word splitting and
+    shell metacharacters. Prefer the array form when values can contain spaces or special characters — each array
+    element is passed as a literal argument.

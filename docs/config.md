@@ -1,7 +1,8 @@
 # Configuration
 
-Majmun can read configuration from a file or from a directory by combining multiple files based on top-level
-elements.
+Majmun reads configuration from a single YAML file or from a directory. With a directory, all `.yaml`/`.yml` files
+are loaded in alphabetical order into one configuration — useful for splitting playlists, clients, and rules into
+separate files. A top-level key defined in a later file overrides the same key from an earlier one.
 
 By default, it reads configuration from `config.yaml` in the current directory.
 
@@ -10,24 +11,25 @@ majmun -config ./config.yaml # from file
 majmun -config ./config      # from directory
 ```
 
-!!! note "Hint"
+!!! info "Single-Value Arrays"
 
-    All arrays with a single value can be specified without brackets.
+    Arrays with a single value can be written without brackets (`playlists: tv` instead of `playlists: ["tv"]`).
 
 !!! warning "Strict Validation"
 
-    Configuration files are validated strictly. Unknown fields will cause an error during validation.
-    Use dot-prefixed keys (e.g. `.my_anchor`) for reusable YAML anchors.
+    Configuration files are validated strictly: unknown fields cause an error. If you use YAML anchors, prefix the
+    anchor key with a dot (e.g. `.my_anchor`) so it isn't treated as an unknown field.
 
-### Root Level Configuration
+## Root Level Configuration
 
 | Field            | Type                                         | Description                                                       |
 | ---------------- | -------------------------------------------- | ----------------------------------------------------------------- |
 | `server`         | [`Server`](./config/server.md)               | Server configuration including listening addresses and public URL |
+| `state_dir`      | `string`                                     | Directory for persistent state (channel schedules). Default `state`. Required when any playlist defines channels. |
 | `url_generator`  | [`URL Generator`](./config/url_generator.md) | URL generation and encryption configuration                       |
 | `logs`           | [`Logs`](./config/logs.md)                   | Logging configuration                                             |
 | `proxy`          | [`Proxy`](./config/proxy.md)                 | Stream proxy configuration for remuxing with ffmpeg               |
-| `playlists`      | [`Playlists`](./config/playlists.md)         | Array of playlist definitions with sources                        |
+| `playlists`      | [`Playlists`](./config/playlists.md)         | Array of playlist definitions with sources and/or channels        |
 | `epgs`           | [`EPGs`](./config/epgs.md)                   | Array of EPG definitions with sources                             |
 | `channel_rules`  | [`Channel Rules`](./config/rules/index.md)   | Global channel processing rules (applied to all channels)         |
 | `playlist_rules` | [`Playlist Rules`](./config/rules/index.md)  | Global playlist processing rules (applied after channel rules)    |

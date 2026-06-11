@@ -21,7 +21,7 @@ sort:
 | `selector`  | [`Selector`](../selector.md)   | No       | Property to use for sorting (attribute/tag/etc), default is name |
 | `order`     | `[]regex`                      | No       | Custom order of channels, regex patterns                         |
 | `group_by`  | [`GroupByRule`](#groupbyrule)  | No       | Group before sorting                                             |
-| `condition` | [`Condition`](../condition.md) | No       | Only `clients` field is allowed in sort condition                |
+| `condition` | [`Condition`](../condition.md) | No       | When to apply this sort. Sorting is all-or-nothing per playlist, so only the `clients` field is allowed here. |
 
 ### GroupByRule
 

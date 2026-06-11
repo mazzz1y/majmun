@@ -44,7 +44,7 @@ clients:
 
 ## Advanced Configuration
 
-A full-featured setup including proxying, rules, and multiple sources.
+A full-featured setup including proxying, rules, generated channels, and multiple sources.
 
 ```yaml
 logs:
@@ -55,6 +55,8 @@ server:
   listen_addr: ":8080"
   metrics_addr: ":9090"
   public_url: "https://iptv.example.com"
+
+state_dir: /var/lib/majmun/state # Required for generated channels
 
 url_generator:
   secret: "super-secret"
@@ -114,6 +116,21 @@ playlists:
     sources:
       - "https://provider.com/sports1.m3u8"
       - "https://provider.com/sports2.m3u8"
+  - name: local
+    channels:
+      - name: "Cartoons 24/7"
+        # 24/7 channel generated from local media files
+        logo: /config/logos/cartoons.png
+        fields:
+          - selector: attr/group-title
+            template: "Kids"
+        sources:
+          - /media/cartoons
+      - name: "Comedy Shows"
+        # Episodes play in random order, reshuffled when the file set changes
+        sources:
+          - /media/shows/comedy
+        random_order: true
 
 epgs:
   - name: movies
@@ -155,7 +172,7 @@ playlist_rules:
 clients:
   - name: "living-room"
     secret: "lr-secret"
-    playlists: ["tv", "movies"]
+    playlists: ["tv", "movies", "local"]
 
   - name: "bedroom"
     secret: "br-secret"

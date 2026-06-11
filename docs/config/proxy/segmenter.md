@@ -1,8 +1,22 @@
 # Segmenter
 
-The `segmenter` block configures the HLS segmenter used for stream pooling. For each proxied stream, Majmun runs a single upstream fetch and an FFmpeg HLS segmenter that writes segments to a temporary directory. Each client is served by an independent FFmpeg process reading from the local HLS playlist, ensuring keyframe-aligned starts and isolation between slow and fast clients. When multiple clients request the same stream, they share the same segmenter and segment directory.
+The `segmenter` is the shared half of the [proxy pipeline](../proxy.md#how-streaming-works). For each proxied
+stream, Majmun runs **one** segmenter process that fetches the upstream and slices it into HLS segments in a
+temporary directory. Every viewer of that stream shares this process and its segments — the provider sees a single
+connection.
 
-The segmenter command reads the upstream stream via the `url` template variable and must output HLS segments to the paths provided via template variables.
+Each viewer is then served by its own [stream](./stream.md) command reading from the local segments. This split is
+what makes viewers independent: a slow TV can't stall a fast one, and every viewer starts cleanly on a keyframe.
+
+Because the segmenter runs once per stream, it is the right place for expensive work like transcoding — done here,
+it happens once and all viewers share the result.
+
+## Contract
+
+- **Input:** `{{ .url }}` — the upstream stream URL.
+- **Output:** HLS segments written to `{{ .segment_path }}` and a playlist at `{{ .playlist_path }}`, continuously
+  rolling (old segments deleted). Majmun waits for `init_segments` segments to appear (up to `ready_timeout`)
+  before serving viewers.
 
 ## YAML Structure
 
@@ -48,7 +62,8 @@ These variables are injected at runtime by the system and are always available i
 
 !!! warning "Reserved Variables"
 
-    `url`, `segment_path` and `playlist_path` are reserved and cannot be used in `template_variables`. Setting them will result in a validation error.
+    `input`, `url`, `segment_path`, `playlist_path`, `Channel` and `Playlist` are reserved and cannot be used in
+    `template_variables`. Setting them will result in a validation error.
 
 ## Examples
 
@@ -150,7 +165,7 @@ proxy:
 playlists:
   - name: low-bandwidth
     sources:
-      - url: "http://example.com/playlist.m3u"
+      - "http://example.com/playlist.m3u"
     proxy:
       segmenter:
         template_variables:

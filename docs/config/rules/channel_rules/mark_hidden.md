@@ -1,6 +1,8 @@
 # Mark as Hidden
 
-The `mark_hidden` rule marks channels as hidden from metrics and logs.
+The `mark_hidden` rule excludes matching channels from [metrics](../../../metrics.md) and from channel names in logs.
+The channels still play normally — use this to keep certain channels or clients out of your dashboards and log
+output, e.g. for privacy or to cut monitoring noise.
 
 ## YAML Structure
 

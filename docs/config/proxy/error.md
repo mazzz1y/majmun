@@ -1,16 +1,20 @@
 # Error
 
-The `error` block configures error handling commands executed during proxy/remuxing when specific error conditions
-occur.
-These commands allow you to display custom error content such as test patterns, audio messages, or static images
-when stream errors are encountered.
+When a proxied stream can't be served, Majmun doesn't just drop the connection — it runs an error command that
+generates a short video telling the viewer what happened. The default renders a color card with an explanatory
+message; you can replace it with any command per error type.
 
-!!! note "Error Types"
+There are three error types:
 
-    Majmun supports three types of error handling:
-    - `upstream_error` - Triggered when the upstream source fails
-    - `rate_limit_exceeded` - Triggered when rate limits are hit
-    - `link_expired` - Triggered when stream links expire
+- `upstream_error` — the upstream source failed (unreachable, error response, or the stream command produced no
+  output).
+- `rate_limit_exceeded` — a [`concurrency`](../proxy.md#configuration-levels) limit (global, playlist, or client)
+  was hit.
+- `link_expired` — the stream link outlived [`url_generator.stream_ttl`](../url_generator.md); the viewer needs to
+  refresh the playlist.
+
+Error commands follow the same output contract as the [stream](./stream.md) command: write video data to `stdout`
+(`pipe:1` for FFmpeg); `stderr` goes to the debug logs.
 
 ## YAML Structure
 
@@ -53,41 +57,27 @@ proxy:
 | `template_variables` | [`[]NameValue`](../shared.md#namevalue-object) | No       | Variables available in command templates |
 | `env_variables`      | [`[]NameValue`](../shared.md#namevalue-object) | No       | Environment variables for the command    |
 
-### Available Template Variables
+### Default Template Variables
 
-| Variable | Type     | Description          |
-| -------- | -------- | -------------------- |
-| `url`    | `string` | Stream URL           |
-| `reason` | `string` | Error reason message |
+The default command renders a static color card with the error text. These variables are available to it and can be
+overridden per error type:
+
+| Variable           | Default                                                            | Description                          |
+| ------------------ | ------------------------------------------------------------------ | ------------------------------------ |
+| `ffmpeg_log_level` | `fatal`                                                            | ffmpeg `-v` log level                |
+| `message`          | Per error type, e.g. `Link has expired\n\nPlease refresh your playlist` | Text drawn on the error card    |
 
 ## Examples
 
-### Default Error Handler
+### Custom Error Message
 
 ```yaml
 proxy:
   error:
-    command:
-      - "ffmpeg"
-      - "-v"
-      - "error"
-      - "-f"
-      - "lavfi"
-      - "-i"
-      - "testsrc2=size=1280x720:rate=25"
-      - "-f"
-      - "lavfi"
-      - "-i"
-      - "sine=frequency=1000:duration=0"
-      - "-c:v"
-      - "libx264"
-      - "-c:a"
-      - "aac"
-      - "-t"
-      - "3600"
-      - "-f"
-      - "mpegts"
-      - "pipe:1"
+    link_expired:
+      template_variables:
+        - name: message
+          value: "Your link is no longer valid"
 ```
 
 ### Upstream Error with Test Pattern
@@ -115,102 +105,6 @@ proxy:
         - "pipe:1"
 ```
 
-### Rate Limit Exceeded
-
-```yaml
-proxy:
-  error:
-    rate_limit_exceeded:
-      template_variables:
-        - name: message
-          value: "Rate limit exceeded"
-      command:
-        - "ffmpeg"
-        - "-v"
-        - "error"
-        - "-f"
-        - "lavfi"
-        - "-i"
-        - "color=c=red:size=1280x720:duration=10"
-        - "-f"
-        - "lavfi"
-        - "-i"
-        - "sine=frequency=440:duration=1"
-        - "-f"
-        - "mpegts"
-        - "pipe:1"
-```
-
-### Link Expired
-
-```yaml
-proxy:
-  error:
-    link_expired:
-      command:
-        - "ffmpeg"
-        - "-v"
-        - "error"
-        - "-f"
-        - "lavfi"
-        - "-i"
-        - "color=c=black:size=1280x720:duration=5"
-        - "-f"
-        - "lavfi"
-        - "-i"
-        - "sine=frequency=880:duration=0.5"
-        - "-f"
-        - "mpegts"
-        - "pipe:1"
-```
-
-### Per-Error-Type Configuration
-
-```yaml
-proxy:
-  error:
-    upstream_error:
-      command:
-        - "ffmpeg"
-        - "-v"
-        - "error"
-        - "-f"
-        - "lavfi"
-        - "-i"
-        - "testsrc2=size=1280x720:rate=25"
-        - "-f"
-        - "mpegts"
-        - "pipe:1"
-    rate_limit_exceeded:
-      command:
-        - "ffmpeg"
-        - "-v"
-        - "error"
-        - "-f"
-        - "lavfi"
-        - "-i"
-        - "testsrc2=size=1280x720:rate=25:color=red"
-        - "-f"
-        - "lavfi"
-        - "-i"
-        - "sine=frequency=600:duration=2"
-        - "-f"
-        - "mpegts"
-        - "pipe:1"
-    link_expired:
-      command:
-        - "ffmpeg"
-        - "-v"
-        - "error"
-        - "-f"
-        - "lavfi"
-        - "-i"
-        - "testsrc2=size=1280x720:rate=25:color=gray"
-        - "-f"
-        - "lavfi"
-        - "-i"
-        - "sine=frequency=300:duration=2"
-        - "-f"
-        - "mpegts"
-        - "pipe:1"
-```
+The same approach works for the other error types — the `command`/`template_variables`/`env_variables` blocks are
+identical under `rate_limit_exceeded` and `link_expired`, and a top-level `command` replaces the default for all
+three at once.

@@ -1,12 +1,19 @@
 # Stream
 
-The `stream` block configures the command executed for stream processing during proxy/remuxing.
-This command is used to process video streams, optionally applying transcoding, filtering, or other transformations.
+The `stream` command is the per-viewer half of the [proxy pipeline](../proxy.md#how-streaming-works): it runs once
+for every connected TV, reads the local segments produced by the shared [segmenter](./segmenter.md) (or
+[playout](./playout.md)) process, and sends the result to that viewer. That's why its input is a local file path,
+not the upstream URL — the upstream is handled by the segmenter.
 
-!!! note "Command Execution"
+Because it runs per viewer, this is the place for cheap per-viewer processing. The default just repackages the
+video without re-encoding; transcoding here would run once per TV, so heavy work belongs in the segmenter or
+playout command instead.
 
-    Majmun expects the command to output video stream data to `stdout`. `stderr` will be printed to the debug logs.
-    If the command exits with empty stdout, an upstream error will be triggered.
+## Contract
+
+- **Input:** `{{ .input }}` — path to the local HLS playlist written by the segmenter/playout process.
+- **Output:** video stream data on `stdout`. `stderr` is printed to the debug logs. If the command exits with empty
+  stdout, an upstream error is triggered.
 
 ## YAML Structure
 
@@ -33,6 +40,14 @@ These variables are injected at runtime by the system and are always available i
 | Variable | Type     | Description                                              |
 | -------- | -------- | -------------------------------------------------------- |
 | `input`  | `string` | Path to the local HLS playlist produced by the segmenter |
+
+### Default Template Variables
+
+These variables are used by the default command and can be overridden:
+
+| Variable           | Default | Description           |
+| ------------------ | ------- | --------------------- |
+| `ffmpeg_log_level` | `fatal` | ffmpeg `-v` log level |
 
 ## Examples
 

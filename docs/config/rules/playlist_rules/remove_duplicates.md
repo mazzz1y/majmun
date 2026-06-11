@@ -28,7 +28,7 @@ Prefer the best quality:
 
 ```yaml
 # Input: CNN HD, CNN 4K
-# Output: CNN HQ
+# Kept:  CNN 4K (first matching pattern wins), renamed to "CNN HQ" by final_value
 playlist_rules:
   - remove_duplicates:
       patterns: ["4K", "UHD", "FHD", "HD", "SD", ""]
@@ -40,7 +40,7 @@ Restrict deduplication to specific clients:
 
 ```yaml
 # Input: CNN HD, CNN 4K, CNN SD
-# Output: CNN SD
+# Kept:  CNN SD ("SD" is the highest-priority pattern here)
 playlist_rules:
   - remove_duplicates:
       patterns: ["SD", "HD", "FHD", "4K"]

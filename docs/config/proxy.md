@@ -1,31 +1,49 @@
 # Proxy
 
-The proxy block configures the streaming proxy functionality, also known as "remuxing".
-This feature allows the app to act as an intermediary between IPTV clients and upstream sources, providing stream
-processing, transcoding, and error handling capabilities.
+The proxy block makes Majmun sit between your TVs and the upstream streams. With proxying disabled, playlists
+contain the provider's original stream URLs and TVs connect to the provider directly. With proxying enabled, the
+URLs are rewritten to encrypted links pointing at your `public_url`, and the video flows through Majmun.
 
-When proxying is enabled, the links in the playlist will be encrypted and will point to the `public_url`.
+The default configuration uses FFmpeg and works out of the box — most users only need `enabled: true`. The commands
+are fully configurable for transcoding, filtering, or any other processing.
 
-The default configuration uses FFmpeg for remuxing and is ready to use out of the box. Most users can enable proxy
-functionality by simply setting `enabled` to `true`. Advanced users can customize commands to add transcoding,
-filtering, or other stream processing features.
+## How Streaming Works
 
-!!! note "Rule Merging Order"
+When a TV requests a proxied stream, two commands cooperate:
 
-    Proxy can be defined at multiple levels in the configuration. It will be merged in the following order, with each level overriding the previous one:
+1. The [**segmenter**](proxy/segmenter.md) fetches the upstream stream **once** and slices it into small video
+   segments in a temporary directory. All viewers of the same stream share this one process — the provider sees a
+   single connection no matter how many TVs are watching.
+2. The [**stream**](proxy/stream.md) command runs **once per viewer**, reads the shared segments, and sends the
+   result to that TV. By default it just repackages the video without re-encoding (often called "remuxing"), which
+   is cheap.
 
-    Global Proxy ➡ Playlist Proxy ➡ Client Proxy
+[Generated channels](channels.md) replace step 1 with the [**playout**](proxy/playout.md) command, which produces a
+continuous stream from your local media files instead of fetching an upstream. When anything goes wrong — upstream
+down, limit reached, expired link — an [**error**](proxy/error.md) command generates a short video telling the
+viewer what happened.
 
-    This applies to all proxy-related fields, **except concurrency**.
+!!! warning "Shared transcodes: first viewer wins"
 
-!!! note "Concurrency Handling"
+    Because segmenter and playout processes are shared, they start with the proxy config of whichever viewer
+    requests the stream first — everyone else joins that stream as-is. In practice: **per-client `segmenter`/
+    `playout` overrides don't isolate clients.** Keep command differences at the global or playlist level.
 
-    Concurrency is handled at the global, subscription, and client levels separately.
+## Configuration Levels
 
-!!! note "Command Handling"
+Proxy can be defined globally, per playlist, and per client. Each level overrides the previous one, field by field:
 
-    Majmun expects the command to output video stream data to `stdout`. `stderr` will be printed to the debug logs.
-    If the command exits with empty stdout, an upstream error will be triggered.
+Global Proxy ➡ Playlist Proxy ➡ Client Proxy
+
+The exception is `concurrency`: rather than overriding, each level enforces its own limit independently. A stream
+starts only if the global, playlist, and client limits all have capacity, and exceeding any of them triggers the
+`rate_limit_exceeded` [error handler](proxy/error.md).
+
+!!! note "Command Output"
+
+    The `stream` and `error` commands must write video data to `stdout`; `stderr` is printed to the debug logs.
+    If a command exits with empty stdout, an upstream error is triggered. The `segmenter` and `playout` commands
+    write segment files to disk instead — see their pages for the exact contract.
 
 ## YAML Structure
 
@@ -50,6 +68,12 @@ proxy:
     template_variables: []
     env_variables: []
     init_segments: 2
+    ready_timeout: 30s
+  playout:
+    command: []
+    template_variables: []
+    env_variables: []
+    init_segments: 4
     ready_timeout: 30s
   error:
     command: []
@@ -79,13 +103,15 @@ proxy:
 | `concurrency` | `int`                                  | No       | Maximum concurrent streams (0 = unlimited)         |
 | `http_client` | [`HTTPClient`](./proxy/http_client.md) | No       | HTTP client configuration overrides for this proxy |
 | `stream`      | [`Stream`](./proxy/stream.md)          | No       | Command configuration for stream processing        |
-| `segmenter`   | [`Segmenter`](./proxy/segmenter.md)    | No       | HLS segmenter configuration for stream pooling     |
+| `segmenter`   | [`Segmenter`](./proxy/segmenter.md)    | No       | HLS segmenter for remote proxied streams           |
+| `playout`     | [`Playout`](./proxy/playout.md)        | No       | HLS transcoder for locally generated channels      |
 | `error`       | [`Error`](./proxy/error.md)            | No       | Default error handling configuration               |
 
 ### Related Documentation
 
 - [Stream Processing](./proxy/stream.md) - Configure stream remuxing commands
-- [Segmenter](./proxy/segmenter.md) - Configure HLS segmenter for stream pooling
+- [Segmenter](./proxy/segmenter.md) - Configure HLS segmenter for proxied streams
+- [Playout](./proxy/playout.md) - Configure the HLS transcoder for generated channels
 - [Error Handling](./proxy/error.md) - Configure error fallback content
 - [HTTP Client](./proxy/http_client.md) - Configure HTTP request settings
 

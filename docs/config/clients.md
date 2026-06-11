@@ -13,7 +13,8 @@ Each client can access the following endpoints:
 
 !!! note
 
-    If playlists/epgs are not explicitly configured for a client, it means that all sources are enabled.
+    Omit `playlists`/`epgs` to give the client access to everything. Generated channels are delivered through their
+    parent playlist, so selecting a playlist also delivers its channels.
 
 ## YAML Structure
 
@@ -28,13 +29,13 @@ clients:
 
 ## Fields
 
-| Field       | Type                  | Required | Description                              |
-| ----------- | --------------------- | -------- | ---------------------------------------- |
-| `name`      | `string`              | Yes      | Unique name identifier for this client   |
-| `secret`    | `string`              | Yes      | Authentication secret key for the client |
-| `playlists` | `[]string`            | No       | List of playlist names for this client.  |
-| `epgs`      | `[]string`            | No       | List of EPG names for this client.       |
-| `proxy`     | [`Proxy`](./proxy.md) | No       | Optional per-client proxy config         |
+| Field       | Type                          | Required | Description                              |
+| ----------- | ----------------------------- | -------- | ---------------------------------------- |
+| `name`      | `string`                      | Yes      | Unique name identifier for this client   |
+| `secret`    | `string`                      | Yes      | Authentication secret. Treat it like a password — it is the only credential and appears in the client's URLs. |
+| `playlists` | `[]string`                    | No       | List of playlist names for this client. Generated channels arrive through their parent playlist. |
+| `epgs`      | `[]string`                    | No       | List of EPG names for this client.       |
+| `proxy`     | [`Proxy`](./proxy.md)         | No       | Optional per-client proxy config         |
 
 ## Examples
 

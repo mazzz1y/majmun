@@ -1,7 +1,10 @@
 # Playlists
 
-Playlists define collections of IPTV channels from M3U/M3U8 sources. Each playlist can contain multiple sources with
-proxy configuration.
+Playlists define collections of IPTV channels from M3U/M3U8 sources. A playlist can also generate its own 24/7 linear
+channels from local files via the `channels` block. Each playlist can contain multiple sources with proxy configuration.
+
+A playlist must define at least one of `sources` or `channels`, and may define both to mix remote channels with locally
+generated ones.
 
 ## YAML Structure
 
@@ -9,6 +12,7 @@ proxy configuration.
 playlists:
   - name: "playlist-name"
     sources: []
+    channels: []
     proxy: {}
     skip_on_error: false
 ```
@@ -18,9 +22,12 @@ playlists:
 | Field           | Type                  | Required | Description                                                                                                                                                                                                              |
 | --------------- | --------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `name`          | `string`              | Yes      | Unique name identifier for this playlist                                                                                                                                                                                 |
-| `sources`       | `[]string`            | Yes      | List of playlist sources (URLs or file paths, M3U/M3U8 format).                                                                                                                                                          |
-| `proxy`         | [`Proxy`](./proxy.md) | No       | Playlist-specific proxy configuration                                                                                                                                                                                    |
-| `skip_on_error` | `bool`                | No       | When `true`, a source that errors (load failure, non-2xx, or mid-stream decode error) is logged and skipped instead of aborting the response. Channels read before the failure are kept; the remainder is dropped. Default `false`. |
+| `sources`       | `[]string`            | No\*     | List of playlist sources (URLs or file paths, M3U/M3U8 format).                                                                                                                                                          |
+| `channels`      | [`[]Channel`](./channels.md) | No\* | Generated 24/7 linear channels from local files. See [Channels](./channels.md).                                                                                                                                   |
+| `proxy`         | [`Proxy`](./proxy.md) | No       | Playlist-specific proxy configuration. Cascades to the playlist's channels (including [`playout`](./proxy/playout.md)).                                                                                                  |
+| `skip_on_error` | `bool`                | No       | When `true`, a failing source is skipped instead of aborting the response. Default `false`. See [Skip Failing Sources](#skip-failing-sources). |
+
+\* At least one of `sources` or `channels` is required.
 
 ## Examples
 
@@ -54,6 +61,32 @@ playlists:
     proxy:
       enabled: true
       concurrency: 5
+```
+
+### Playlist with Generated Channels
+
+A playlist can carry locally generated channels alongside (or instead of) remote sources. See
+[Channels](./channels.md) for the channel fields.
+
+```yaml
+state_dir: ./state
+
+playlists:
+  - name: local
+    channels:
+      - name: "Cartoons 24/7"
+        fields:
+          - selector: attr/group-title
+            template: "Kids"
+        sources:
+          - /media/cartoons
+  - name: mixed
+    sources:
+      - "https://provider.com/list.m3u8"
+    channels:
+      - name: "Movie Marathon"
+        sources: [/media/movies]
+        random_order: true
 ```
 
 ### Skip Failing Sources

@@ -19,8 +19,8 @@ epgs:
 | --------------- | --------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `name`          | `string`              | Yes      | Unique name identifier for this EPG                                                                                                                                                                                                          |
 | `sources`       | `[]string`            | Yes      | List of EPG sources (URLs or file paths, XML or .gz).                                                                                                                                                                                        |
-| `proxy`         | [`Proxy`](./proxy.md) | No       | EPG-specific proxy configuration, only enabled takes effect                                                                                                                                                                                  |
-| `skip_on_error` | `bool`                | No       | When `true`, a source that errors (load failure, non-2xx, or mid-stream decode error) is logged and skipped instead of aborting the response. Channels and programmes read before the failure are kept; the remainder is dropped. Default `false`. |
+| `proxy`         | [`Proxy`](./proxy.md) | No       | EPG-specific proxy overrides. For EPGs only the [`http_client`](./proxy/http_client.md) settings (cache, headers) take effect — they apply to fetching the guide sources. |
+| `skip_on_error` | `bool`                | No       | When `true`, a failing source is skipped instead of aborting the response. Default `false`. See [Skip Failing Sources](#skip-failing-sources). |
 
 ## Examples
 
