@@ -230,17 +230,7 @@ func (s *Streamer) drainStderr(ctx context.Context, stderr io.ReadCloser) {
 }
 
 func (s *Streamer) renderCommand(tmplVars map[string]any) ([]string, error) {
-	cmdLen := len(s.cmdTmpl)
-
-	if cmdLen == 1 {
-		result, err := renderTemplate(s.cmdTmpl[0], tmplVars)
-		if err != nil {
-			return nil, err
-		}
-		return []string{"sh", "-c", result}, nil
-	}
-
-	command := make([]string, cmdLen)
+	command := make([]string, len(s.cmdTmpl))
 	for i, tmpl := range s.cmdTmpl {
 		result, err := renderTemplate(tmpl, tmplVars)
 		if err != nil {

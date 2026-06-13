@@ -14,10 +14,9 @@ A command is configured with three fields, all optional:
 
 ## Forms
 
-`command` can be a single string or an array of strings. Each element supports
-[Go template](https://pkg.go.dev/text/template) syntax with [Sprig functions](https://masterminds.github.io/sprig/).
-
-**Array form** — each element is a separate argument:
+`command` is an array of strings: the program followed by its arguments, each a separate element. Every element
+supports [Go template](https://pkg.go.dev/text/template) syntax with
+[Sprig functions](https://masterminds.github.io/sprig/).
 
 ```yaml
 command:
@@ -28,17 +27,7 @@ command:
   - "{{ .Stream.PlaylistPath }}"
 ```
 
-**String form** — passed to `sh -c`:
-
-```yaml
-command: "ffmpeg -v {{ .log_level }} -i {{ .Stream.PlaylistPath }} -c copy -f mpegts pipe:1"
-```
-
-!!! warning "String form and shell interpretation"
-
-    In string form the whole line goes through the shell, so template values are subject to word splitting and
-    shell metacharacters. Prefer the array form when values can contain spaces or special characters — each array
-    element is passed as a literal argument.
+The first element is the program; the rest are its arguments.
 
 ## Template Variables
 
@@ -99,3 +88,8 @@ inline YAML, which is often more readable:
 Both run the same program. The inline form keeps everything in one file and supports the `template_variables` cascade;
 the script form trades that cascade for plain shell variables and keeps the YAML short. A script must be executable
 (`chmod +x`), readable inside the container, with its interpreter and any tools (e.g. FFmpeg) on `PATH`.
+
+!!! warning "Use `exec` in wrapper scripts"
+
+    End the script with `exec ffmpeg ...` (as above), so FFmpeg replaces the shell and majmun can stop it directly.
+    Without `exec`, FFmpeg is left orphaned when majmun terminates the script.
