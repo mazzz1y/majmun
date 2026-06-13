@@ -84,6 +84,12 @@ func (c *Config) Validate() error {
 				return fmt.Errorf("duplicate channel name %q in playlist %q", ch.Name, pl.Name)
 			}
 			channelNames[ch.Name] = true
+
+			if len(c.Playout.Command) == 0 && len(pl.Playout.Command) == 0 && len(ch.Playout.Command) == 0 {
+				return fmt.Errorf("playout.command is required for generated channel %q in playlist %q: "+
+					"a transcode command depends on your hardware and has no default — see the playout examples",
+					ch.Name, pl.Name)
+			}
 		}
 	}
 

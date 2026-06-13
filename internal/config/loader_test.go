@@ -73,6 +73,7 @@ url_generator:
 url_generator:
   secret: "test-secret"
 playout:
+  command: [ffmpeg, -i, "{{ .Playout.Input }}", "{{ .Stream.PlaylistPath }}"]
   schedule_swap_at: "03:00"
   template_variables:
     - name: video_bitrate_kbps
@@ -91,11 +92,8 @@ playlists:
 				if cfg.Playout.ScheduleSwapAt == nil || *cfg.Playout.ScheduleSwapAt != "03:00" {
 					t.Errorf("expected global schedule_swap_at 03:00, got %v", cfg.Playout.ScheduleSwapAt)
 				}
-				if len(cfg.Playout.TemplateVars) <= 1 {
-					t.Errorf("expected default template vars to survive merge with user var, got %d", len(cfg.Playout.TemplateVars))
-				}
-				if len(cfg.Playout.Command) == 0 {
-					t.Errorf("expected default playout command to survive, got empty")
+				if len(cfg.Playout.TemplateVars) != 1 || cfg.Playout.TemplateVars[0].Value != "3000" {
+					t.Errorf("expected global template var, got %v", cfg.Playout.TemplateVars)
 				}
 				ch := cfg.Playlists[0].Channels[0]
 				if len(ch.Playout.TemplateVars) != 1 || ch.Playout.TemplateVars[0].Value != "6000" {

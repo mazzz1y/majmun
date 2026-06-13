@@ -945,6 +945,44 @@ func TestRemovedFileAiringAfterSwapDefers(t *testing.T) {
 	}
 }
 
+// TestRemovedFileAiringAtSwapBoundarySwapsEarly pins the boundary-vs-swapAt fix: a removal
+// airing exactly at the swap time would be reached live before adoption, so it must swap early.
+func TestRemovedFileAiringAtSwapBoundarySwapsEarly(t *testing.T) {
+	dir := t.TempDir()
+	keep := filepath.Join(dir, "a_keep.mkv")
+	gone := filepath.Join(dir, "b_gone.mkv")
+	writeFile(t, keep)
+	writeFile(t, gone)
+	p := newFakeProber()
+	// Anchor is t0 = 10:00; the next 04:00 swap is 18h away. keep airs 0..18h, so gone's slot
+	// starts exactly at 18h == the swap instant, making gone the programme straddling the
+	// boundary (ends at 19h). gone's next occurrence therefore lands exactly on swapAt.
+	p.durations[keep] = 18 * 3600
+	p.durations[gone] = 3600
+	c, _ := newTestChannel(t, "c", []string{dir}, p)
+	c.refresh = time.Hour
+	c.swapHour, c.swapMin = 4, 0
+
+	t0 := time.Date(2024, 1, 1, 10, 0, 0, 0, time.Local)
+	warmUp(t, c, t0)
+	first := c.schedule
+
+	if err := os.Remove(gone); err != nil {
+		t.Fatal(err)
+	}
+	warmUp(t, c, t0.Add(2*time.Hour))
+
+	c.mu.Lock()
+	active, pending, promoteAt := c.schedule, c.pending, c.promoteAt
+	c.mu.Unlock()
+	if active == first {
+		t.Error("removal airing at the swap boundary must adopt the new schedule immediately")
+	}
+	if pending != nil || !promoteAt.IsZero() {
+		t.Error("immediate adoption must clear any pending swap")
+	}
+}
+
 func TestRemovalSupersedesPendingAddition(t *testing.T) {
 	dir := t.TempDir()
 	a := filepath.Join(dir, "a.mkv")

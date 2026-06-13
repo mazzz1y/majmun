@@ -15,7 +15,7 @@ var defaultPlayoutExtensions = []string{
 	"mkv", "mp4", "avi", "mov", "m4v", "ts", "webm", "mpg", "mpeg", "flv", "wmv"}
 
 const (
-	defaultPlayoutRefresh     = 5 * time.Minute
+	defaultPlayoutRefresh     = 30 * time.Minute
 	defaultPlayoutEPGDuration = 7 * 24 * time.Hour
 	defaultPlayoutSwapHour    = 4
 	defaultPlayoutSwapMinute  = 0

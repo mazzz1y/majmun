@@ -30,6 +30,7 @@ func validBaseConfig() Config {
 		Server:       ServerConfig{ListenAddr: ":8080", PublicURL: common.URL(*u)},
 		Logs:         Logs{"info", "text"},
 		URLGenerator: URLGeneratorConfig{Secret: "test"},
+		Playout:      proxy.Playout{Command: common.StringOrArr{"ffmpeg"}},
 	}
 }
 
@@ -172,6 +173,24 @@ func TestConfigChannelValidation(t *testing.T) {
 				c.Playlists = []Playlist{{Name: "p1"}}
 			},
 			expectError: true,
+		},
+		{
+			name: "channel without any playout command is invalid",
+			mutate: func(c *Config) {
+				c.Playout.Command = nil
+				c.Playlists = []Playlist{{Name: "p1", Channels: []Channel{{Name: "a", Sources: common.StringOrArr{"/m"}}}}}
+			},
+			expectError: true,
+		},
+		{
+			name: "channel-level playout command satisfies requirement",
+			mutate: func(c *Config) {
+				c.Playout.Command = nil
+				c.Playlists = []Playlist{{Name: "p1", Channels: []Channel{
+					{Name: "a", Sources: common.StringOrArr{"/m"}, Playout: proxy.Playout{Command: common.StringOrArr{"ffmpeg"}}},
+				}}}
+			},
+			expectError: false,
 		},
 		{
 			name: "client references unknown playlist",

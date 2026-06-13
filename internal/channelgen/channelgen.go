@@ -200,11 +200,14 @@ func (c *Channel) build(ctx context.Context, now time.Time) {
 	changed := old != nil && !old.isEmpty() && s.Fingerprint != old.Fingerprint && !s.isEmpty()
 	if changed {
 		swapAt := c.nextSwap(now)
-		// A removed file is skipped live, but that desyncs playout from the EPG once its slot
-		// is reached. Adopt the new schedule early only when a removed file would air before
-		// the swap; otherwise the swap adopts the corrected schedule first, so defer as usual.
+		// Promotion holds until the programme spanning swapAt finishes, so a removal must be
+		// compared against that boundary, not swapAt, or it could air live before adoption.
+		boundary := swapAt
+		if _, _, _, b, ok := locate(old, swapAt); ok {
+			boundary = b
+		}
 		air, removed := earliestRemovedAir(old, s, now)
-		if !removed || !air.Before(swapAt) {
+		if !removed || !air.Before(boundary) {
 			// Keep an already-scheduled swap time so repeated refresh rebuilds of the same
 			// change do not keep pushing the promotion to the next day.
 			if c.pending == nil || c.pending.Fingerprint != s.Fingerprint {
@@ -215,8 +218,8 @@ func (c *Channel) build(ctx context.Context, now time.Time) {
 			c.mu.Unlock()
 			return
 		}
-		logging.Info(ctx, "removed file airs before swap, adopting schedule early",
-			"airs_at", air.Format(time.RFC3339), "swap_at", swapAt.Format(time.RFC3339))
+		logging.Info(ctx, "removed file airs before swap boundary, adopting schedule early",
+			"airs_at", air.Format(time.RFC3339), "boundary", boundary.Format(time.RFC3339))
 	}
 
 	if s.isEmpty() && old != nil && !old.isEmpty() {
