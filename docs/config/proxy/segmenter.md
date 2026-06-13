@@ -13,10 +13,10 @@ it happens once and all viewers share the result.
 
 ## Contract
 
-- **Input:** `{{ .url }}` — the upstream stream URL.
-- **Output:** HLS segments written to `{{ .segment_path }}` and a playlist at `{{ .playlist_path }}`, continuously
-  rolling (old segments deleted). Majmun waits for `init_segments` segments to appear (up to `ready_timeout`)
-  before serving viewers.
+- **Input:** `{{ .Stream.URL }}` — the upstream stream URL.
+- **Output:** HLS segments written to `{{ .Stream.SegmentPath }}` and a playlist at `{{ .Stream.PlaylistPath }}`,
+  continuously rolling (old segments deleted). Majmun waits for `init_segments` segments to appear (up to
+  `ready_timeout`) before serving viewers.
 
 ## YAML Structure
 
@@ -34,11 +34,14 @@ proxy:
 
 | Field                | Type                                           | Required | Description                                                                                                              |
 | -------------------- | ---------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `command`            | [`Command`](../shared.md#command)              | No       | Segmenter command array to execute                                                                                       |
-| `template_variables` | [`[]NameValue`](../shared.md#namevalue-object) | No       | Variables available in command templates                                                                                  |
-| `env_variables`      | [`[]NameValue`](../shared.md#namevalue-object) | No       | Environment variables for the command                                                                                    |
+| `command`            | [`Command`](../shared/command.md)                     | No       | Segmenter command. See [Command](../shared/command.md).                                                                         |
+| `template_variables` | [`[]NameValue`](../shared/name-value.md) | No       | User variables available in the command. See [Command](../shared/command.md#template-variables).                               |
+| `env_variables`      | [`[]NameValue`](../shared/name-value.md) | No       | Environment variables for the command.                                                                                  |
 | `init_segments`      | `int`                                          | No       | Number of segments that must exist before clients can start reading (default: `2`). Must be at least 1.                  |
-| `ready_timeout`      | [`duration`](../shared.md#duration)            | No       | Maximum time to wait for the initial segments to become available (default: `30s`).                                       |
+| `ready_timeout`      | [`duration`](../shared/duration.md)            | No       | Maximum time to wait for the initial segments to become available (default: `30s`).                                       |
+
+The segmenter command receives the reserved variables `{{ .Stream.URL }}`, `{{ .Stream.SegmentPath }}` and
+`{{ .Stream.PlaylistPath }}` — see [Command → Reserved Variables](../shared/command.md#reserved-variables).
 
 ### Default Template Variables
 
@@ -49,21 +52,6 @@ These variables have default values and are used in the default segmenter comman
 | `segment_duration` | `2`     | Duration of each HLS segment in seconds              |
 | `max_segments`     | `15`    | Maximum number of segments kept in the playlist      |
 | `ffmpeg_log_level` | `fatal` | FFmpeg log level                                     |
-
-### Reserved Template Variables
-
-These variables are injected at runtime by the system and are always available in the segmenter command templates:
-
-| Variable        | Type     | Description                                                  |
-| --------------- | -------- | ------------------------------------------------------------ |
-| `url`           | `string` | Upstream stream URL                                          |
-| `segment_path`  | `string` | File path for segment files (e.g. `/tmp/.../seg_%05d.ts`)    |
-| `playlist_path` | `string` | File path for the HLS playlist (e.g. `/tmp/.../stream.m3u8`) |
-
-!!! warning "Reserved Variables"
-
-    `input`, `url`, `segment_path`, `playlist_path`, `Channel` and `Playlist` are reserved and cannot be used in
-    `template_variables`. Setting them will result in a validation error.
 
 ## Examples
 
@@ -76,31 +64,14 @@ proxy:
   enabled: true
   segmenter:
     command:
-      - "ffmpeg"
-      - "-v"
-      - "{{ .ffmpeg_log_level }}"
-      - "-i"
-      - "{{ .url }}"
-      - "-c"
-      - "copy"
-      - "-f"
-      - "hls"
-      - "-hls_time"
-      - "{{ .segment_duration }}"
-      - "-hls_list_size"
-      - "{{ .max_segments }}"
-      - "-hls_flags"
-      - "delete_segments+append_list+independent_segments"
-      - "-hls_segment_filename"
-      - "{{ .segment_path }}"
-      - "{{ .playlist_path }}"
+      [ffmpeg, -v, "{{ .ffmpeg_log_level }}", -i, "{{ .Stream.URL }}", -c, copy,
+       -f, hls, -hls_time, "{{ .segment_duration }}", -hls_list_size, "{{ .max_segments }}",
+       -hls_flags, "delete_segments+append_list+independent_segments",
+       -hls_segment_filename, "{{ .Stream.SegmentPath }}", "{{ .Stream.PlaylistPath }}"]
     template_variables:
-      - name: ffmpeg_log_level
-        value: "fatal"
-      - name: segment_duration
-        value: "2"
-      - name: max_segments
-        value: "15"
+      - { name: ffmpeg_log_level, value: fatal }
+      - { name: segment_duration, value: "2" }
+      - { name: max_segments, value: "15" }
 ```
 
 ### Transcoding
@@ -111,28 +82,11 @@ Transcode the stream to H.264 before segmenting. This transcodes once in the seg
 proxy:
   segmenter:
     command:
-      - "ffmpeg"
-      - "-v"
-      - "fatal"
-      - "-i"
-      - "{{ .url }}"
-      - "-c:v"
-      - "libx264"
-      - "-preset"
-      - "ultrafast"
-      - "-c:a"
-      - "aac"
-      - "-f"
-      - "hls"
-      - "-hls_time"
-      - "{{ .segment_duration }}"
-      - "-hls_list_size"
-      - "{{ .max_segments }}"
-      - "-hls_flags"
-      - "delete_segments+append_list+independent_segments"
-      - "-hls_segment_filename"
-      - "{{ .segment_path }}"
-      - "{{ .playlist_path }}"
+      [ffmpeg, -v, fatal, -i, "{{ .Stream.URL }}",
+       -c:v, libx264, -preset, ultrafast, -c:a, aac,
+       -f, hls, -hls_time, "{{ .segment_duration }}", -hls_list_size, "{{ .max_segments }}",
+       -hls_flags, "delete_segments+append_list+independent_segments",
+       -hls_segment_filename, "{{ .Stream.SegmentPath }}", "{{ .Stream.PlaylistPath }}"]
 ```
 
 ### Low-Latency Configuration
@@ -143,8 +97,7 @@ Shorter segments and fewer init segments reduce startup latency:
 proxy:
   segmenter:
     template_variables:
-      - name: segment_duration
-        value: "1"
+      - { name: segment_duration, value: "1" }
     init_segments: 1
     ready_timeout: 15s
 ```
@@ -157,10 +110,8 @@ Override segmenter settings for a specific playlist:
 proxy:
   segmenter:
     template_variables:
-      - name: segment_duration
-        value: "2"
-      - name: max_segments
-        value: "15"
+      - { name: segment_duration, value: "2" }
+      - { name: max_segments, value: "15" }
 
 playlists:
   - name: low-bandwidth
@@ -169,9 +120,7 @@ playlists:
     proxy:
       segmenter:
         template_variables:
-          - name: segment_duration
-            value: "4"
-          - name: max_segments
-            value: "20"
+          - { name: segment_duration, value: "4" }
+          - { name: max_segments, value: "20" }
         init_segments: 5
 ```

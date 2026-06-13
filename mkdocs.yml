@@ -39,6 +39,7 @@ nav:
       - Playlists:
           - Overview: config/playlists.md
           - Channels: config/channels.md
+      - Playout: config/playout.md
       - EPGs: config/epgs.md
       - Rules:
           - Overview: config/rules/index.md
@@ -51,19 +52,26 @@ nav:
               - Remove Duplicates: config/rules/playlist_rules/remove_duplicates.md
               - Merge Duplicates: config/rules/playlist_rules/merge_duplicates.md
               - Sort: config/rules/playlist_rules/sort.md
-          - Shared Objects:
-              - Condition: config/rules/condition.md
-              - Selector: config/rules/selector.md
-              - Final Value: config/rules/final_value.md
       - Proxy:
           - Overview: config/proxy.md
           - Stream: config/proxy/stream.md
           - Segmenter: config/proxy/segmenter.md
-          - Playout: config/proxy/playout.md
           - Error: config/proxy/error.md
           - HTTP Client: config/proxy/http_client.md
       - Clients: config/clients.md
       - URL Generator: config/url_generator.md
-      - Shared Types: config/shared.md
-  - Examples: examples.md
+      - Shared:
+          - Command: config/shared/command.md
+          - Condition: config/shared/condition.md
+          - Selector: config/shared/selector.md
+          - Final Value: config/shared/final_value.md
+          - Duration: config/shared/duration.md
+          - Name/Value: config/shared/name-value.md
+  - Examples:
+      - Overview: examples/index.md
+      - Minimal: examples/minimal.md
+      - Proxy: examples/proxy.md
+      - Playout: examples/playout.md
+      - Rules: examples/rules.md
+      - Full Setup: examples/full.md
   - Metrics: metrics.md

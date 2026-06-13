@@ -15,9 +15,9 @@ set_field:
 
 | Field       | Type                           | Required | Description                               |
 | ----------- | ------------------------------ | -------- | ----------------------------------------- |
-| `selector`  | [`Selector`](../selector.md)   | Yes      | What property to set (attribute/tag/name) |
+| `selector`  | [`Selector`](../../shared/selector.md)   | Yes      | What property to set (attribute/tag/name) |
 | `template`  | `gotemplate`                   | Yes      | The template definition for the new value |
-| `condition` | [`Condition`](../condition.md) | No       | Optional, restricts rule activation       |
+| `condition` | [`Condition`](../../shared/condition.md) | No       | Optional, restricts rule activation       |
 
 ## Template Variables
 

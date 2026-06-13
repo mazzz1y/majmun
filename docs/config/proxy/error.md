@@ -42,9 +42,9 @@ proxy:
 
 | Field                 | Type                                           | Required | Description                              |
 | --------------------- | ---------------------------------------------- | -------- | ---------------------------------------- |
-| `command`             | [`Command`](../shared.md#command)              | No       | Default command for all error types      |
-| `template_variables`  | [`[]NameValue`](../shared.md#namevalue-object) | No       | Variables available in command templates |
-| `env_variables`       | [`[]NameValue`](../shared.md#namevalue-object) | No       | Environment variables for the command    |
+| `command`             | [`Command`](../shared/command.md)                     | No       | Default command for all error types      |
+| `template_variables`  | [`[]NameValue`](../shared/name-value.md) | No       | User variables for the command           |
+| `env_variables`       | [`[]NameValue`](../shared/name-value.md) | No       | Environment variables for the command    |
 | `upstream_error`      | [`CommandObject`](#command-object)             | No       | Command for upstream source failures     |
 | `rate_limit_exceeded` | [`CommandObject`](#command-object)             | No       | Command for rate limit errors            |
 | `link_expired`        | [`CommandObject`](#command-object)             | No       | Command for expired link errors          |
@@ -53,9 +53,9 @@ proxy:
 
 | Field                | Type                                           | Required | Description                              |
 | -------------------- | ---------------------------------------------- | -------- | ---------------------------------------- |
-| `command`            | [`Command`](../shared.md#command)              | No       | Command array to execute                 |
-| `template_variables` | [`[]NameValue`](../shared.md#namevalue-object) | No       | Variables available in command templates |
-| `env_variables`      | [`[]NameValue`](../shared.md#namevalue-object) | No       | Environment variables for the command    |
+| `command`            | [`Command`](../shared/command.md)                     | No       | Command array to execute                 |
+| `template_variables` | [`[]NameValue`](../shared/name-value.md) | No       | User variables for the command           |
+| `env_variables`      | [`[]NameValue`](../shared/name-value.md) | No       | Environment variables for the command    |
 
 ### Default Template Variables
 
@@ -76,8 +76,7 @@ proxy:
   error:
     link_expired:
       template_variables:
-        - name: message
-          value: "Your link is no longer valid"
+        - { name: message, value: "Your link is no longer valid" }
 ```
 
 ### Upstream Error with Test Pattern
@@ -87,22 +86,8 @@ proxy:
   error:
     upstream_error:
       command:
-        - "ffmpeg"
-        - "-v"
-        - "fatal"
-        - "-f"
-        - "lavfi"
-        - "-i"
-        - "testsrc2=size=1920x1080:rate=30"
-        - "-c:v"
-        - "libx264"
-        - "-preset"
-        - "fast"
-        - "-t"
-        - "300"
-        - "-f"
-        - "mpegts"
-        - "pipe:1"
+        [ffmpeg, -v, fatal, -f, lavfi, -i, "testsrc2=size=1920x1080:rate=30",
+         -c:v, libx264, -preset, fast, -t, "300", -f, mpegts, "pipe:1"]
 ```
 
 The same approach works for the other error types — the `command`/`template_variables`/`env_variables` blocks are

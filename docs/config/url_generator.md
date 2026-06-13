@@ -18,8 +18,8 @@ url_generator:
 | Field        | Type                             | Required | Default             | Description                                          |
 | ------------ | -------------------------------- | -------- | ------------------- | ---------------------------------------------------- |
 | `secret`     | `string`                         | Yes      | ``                  | Server-side salt for URL encryption                  |
-| `stream_ttl` | [`duration`](shared.md#duration) | No       | `30 days`           | Time-to-live for stream links (0 = no expiration)    |
-| `file_ttl`   | [`duration`](shared.md#duration) | No       | `0 (no expiration)` | Time-to-live for asset links (0 = no expiration)     |
+| `stream_ttl` | [`duration`](shared/duration.md) | No       | `30 days`           | Time-to-live for stream links (0 = no expiration)    |
+| `file_ttl`   | [`duration`](shared/duration.md) | No       | `0 (no expiration)` | Time-to-live for asset links (0 = no expiration)     |
 
 !!! note "Secret Key"
 

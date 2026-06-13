@@ -24,7 +24,8 @@ playlists:
 | `name`          | `string`              | Yes      | Unique name identifier for this playlist                                                                                                                                                                                 |
 | `sources`       | `[]string`            | No\*     | List of playlist sources (URLs or file paths, M3U/M3U8 format).                                                                                                                                                          |
 | `channels`      | [`[]Channel`](./channels.md) | No\* | Generated 24/7 linear channels from local files. See [Channels](./channels.md).                                                                                                                                   |
-| `proxy`         | [`Proxy`](./proxy.md) | No       | Playlist-specific proxy configuration. Cascades to the playlist's channels (including [`playout`](./proxy/playout.md)).                                                                                                  |
+| `proxy`         | [`Proxy`](./proxy.md) | No       | Playlist-specific proxy configuration for proxied sources.                                                                                                                                                              |
+| `playout`       | [`Playout`](./playout.md) | No   | Playlist-level [playout](./playout.md) overrides applied to this playlist's generated channels (cascades global ➡ playlist ➡ channel).                                                                                  |
 | `skip_on_error` | `bool`                | No       | When `true`, a failing source is skipped instead of aborting the response. Default `false`. See [Skip Failing Sources](#skip-failing-sources). |
 
 \* At least one of `sources` or `channels` is required.
@@ -69,7 +70,8 @@ A playlist can carry locally generated channels alongside (or instead of) remote
 [Channels](./channels.md) for the channel fields.
 
 ```yaml
-state_dir: ./state
+playout:
+  state_dir: ./state
 
 playlists:
   - name: local
@@ -86,7 +88,8 @@ playlists:
     channels:
       - name: "Movie Marathon"
         sources: [/media/movies]
-        random_order: true
+        playout:
+          random_order: true
 ```
 
 ### Skip Failing Sources

@@ -25,10 +25,10 @@ majmun -config ./config      # from directory
 | Field            | Type                                         | Description                                                       |
 | ---------------- | -------------------------------------------- | ----------------------------------------------------------------- |
 | `server`         | [`Server`](./config/server.md)               | Server configuration including listening addresses and public URL |
-| `state_dir`      | `string`                                     | Directory for persistent state (channel schedules). Default `state`. Required when any playlist defines channels. |
 | `url_generator`  | [`URL Generator`](./config/url_generator.md) | URL generation and encryption configuration                       |
 | `logs`           | [`Logs`](./config/logs.md)                   | Logging configuration                                             |
 | `proxy`          | [`Proxy`](./config/proxy.md)                 | Stream proxy configuration for remuxing with ffmpeg               |
+| `playout`        | [`Playout`](./config/playout.md)             | Settings for channels generated from local media (24/7 live TV)   |
 | `playlists`      | [`Playlists`](./config/playlists.md)         | Array of playlist definitions with sources and/or channels        |
 | `epgs`           | [`EPGs`](./config/epgs.md)                   | Array of EPG definitions with sources                             |
 | `channel_rules`  | [`Channel Rules`](./config/rules/index.md)   | Global channel processing rules (applied to all channels)         |

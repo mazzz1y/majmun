@@ -21,9 +21,9 @@ merge_duplicates:
 | Field         | Type                              | Required | Description                                 |
 | ------------- | --------------------------------- | -------- | ------------------------------------------- |
 | `patterns`    | `[]regex`                         | Yes      | Priority order (first has highest priority) |
-| `selector`    | [`Selector`](../selector.md)      | No       | Use attribute or tag to identify groups     |
-| `final_value` | [`FinalValue`](../final_value.md) | No       | Use for modify result channels              |
-| `condition`   | [`Condition`](../condition.md)    | No       | Only apply if condition matches             |
+| `selector`    | [`Selector`](../../shared/selector.md)      | No       | Use attribute or tag to identify groups     |
+| `final_value` | [`FinalValue`](../../shared/final_value.md) | No       | Use for modify result channels              |
+| `condition`   | [`Condition`](../../shared/condition.md)    | No       | Only apply if condition matches             |
 
 ## Examples
 

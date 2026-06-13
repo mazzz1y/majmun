@@ -27,7 +27,7 @@ proxy:
 | Field     | Type                                           | Required | Description                                 |
 | --------- | ---------------------------------------------- | -------- | ------------------------------------------- |
 | `cache`   | `object`                                       | No       | Cache configuration for proxy requests      |
-| `headers` | [`[]NameValue`](../shared.md#namevalue-object) | No       | Extra request headers for outgoing requests |
+| `headers` | [`[]NameValue`](../shared/name-value.md) | No       | Extra request headers for outgoing requests |
 
 ### `http_client.cache`
 
@@ -35,8 +35,8 @@ proxy:
 | ------------- | ----------------------------------- | ---------------------- | ----------------------------------------- |
 | `enabled`     | `bool`                              | No                     | Enable/disable disk cache (default: true) |
 | `path`        | `string`                            | Yes (if cache enabled) | Path to cache directory (global only)     |
-| `ttl`         | [`duration`](../shared.md#duration) | Yes (if cache enabled) | Cache TTL (e.g., "5m", "1h")              |
-| `retention`   | [`duration`](../shared.md#duration) | Yes (if cache enabled) | Cache retention duration                  |
+| `ttl`         | [`duration`](../shared/duration.md) | Yes (if cache enabled) | Cache TTL (e.g., "5m", "1h")              |
+| `retention`   | [`duration`](../shared/duration.md) | Yes (if cache enabled) | Cache retention duration                  |
 | `compression` | `bool`                              | No                     | Enable gzip compression for cached files  |
 
 ## Examples

@@ -1,50 +1,9 @@
 <div style="max-width: 850px; margin: 0 auto;" markdown>
 
-# Configuration Examples
+# Full Setup
 
-!!! note "Exposed endpoints"
-
-    - `{public_url}/{client_secret}/playlist.m3u8`
-    - `{public_url}/{client_secret}/epg.xml`
-    - `{public_url}/{client_secret}/epg.xml.gz`
-
-## Simple Configuration
-
-A minimal setup with a basic server, one playlist, and one EPG.
-
-```yaml
-server:
-  listen_addr: ":8080"
-  public_url: "http://localhost:8080"
-
-url_generator:
-  secret: "your-secret-key"
-
-proxy:
-  enabled: true
-  http_client:
-    cache:
-      enabled: true
-      path: /tmp/cache
-      ttl: 5m
-      retention: 24h
-
-playlists:
-  - name: basic-tv
-    sources: "https://provider.com/basic.m3u8"
-
-epgs:
-  - name: tv-guide
-    sources: "https://provider.com/guide.xml"
-
-clients:
-  - name: "tv"
-    secret: "tv-secret"
-```
-
-## Advanced Configuration
-
-A full-featured setup including proxying, rules, generated channels, and multiple sources.
+Everything together: proxied playlists with caching and error screens, generated local channels, global and per-client
+rules, and multiple clients with different playlist sets.
 
 ```yaml
 logs:
@@ -56,7 +15,8 @@ server:
   metrics_addr: ":9090"
   public_url: "https://iptv.example.com"
 
-state_dir: /var/lib/majmun/state # Required for generated channels
+playout:
+  state_dir: /var/lib/majmun/state # where generated-channel schedules are persisted
 
 url_generator:
   secret: "super-secret"
@@ -65,7 +25,7 @@ url_generator:
 
 proxy:
   enabled: true
-  concurrency: 10 # Set global concurrency
+  concurrency: 10 # global cap on simultaneous upstream streams
   http_client:
     cache:
       enabled: true
@@ -84,8 +44,6 @@ proxy:
         - name: message
           value: |
             Canal temporalmente no disponible
-
-            No hay respuesta del servidor ascendente
 
             Por favor, inténtelo más tarde
     rate_limit_exceeded:
@@ -120,17 +78,19 @@ playlists:
     channels:
       - name: "Cartoons 24/7"
         # 24/7 channel generated from local media files
-        logo: /config/logos/cartoons.png
         fields:
           - selector: attr/group-title
             template: "Kids"
         sources:
           - /media/cartoons
+        playout:
+          logo: /config/logos/cartoons.png
       - name: "Comedy Shows"
         # Episodes play in random order, reshuffled when the file set changes
         sources:
           - /media/shows/comedy
-        random_order: true
+        playout:
+          random_order: true
 
 epgs:
   - name: movies
@@ -186,3 +146,5 @@ clients:
     secret: "kt-secret"
     playlists: ["tv", "movies"]
 ```
+
+</div>

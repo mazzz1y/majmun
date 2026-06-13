@@ -14,8 +14,8 @@ remove_field:
 
 | Field       | Type                           | Required | Description                              |
 | ----------- | ------------------------------ | -------- | ---------------------------------------- |
-| `selector`  | [`Selector`](../selector.md)   | Yes      | What to remove (attribute/tag)           |
-| `condition` | [`Condition`](../condition.md) | No       | Optional, restricts which channels match |
+| `selector`  | [`Selector`](../../shared/selector.md)   | Yes      | What to remove (attribute/tag)           |
+| `condition` | [`Condition`](../../shared/condition.md) | No       | Optional, restricts which channels match |
 
 ## Examples
 

@@ -38,7 +38,7 @@ Start Majmun with `majmun -config ./config.yaml`, then point your TV or player a
 - `http://localhost:8080/living-room-secret/epg.xml` — the guide (`.gz` also available)
 
 Each client gets its own URLs based on its `secret`. From here, see [Configuration](config.md) for all options and
-[Examples](examples.md) for larger setups.
+[Examples](examples/index.md) for ready-to-use setups.
 
 ## Docker Compose Example
 
@@ -69,7 +69,7 @@ What each mount is for:
 - **`/config`** — your configuration file(s).
 - **`/cache`** — disk cache for playlists, guides, and logos. Point
   [`http_client.cache.path`](config/proxy/http_client.md) at it (e.g. `path: /cache`).
-- **`/state`** — schedules for [generated channels](config/channels.md); set `state_dir: /state` in your config.
+- **`/state`** — schedules for [generated channels](config/channels.md); set `playout.state_dir: /state` in your config.
   Without it, generated channels lose their live position on container recreation. Omit it if you don't use channels.
 - **`/tmp` as tmpfs** — when proxying is enabled, Majmun writes temporary video segments to `/tmp`. Keeping it in
   RAM avoids disk wear.
@@ -82,5 +82,5 @@ What each mount is for:
 !!! note "No GPU drivers in the image"
 
     The Docker image ships with FFmpeg but no GPU drivers or hardware-acceleration libraries (VAAPI, NVENC, QSV).
-    To use [hardware acceleration](config/proxy/playout.md#hardware-acceleration), extend the image with the
+    To use [hardware acceleration](examples/playout.md#hardware-acceleration), extend the image with the
     drivers for your hardware and pass the devices through to the container.

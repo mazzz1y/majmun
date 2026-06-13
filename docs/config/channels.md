@@ -10,17 +10,23 @@ that playlist. Each channel produces one entry in the client M3U8 and a matching
 
 ## How It Works
 
-A channel scans its `sources`, probes each file's duration and title with `ffprobe`, and lays the files out on a
-continuous looping timeline. The live position follows wall-clock time, so it survives restarts (the schedule is
-persisted under [`state_dir`](../config.md)) and stays consistent for every viewer.
+A channel scans its `sources`, lays the files out on a continuous looping timeline, and plays it as one shared
+[`playout`](./playout.md) transcode. The live position follows wall-clock time, so it survives restarts and is the same
+for every viewer.
 
-The video is produced by the [`proxy.playout`](./proxy/playout.md) command — one FFmpeg transcode per channel, shared
-across all viewers.
+### Picking Up File Changes
 
-The schedule is built at startup and rebuilt in the background when files change or `refresh_interval` elapses.
-Probe results are cached, so unchanged files are never re-probed. Viewers are never interrupted: during a rebuild the
-channel keeps serving the previous schedule, a deleted file is skipped on the fly, and a channel with no schedule yet
-serves a placeholder stream.
+majmun re-scans the `sources` every [`refresh_interval`](./playout.md) (default `30m`) to notice files you've added or
+removed. To avoid cutting off a show, a changed file set is not adopted the moment it's detected. Instead:
+
+- **Added files** appear at the next [`schedule_swap_at`](./playout.md) time (local, default `04:00`), and only once
+  the programme playing then finishes — so turnover always lands on a programme boundary.
+- **Removed files** are also deferred to that swap, *unless* a removed file is next due to air before the swap lands
+  (i.e. before the programme spanning the swap time finishes). Since the looping transcode would crash when it reopens
+  a missing file, that case triggers an immediate, controlled restart.
+
+The first build is immediate (the channel starts right away), and if all sources disappear the channel keeps playing
+its last good schedule.
 
 ## YAML Structure
 
@@ -29,48 +35,33 @@ playlists:
   - name: local
     channels:
       - name: ""
-        logo: ""
+        sources: []
         fields:
           - selector: ""
             template: ""
-        template_variables: []
-        sources: []
-        random_order: false
-        extensions: []
-        refresh_interval: 5m
-        epg_duration: 1w
+        playout: {} # per-channel override of any playout field (logo, schedule, command, ...)
 ```
 
 ## Fields
 
-| Field              | Type                                | Required | Description                                                                                                                                              |
-| ------------------ | ----------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `name`             | `string`                            | Yes      | Display name shown in the playlist and guide. Must be unique within its playlist; may repeat across playlists.                                            |
-| `logo`             | `string`                            | No       | Channel logo: an http(s) URL or a local file path.                                                                                                        |
-| `fields`           | `[]field`                           | No       | Extra M3U fields to emit. Each entry sets one attr or tag via a [selector](./rules/selector.md) (`attr/<key>` or `tag/<key>`) and a Go `template`.        |
-| `template_variables` | [`[]NameValue`](./shared.md#namevalue-object) | No | Extra variables for this channel's [playout](./proxy/playout.md) command. Override playout `template_variables` from the proxy cascade. |
-| `sources`          | `[]string`                          | Yes      | Directories (scanned recursively) and/or individual video files.                                                                                         |
-| `random_order`     | `bool`                              | No       | When `true`, files play in a stable shuffled order; otherwise they play in [episode order](#playback-order). Default `false`.                             |
-| `extensions`       | `[]string`                          | No       | Video file extensions to include. Default: `mkv, mp4, avi, mov, m4v, ts, webm, mpg, mpeg, flv, wmv`.                                                      |
-| `refresh_interval` | [`duration`](./shared.md#duration)  | No       | How often the schedule is rebuilt to pick up file changes. Default `5m`; `0` disables. The check is a cheap rescan — see [How It Works](#how-it-works).   |
-| `epg_duration`     | [`duration`](./shared.md#duration)  | No       | How far into the future the EPG is generated. Default `1w`.                                                                                               |
+A channel itself has only three fields plus an optional `playout` override. Everything else — `logo`, `random_order`,
+`extensions`, `refresh_interval`, `epg_duration`, `schedule_swap_at`, the transcode command and its
+`template_variables` — lives in the [`playout`](./playout.md) block and cascades global ➡ playlist ➡ channel.
 
-### Channel Identity
+| Field     | Type                            | Required | Description                                                                                                                                        |
+| --------- | ------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`    | `string`                        | Yes      | Display name shown in the playlist and guide. Must be unique within its playlist; may repeat across playlists.                                      |
+| `sources` | `[]string`                      | Yes      | Directories (scanned recursively) and/or individual video files.                                                                                   |
+| `fields`  | `[]field`                       | No       | Extra M3U fields to emit. Each entry sets one attr or tag via a [selector](./shared/selector.md) (`attr/<key>` or `tag/<key>`) and a Go `template`. |
+| `playout` | [`Playout`](./playout.md)       | No       | Per-channel overrides of the playout config (logo, scheduling, transcode command/variables).                                                       |
 
-The channel's stable id — used as the `tvg-id`, the XMLTV `<channel id>`, and the EPG join key — is derived
-automatically by hashing the playlist and channel names; there is no id field to set. This keeps the id unique and
-URL-safe even when the same `name` is reused in another playlist.
-
-Hashes are technical identifiers only: schedule files under `state_dir` are named by the channel id, while logs and
-metrics always show the human-readable channel and playlist names.
-
-A channel belongs to its parent playlist: the [`proxy.playout`](./proxy/playout.md) command cascades global ➡
-playlist (group channels that need the same command into one playlist), and [channel rules](./rules/index.md) with a
+A channel belongs to its parent playlist: the [`playout`](./playout.md) config cascades global ➡ playlist (group
+channels that need the same command into one playlist) ➡ channel, and [channel rules](./rules/index.md) with a
 `condition.playlists` match the channel by its **parent playlist name**.
 
 ## Playback Order
 
-Unless `random_order` is set, files play in episode order:
+Unless [`playout.random_order`](./playout.md) is set, files play in episode order:
 
 1. Files are grouped by directory; directories compare in natural order (`Season 2` before `Season 10`).
 2. Within a directory, files with season/episode info play in `season, episode` order. The info comes from container
@@ -93,18 +84,19 @@ conventions work. Tags that are absent or in an unrecognized format are simply o
 
 ## FFmpeg Transcode
 
-A channel is transcoded by [`proxy.playout`](./proxy/playout.md). The default is a software
-(libx264/aac) 24/7 loop that normalizes every source to a common resolution, frame rate, and audio layout, so sources
-with different resolutions can be mixed freely — but software encoding is slow, and picking a command that fits your
-hardware is your responsibility. See the [Playout](./proxy/playout.md) page for the input/output contract a command
-must satisfy, the default command, and hardware-acceleration starting points.
+A channel is transcoded by [`playout`](./playout.md), which loops its sources into one continuous live stream. You
+must provide the FFmpeg `command` — there is no default, since the right one depends on your hardware.
+
+See the [Playout](./playout.md) page for what a command must do (normalize mixed sources, loop, pace at realtime) and
+[Examples → Playout](../examples/playout.md) for ready-to-use commands, including hardware acceleration.
 
 ## Examples
 
 ### Basic Channel
 
 ```yaml
-state_dir: ./state
+playout:
+  state_dir: ./state
 
 playlists:
   - name: local
@@ -146,7 +138,7 @@ playlists:
 ### Multiple Sources and Random Order
 
 Directories are scanned recursively; individual files can be mixed in. `random_order` shuffles playback with a stable,
-persisted seed.
+persisted seed. Both `random_order` and `extensions` are [`playout`](./playout.md) fields, set here at the channel level:
 
 ```yaml
 playlists:
@@ -156,6 +148,7 @@ playlists:
         sources:
           - /media/movies
           - /media/extra/feature.mkv
-        random_order: true
-        extensions: [mkv, mp4]
+        playout:
+          random_order: true
+          extensions: [mkv, mp4]
 ```

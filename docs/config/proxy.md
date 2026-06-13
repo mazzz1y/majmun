@@ -18,16 +18,17 @@ When a TV requests a proxied stream, two commands cooperate:
    result to that TV. By default it just repackages the video without re-encoding (often called "remuxing"), which
    is cheap.
 
-[Generated channels](channels.md) replace step 1 with the [**playout**](proxy/playout.md) command, which produces a
-continuous stream from your local media files instead of fetching an upstream. When anything goes wrong — upstream
-down, limit reached, expired link — an [**error**](proxy/error.md) command generates a short video telling the
-viewer what happened.
+[Generated channels](channels.md) replace step 1 with the [**playout**](playout.md) command, which produces a
+continuous stream from your local media files instead of fetching an upstream. Playout is configured in its own
+top-level [`playout`](playout.md) block, not under `proxy`. When anything goes wrong — upstream down, limit reached,
+expired link — an [**error**](proxy/error.md) command generates a short video telling the viewer what happened.
 
 !!! warning "Shared transcodes: first viewer wins"
 
-    Because segmenter and playout processes are shared, they start with the proxy config of whichever viewer
-    requests the stream first — everyone else joins that stream as-is. In practice: **per-client `segmenter`/
-    `playout` overrides don't isolate clients.** Keep command differences at the global or playlist level.
+    Because segmenter and playout processes are shared, they start with the config of whichever viewer
+    requests the stream first — everyone else joins that stream as-is. In practice: **per-client `segmenter`
+    overrides don't isolate clients.** Keep command differences at the global or playlist level. (Playout has no
+    per-client level at all — see [Playout](playout.md).)
 
 ## Configuration Levels
 
@@ -42,8 +43,9 @@ starts only if the global, playlist, and client limits all have capacity, and ex
 !!! note "Command Output"
 
     The `stream` and `error` commands must write video data to `stdout`; `stderr` is printed to the debug logs.
-    If a command exits with empty stdout, an upstream error is triggered. The `segmenter` and `playout` commands
-    write segment files to disk instead — see their pages for the exact contract.
+    If a command exits with empty stdout, an upstream error is triggered. The `segmenter` command (and the
+    [playout](playout.md) transcode for generated channels) write segment files to disk instead — see their pages
+    for the exact contract.
 
 ## YAML Structure
 
@@ -68,12 +70,6 @@ proxy:
     template_variables: []
     env_variables: []
     init_segments: 2
-    ready_timeout: 30s
-  playout:
-    command: []
-    template_variables: []
-    env_variables: []
-    init_segments: 4
     ready_timeout: 30s
   error:
     command: []
@@ -104,14 +100,15 @@ proxy:
 | `http_client` | [`HTTPClient`](./proxy/http_client.md) | No       | HTTP client configuration overrides for this proxy |
 | `stream`      | [`Stream`](./proxy/stream.md)          | No       | Command configuration for stream processing        |
 | `segmenter`   | [`Segmenter`](./proxy/segmenter.md)    | No       | HLS segmenter for remote proxied streams           |
-| `playout`     | [`Playout`](./proxy/playout.md)        | No       | HLS transcoder for locally generated channels      |
 | `error`       | [`Error`](./proxy/error.md)            | No       | Default error handling configuration               |
+
+Generated channels are configured separately in the top-level [`playout`](playout.md) block, not under `proxy`.
 
 ### Related Documentation
 
 - [Stream Processing](./proxy/stream.md) - Configure stream remuxing commands
 - [Segmenter](./proxy/segmenter.md) - Configure HLS segmenter for proxied streams
-- [Playout](./proxy/playout.md) - Configure the HLS transcoder for generated channels
+- [Playout](./playout.md) - Configure generated channels (transcode + scheduling)
 - [Error Handling](./proxy/error.md) - Configure error fallback content
 - [HTTP Client](./proxy/http_client.md) - Configure HTTP request settings
 
@@ -133,21 +130,10 @@ proxy:
   concurrency: 5
   stream:
     command:
-      - "ffmpeg"
-      - "-v"
-      - "{{ .ffmpeg_log_level }}"
-      - "-i"
-      - "{{ .input }}"
-      - "-c:v"
-      - "libx264"
-      - "-preset"
-      - "ultrafast"
-      - "-f"
-      - "mpegts"
-      - "pipe:1"
+      [ffmpeg, -v, "{{ .ffmpeg_log_level }}", -i, "{{ .Stream.PlaylistPath }}",
+       -c:v, libx264, -preset, ultrafast, -f, mpegts, "pipe:1"]
     template_variables:
-      - name: ffmpeg_log_level
-        value: "error"
+      - { name: ffmpeg_log_level, value: error }
 ```
 
 ### Proxy HTTP Client Overrides
