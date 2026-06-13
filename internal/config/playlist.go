@@ -11,6 +11,7 @@ type Playlist struct {
 	Sources     common.StringOrArr `yaml:"sources,omitempty"`
 	Channels    []Channel          `yaml:"channels,omitempty"`
 	Proxy       proxy.Proxy        `yaml:"proxy,omitempty"`
+	Playout     proxy.Playout      `yaml:"playout,omitempty"`
 	SkipOnError bool               `yaml:"skip_on_error,omitempty"`
 }
 
@@ -33,6 +34,9 @@ func (p *Playlist) Validate() error {
 	}
 	if err := p.Proxy.ValidateOverride(); err != nil {
 		return fmt.Errorf("proxy: %w", err)
+	}
+	if err := p.Playout.Validate(); err != nil {
+		return fmt.Errorf("playout: %w", err)
 	}
 	return nil
 }

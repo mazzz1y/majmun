@@ -37,7 +37,7 @@ type Request struct {
 	ExtraVars      map[string]any
 	ClientStreamer ClientStreamerFunc
 	Semaphore      *semaphore.Weighted
-	Segmenter      proxy.Segmenter
+	RunnerConfig   proxy.RunnerConfig
 }
 
 type StreamPool struct {
@@ -74,7 +74,7 @@ func (d *StreamPool) GetReader(ctx context.Context, req Request) (io.ReadCloser,
 	streamCtx := context.WithoutCancel(clientCtx)
 
 	seg, isNew, err := d.pool.getOrCreate(
-		req.StreamKey, streamCtx, d.baseDir, req.Segmenter, req.StreamURL, req.ExtraVars)
+		req.StreamKey, streamCtx, d.baseDir, req.RunnerConfig, req.StreamURL, req.ExtraVars)
 	if err != nil {
 		return nil, err
 	}

@@ -13,7 +13,6 @@ type Proxy struct {
 	HTTPClient        common.HTTPClient `yaml:"http_client,omitempty"`
 	Stream            Handler           `yaml:"stream,omitempty"`
 	Segmenter         Segmenter         `yaml:"segmenter,omitempty"`
-	Playout           Segmenter         `yaml:"playout,omitempty"`
 	Error             Error             `yaml:"error,omitempty"`
 }
 
@@ -26,9 +25,6 @@ func (p *Proxy) ValidateGlobal() error {
 	}
 	if err := p.Segmenter.Validate(); err != nil {
 		return fmt.Errorf("segmenter: %w", err)
-	}
-	if err := p.Playout.Validate(); err != nil {
-		return fmt.Errorf("playout: %w", err)
 	}
 	if err := p.HTTPClient.ValidateProxyGlobal(); err != nil {
 		return fmt.Errorf("http_client: %w", err)
@@ -48,9 +44,6 @@ func (p *Proxy) ValidateOverride() error {
 	}
 	if err := p.Segmenter.Validate(); err != nil {
 		return fmt.Errorf("segmenter: %w", err)
-	}
-	if err := p.Playout.Validate(); err != nil {
-		return fmt.Errorf("playout: %w", err)
 	}
 	if err := p.HTTPClient.ValidateProxyOverride(); err != nil {
 		return fmt.Errorf("http_client: %w", err)
@@ -77,7 +70,6 @@ func (p *Proxy) UnmarshalYAML(value *yaml.Node) error {
 
 	mergeHandlerVars(&prev.Stream, &p.Stream)
 	mergeSegmenterVars(&prev.Segmenter, &p.Segmenter)
-	mergeSegmenterVars(&prev.Playout, &p.Playout)
 	mergeHandlerVars(&prev.Error.Handler, &p.Error.Handler)
 	mergeHandlerVars(&prev.Error.UpstreamError, &p.Error.UpstreamError)
 	mergeHandlerVars(&prev.Error.RateLimitExceeded, &p.Error.RateLimitExceeded)

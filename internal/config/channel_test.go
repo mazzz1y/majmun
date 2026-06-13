@@ -2,11 +2,11 @@ package config
 
 import (
 	"majmun/internal/config/common"
+	"majmun/internal/config/proxy"
 	"net/url"
 	"strconv"
 	"testing"
 	"text/template"
-	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -24,82 +24,11 @@ func channelField(t *testing.T, selectorRaw, templateStr string) ChannelField {
 	return ChannelField{Selector: &sel, Template: (*common.Template)(tmpl)}
 }
 
-func TestChannelResolvedRefreshInterval(t *testing.T) {
-	c := Channel{Name: "c", Sources: common.StringOrArr{"/m"}}
-	if got := c.ResolvedRefreshInterval(); got != defaultChannelRefresh {
-		t.Errorf("expected default %v, got %v", defaultChannelRefresh, got)
-	}
-
-	zero := common.Duration(0)
-	c.RefreshInterval = &zero
-	if got := c.ResolvedRefreshInterval(); got != 0 {
-		t.Errorf("expected 0 (disabled), got %v", got)
-	}
-
-	tenMin := common.Duration(10 * time.Minute)
-	c.RefreshInterval = &tenMin
-	if got := c.ResolvedRefreshInterval(); got != 10*time.Minute {
-		t.Errorf("expected 10m, got %v", got)
-	}
-}
-
-func TestChannelResolvedEPGDuration(t *testing.T) {
-	c := Channel{Name: "c", Sources: common.StringOrArr{"/m"}}
-	if got := c.ResolvedEPGDuration(); got != defaultChannelEPGDuration {
-		t.Errorf("expected default %v, got %v", defaultChannelEPGDuration, got)
-	}
-
-	day := common.Duration(24 * time.Hour)
-	c.EPGDuration = &day
-	if got := c.ResolvedEPGDuration(); got != 24*time.Hour {
-		t.Errorf("expected 24h, got %v", got)
-	}
-}
-
-func TestChannelResolvedScheduleSwapAt(t *testing.T) {
-	c := Channel{Name: "c", Sources: common.StringOrArr{"/m"}}
-	if h, m := c.ResolvedScheduleSwapAt(); h != defaultScheduleSwapHour || m != defaultScheduleSwapMinute {
-		t.Errorf("expected default %02d:%02d, got %02d:%02d", defaultScheduleSwapHour, defaultScheduleSwapMinute, h, m)
-	}
-
-	v := "23:45"
-	c.ScheduleSwapAt = &v
-	if h, m := c.ResolvedScheduleSwapAt(); h != 23 || m != 45 {
-		t.Errorf("expected 23:45, got %02d:%02d", h, m)
-	}
-}
-
-func TestParseSwapAt(t *testing.T) {
-	valid := map[string][2]int{
-		"00:00": {0, 0},
-		"04:00": {4, 0},
-		"23:59": {23, 59},
-		" 9:05": {9, 5},
-	}
-	for in, want := range valid {
-		h, m, err := parseSwapAt(in)
-		if err != nil {
-			t.Errorf("parseSwapAt(%q) unexpected error: %v", in, err)
-			continue
-		}
-		if h != want[0] || m != want[1] {
-			t.Errorf("parseSwapAt(%q) = %02d:%02d, want %02d:%02d", in, h, m, want[0], want[1])
-		}
-	}
-
-	for _, in := range []string{"", "4", "4:00:00", "24:00", "04:60", "-1:00", "aa:bb", "04.00"} {
-		if _, _, err := parseSwapAt(in); err == nil {
-			t.Errorf("parseSwapAt(%q) expected error, got nil", in)
-		}
-	}
-}
-
 func validBaseConfig() Config {
 	u, _ := url.Parse("http://example.com")
 	return Config{
 		Server:       ServerConfig{ListenAddr: ":8080", PublicURL: common.URL(*u)},
 		Logs:         Logs{"info", "text"},
-		StateDir:     "state",
 		URLGenerator: URLGeneratorConfig{Secret: "test"},
 	}
 }
@@ -117,7 +46,7 @@ func TestChannelValidate(t *testing.T) {
 		},
 		{
 			name:        "valid random",
-			channel:     Channel{Name: "cartoons", Sources: common.StringOrArr{"/media/cartoons"}, RandomOrder: true},
+			channel:     Channel{Name: "cartoons", Sources: common.StringOrArr{"/media/cartoons"}, Playout: proxy.Playout{RandomOrder: boolPtr(true)}},
 			expectError: false,
 		},
 		{
@@ -166,21 +95,15 @@ func TestChannelValidate(t *testing.T) {
 			expectError: true,
 		},
 		{
-			name: "valid template variable",
+			name: "valid playout template variable",
 			channel: Channel{Name: "c", Sources: common.StringOrArr{"/m"},
-				TemplateVars: []common.NameValue{{Name: "logo_width_pct", Value: "0.06"}}},
+				Playout: proxy.Playout{TemplateVars: []common.NameValue{{Name: "logo_width_pct", Value: "0.06"}}}},
 			expectError: false,
 		},
 		{
-			name: "reserved template variable Channel is rejected",
+			name: "invalid playout propagates",
 			channel: Channel{Name: "c", Sources: common.StringOrArr{"/m"},
-				TemplateVars: []common.NameValue{{Name: "Channel", Value: "x"}}},
-			expectError: true,
-		},
-		{
-			name: "reserved template variable input is rejected",
-			channel: Channel{Name: "c", Sources: common.StringOrArr{"/m"},
-				TemplateVars: []common.NameValue{{Name: "input", Value: "x"}}},
+				Playout: proxy.Playout{TemplateVars: []common.NameValue{{Name: "input", Value: "x"}}}},
 			expectError: true,
 		},
 	}
@@ -247,14 +170,6 @@ func TestConfigChannelValidation(t *testing.T) {
 			name: "playlist with neither sources nor channels is invalid",
 			mutate: func(c *Config) {
 				c.Playlists = []Playlist{{Name: "p1"}}
-			},
-			expectError: true,
-		},
-		{
-			name: "state_dir required when channels present",
-			mutate: func(c *Config) {
-				c.StateDir = ""
-				c.Playlists = []Playlist{{Name: "p1", Channels: []Channel{{Name: "a", Sources: common.StringOrArr{"/m"}}}}}
 			},
 			expectError: true,
 		},

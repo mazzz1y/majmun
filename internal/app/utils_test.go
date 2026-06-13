@@ -5,6 +5,7 @@ import (
 	"majmun/internal/config/proxy"
 	"reflect"
 	"testing"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -130,30 +131,46 @@ func TestMergeProxies(t *testing.T) {
 	}
 }
 
-func TestMergeProxiesPlayoutCascade(t *testing.T) {
-	global := proxy.Proxy{
-		Playout: proxy.Segmenter{
-			Command:      common.StringOrArr{"ffmpeg", "global"},
-			TemplateVars: []common.NameValue{{Name: "ffmpeg_log_level", Value: "fatal"}},
-		},
+func TestMergePlayoutsCascade(t *testing.T) {
+	global := proxy.Playout{
+		Command:         common.StringOrArr{"ffmpeg", "global"},
+		TemplateVars:    []common.NameValue{{Name: "ffmpeg_log_level", Value: "fatal"}},
+		ScheduleSwapAt:  strPtr("04:00"),
+		RefreshInterval: durPtr(5 * time.Minute),
 	}
-	playlist := proxy.Proxy{
-		Playout: proxy.Segmenter{
-			Command:      common.StringOrArr{"ffmpeg", "playlist"},
-			TemplateVars: []common.NameValue{{Name: "segment_duration", Value: "4"}},
-		},
+	playlist := proxy.Playout{
+		TemplateVars:   []common.NameValue{{Name: "segment_duration", Value: "4"}},
+		ScheduleSwapAt: strPtr("03:00"),
+	}
+	channel := proxy.Playout{
+		Command:      common.StringOrArr{"ffmpeg", "channel"},
+		TemplateVars: []common.NameValue{{Name: "video_bitrate_kbps", Value: "6000"}},
 	}
 
-	result := mergeProxies(global, playlist)
-	if !reflect.DeepEqual([]string(result.Playout.Command), []string{"ffmpeg", "playlist"}) {
-		t.Errorf("expected playlist playout command to override, got %v", result.Playout.Command)
+	result := mergePlayouts(global, playlist, channel)
+	if !reflect.DeepEqual([]string(result.Command), []string{"ffmpeg", "channel"}) {
+		t.Errorf("expected channel command to override, got %v", result.Command)
 	}
-	if !nameValueSlicesEqual(result.Playout.TemplateVars, []common.NameValue{
+	if !nameValueSlicesEqual(result.TemplateVars, []common.NameValue{
 		{Name: "ffmpeg_log_level", Value: "fatal"},
 		{Name: "segment_duration", Value: "4"},
+		{Name: "video_bitrate_kbps", Value: "6000"},
 	}) {
-		t.Errorf("expected accumulated playout template vars, got %v", result.Playout.TemplateVars)
+		t.Errorf("expected accumulated playout template vars, got %v", result.TemplateVars)
 	}
+	if result.ScheduleSwapAt == nil || *result.ScheduleSwapAt != "03:00" {
+		t.Errorf("expected playlist schedule_swap_at to win, got %v", result.ScheduleSwapAt)
+	}
+	if result.RefreshInterval == nil || time.Duration(*result.RefreshInterval) != 5*time.Minute {
+		t.Errorf("expected global refresh_interval to be inherited, got %v", result.RefreshInterval)
+	}
+}
+
+func strPtr(s string) *string { return &s }
+
+func durPtr(d time.Duration) *common.Duration {
+	cd := common.Duration(d)
+	return &cd
 }
 
 func TestMergeHandlers(t *testing.T) {

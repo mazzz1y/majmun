@@ -65,6 +65,57 @@ url_generator:
 				}
 			},
 		},
+		{
+			name: "top-level playout with channel override parses",
+			configContent: `server:
+  listen_addr: ":8080"
+  public_url: "http://example.com"
+url_generator:
+  secret: "test-secret"
+playout:
+  schedule_swap_at: "03:00"
+  template_variables:
+    - name: video_bitrate_kbps
+      value: "3000"
+playlists:
+  - name: local
+    channels:
+      - name: movies
+        sources: [/media/movies]
+        playout:
+          template_variables:
+            - name: video_bitrate_kbps
+              value: "6000"`,
+			expectError: false,
+			validate: func(t *testing.T, cfg *Config) {
+				if cfg.Playout.ScheduleSwapAt == nil || *cfg.Playout.ScheduleSwapAt != "03:00" {
+					t.Errorf("expected global schedule_swap_at 03:00, got %v", cfg.Playout.ScheduleSwapAt)
+				}
+				if len(cfg.Playout.TemplateVars) <= 1 {
+					t.Errorf("expected default template vars to survive merge with user var, got %d", len(cfg.Playout.TemplateVars))
+				}
+				if len(cfg.Playout.Command) == 0 {
+					t.Errorf("expected default playout command to survive, got empty")
+				}
+				ch := cfg.Playlists[0].Channels[0]
+				if len(ch.Playout.TemplateVars) != 1 || ch.Playout.TemplateVars[0].Value != "6000" {
+					t.Errorf("expected channel playout override, got %v", ch.Playout.TemplateVars)
+				}
+			},
+		},
+		{
+			name: "legacy proxy.playout is rejected",
+			configContent: `server:
+  listen_addr: ":8080"
+  public_url: "http://example.com"
+url_generator:
+  secret: "test-secret"
+proxy:
+  playout:
+    command: [ffmpeg]`,
+			expectError: true,
+			validate:    nil,
+		},
 	}
 
 	for _, tt := range tests {

@@ -70,7 +70,6 @@ func mergeProxies(proxies ...proxy.Proxy) proxy.Proxy {
 
 		result.Stream = mergeHandlers(result.Stream, p.Stream)
 		mergeSegmenter(&result.Segmenter, p.Segmenter)
-		mergeSegmenter(&result.Playout, p.Playout)
 
 		result.Error.Handler = mergeHandlers(result.Error.Handler, p.Error.Handler)
 
@@ -112,4 +111,46 @@ func mergeSegmenter(dst *proxy.Segmenter, src proxy.Segmenter) {
 	if src.ReadyTimeout != nil {
 		dst.ReadyTimeout = src.ReadyTimeout
 	}
+}
+
+// mergePlayouts cascades playout config global -> playlist -> channel, each level overriding
+// the previous field by field. Template/env vars merge by name; scheduling/listing fields
+// keep their pointer/empty zero value when unset so the lower level inherits.
+func mergePlayouts(playouts ...proxy.Playout) proxy.Playout {
+	result := proxy.Playout{}
+	for _, p := range playouts {
+		if len(p.Command) > 0 {
+			result.Command = p.Command
+		}
+		result.TemplateVars = common.MergeNameValues(result.TemplateVars, p.TemplateVars)
+		result.EnvVars = common.MergeNameValues(result.EnvVars, p.EnvVars)
+		if p.InitSegments != nil {
+			result.InitSegments = p.InitSegments
+		}
+		if p.ReadyTimeout != nil {
+			result.ReadyTimeout = p.ReadyTimeout
+		}
+		if p.StateDir != "" {
+			result.StateDir = p.StateDir
+		}
+		if p.Logo != "" {
+			result.Logo = p.Logo
+		}
+		if len(p.Extensions) > 0 {
+			result.Extensions = p.Extensions
+		}
+		if p.RandomOrder != nil {
+			result.RandomOrder = p.RandomOrder
+		}
+		if p.RefreshInterval != nil {
+			result.RefreshInterval = p.RefreshInterval
+		}
+		if p.EPGDuration != nil {
+			result.EPGDuration = p.EPGDuration
+		}
+		if p.ScheduleSwapAt != nil {
+			result.ScheduleSwapAt = p.ScheduleSwapAt
+		}
+	}
+	return result
 }

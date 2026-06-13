@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"majmun/internal/channelgen"
 	"majmun/internal/config"
-	"majmun/internal/config/common"
 	"majmun/internal/config/proxy"
 	"majmun/internal/hashid"
 	"majmun/internal/listing"
@@ -23,7 +22,7 @@ type Channel struct {
 	fields       []config.ChannelField
 	urlGenerator *urlgen.Generator
 	httpClient   listing.HTTPClient
-	segmenter    proxy.Segmenter
+	playout      proxy.Playout
 	gen          *channelgen.Channel
 
 	streamer              *shell.Streamer
@@ -33,6 +32,7 @@ type Channel struct {
 func NewChannelProvider(
 	playlist listing.Playlist,
 	channelConf config.Channel,
+	playout proxy.Playout,
 	urlGen *urlgen.Generator,
 	gen *channelgen.Channel,
 	httpClient listing.HTTPClient,
@@ -56,18 +56,15 @@ func NewChannelProvider(
 		return nil, fmt.Errorf("failed to create upstream error command: %w", err)
 	}
 
-	playout := mergedProxy.Playout
-	playout.TemplateVars = common.MergeNameValues(playout.TemplateVars, channelConf.TemplateVars)
-
 	return &Channel{
 		name:                  channelConf.Name,
 		id:                    hashid.New(playlist.Name(), channelConf.Name),
 		playlist:              playlist,
-		logo:                  channelConf.Logo,
+		logo:                  playout.Logo,
 		fields:                channelConf.Fields,
 		urlGenerator:          urlGen,
 		httpClient:            httpClient,
-		segmenter:             playout,
+		playout:               playout,
 		gen:                   gen,
 		streamer:              streamStreamer,
 		upstreamErrorStreamer: upstreamErrorStreamer,
@@ -117,8 +114,8 @@ func (c *Channel) ExpiredLinkStreamer() *shell.Streamer {
 	return nil
 }
 
-func (c *Channel) Segmenter() proxy.Segmenter {
-	return c.segmenter
+func (c *Channel) Playout() proxy.RunnerConfig {
+	return &c.playout
 }
 
 func (c *Channel) Generator() *channelgen.Channel {

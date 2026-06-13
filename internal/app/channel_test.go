@@ -17,9 +17,6 @@ func testChannelProxy() proxy.Proxy {
 		Stream: proxy.Handler{
 			Command: common.StringOrArr{"ffmpeg", "-i", "{{ .input }}", "-f", "mpegts", "pipe:1"},
 		},
-		Playout: proxy.Segmenter{
-			Command: common.StringOrArr{"ffmpeg", "-i", "{{ .input }}", "-f", "hls", "{{ .playlist_path }}"},
-		},
 		Error: proxy.Error{
 			UpstreamError: proxy.Handler{
 				Command: common.StringOrArr{"ffmpeg", "-f", "lavfi", "-i", "color=black", "pipe:1"},
@@ -28,29 +25,36 @@ func testChannelProxy() proxy.Proxy {
 	}
 }
 
-func newChannelProvider(t *testing.T, parentPlaylist string, conf config.Channel) *Channel {
+func testPlayout() proxy.Playout {
+	return proxy.Playout{
+		Command: common.StringOrArr{"ffmpeg", "-i", "{{ .input }}", "-f", "hls", "{{ .playlist_path }}"},
+	}
+}
+
+func newChannelProvider(t *testing.T, parentPlaylist string, conf config.Channel, playout proxy.Playout) *Channel {
 	t.Helper()
 	urlGen, err := urlgen.NewGenerator("http://localhost", "secret", time.Hour, time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}
 	mergedProxy := testChannelProxy()
+	swapHour, swapMin := playout.ResolvedScheduleSwapAt()
 	gen := channelgen.NewChannel(
 		parentPlaylist,
 		conf.Name,
 		conf.Sources,
-		conf.ResolvedExtensions(),
-		conf.RandomOrder,
-		conf.ResolvedRefreshInterval(),
-		conf.ResolvedEPGDuration(),
-		4, 0,
+		playout.ResolvedExtensions(),
+		playout.ResolvedRandomOrder(),
+		playout.ResolvedRefreshInterval(),
+		playout.ResolvedEPGDuration(),
+		swapHour, swapMin,
 		"state",
 	)
 	pl, err := NewPlaylistProvider(parentPlaylist, urlGen, nil, mergedProxy, nil, nil, httpclient.NewDirectClient(nil), false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	ch, err := NewChannelProvider(pl, conf, urlGen, gen, httpclient.NewDirectClient(nil), mergedProxy)
+	ch, err := NewChannelProvider(pl, conf, playout, urlGen, gen, httpclient.NewDirectClient(nil), mergedProxy)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,7 +65,7 @@ func TestChannelProviderDefaults(t *testing.T) {
 	ch := newChannelProvider(t, "local", config.Channel{
 		Name:    "cartoons",
 		Sources: common.StringOrArr{"/media"},
-	})
+	}, testPlayout())
 
 	if ch.Type() != "channel" {
 		t.Errorf("expected type channel, got %s", ch.Type())
@@ -77,54 +81,28 @@ func TestChannelProviderDefaults(t *testing.T) {
 	}
 }
 
-func TestChannelProviderSegmenterFromPlayout(t *testing.T) {
+func TestChannelProviderPlayoutCommand(t *testing.T) {
 	ch := newChannelProvider(t, "local", config.Channel{
 		Name:    "cartoons",
 		Sources: common.StringOrArr{"/media"},
-	})
+	}, testPlayout())
 
-	got := ch.Segmenter().Command
+	got := ch.Playout().GetCommand()
 	if len(got) == 0 || got[0] != "ffmpeg" {
-		t.Errorf("expected playout segmenter command, got %v", got)
+		t.Errorf("expected playout command, got %v", got)
 	}
 }
 
-func TestChannelProviderTemplateVarsOverridePlayout(t *testing.T) {
-	urlGen, err := urlgen.NewGenerator("http://localhost", "secret", time.Hour, time.Hour)
-	if err != nil {
-		t.Fatal(err)
-	}
-	mergedProxy := testChannelProxy()
-	mergedProxy.Playout.TemplateVars = []common.NameValue{
-		{Name: "logo_width_pct", Value: "0.06"},
-		{Name: "fps", Value: "30"},
-	}
-	conf := config.Channel{
+func TestChannelProviderLogoFromPlayout(t *testing.T) {
+	playout := testPlayout()
+	playout.Logo = "/config/logo.png"
+	ch := newChannelProvider(t, "local", config.Channel{
 		Name:    "cartoons",
 		Sources: common.StringOrArr{"/media"},
-		TemplateVars: []common.NameValue{
-			{Name: "logo_width_pct", Value: "0.10"},
-			{Name: "custom", Value: "x"},
-		},
-	}
-	pl, err := NewPlaylistProvider("local", urlGen, nil, mergedProxy, nil, nil, httpclient.NewDirectClient(nil), false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	ch, err := NewChannelProvider(pl, conf, urlGen, nil, httpclient.NewDirectClient(nil), mergedProxy)
-	if err != nil {
-		t.Fatal(err)
-	}
+	}, playout)
 
-	got := map[string]string{}
-	for _, nv := range ch.Segmenter().TemplateVars {
-		got[nv.Name] = nv.Value
-	}
-	want := map[string]string{"logo_width_pct": "0.10", "fps": "30", "custom": "x"}
-	for k, v := range want {
-		if got[k] != v {
-			t.Errorf("template var %s = %q, want %q", k, got[k], v)
-		}
+	if ch.Logo() != "/config/logo.png" {
+		t.Errorf("expected logo from playout, got %q", ch.Logo())
 	}
 }
 
@@ -132,7 +110,7 @@ func TestChannelProviderClientStreamerInjectsInput(t *testing.T) {
 	ch := newChannelProvider(t, "local", config.Channel{
 		Name:    "cartoons",
 		Sources: common.StringOrArr{"/media"},
-	})
+	}, testPlayout())
 	if ch.ClientStreamer("/tmp/seg/stream.m3u8") == nil {
 		t.Error("expected a client streamer")
 	}

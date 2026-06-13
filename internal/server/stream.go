@@ -159,7 +159,7 @@ func (s *Server) handleChannelStream(
 	streamReq := streampool.Request{
 		StreamKey:      streamKey,
 		ClientStreamer: channel.ClientStreamer,
-		Segmenter:      channel.Segmenter(),
+		RunnerConfig:   channel.Playout(),
 		ExtraVars: map[string]any{
 			"input": concatPath,
 			"Channel": map[string]any{
@@ -253,7 +253,7 @@ func (s *Server) tryStream(
 		StreamURL:      streamURL,
 		ClientStreamer: playlist.ClientStreamer,
 		Semaphore:      playlist.Semaphore(),
-		Segmenter:      playlist.SegmenterConfig(),
+		RunnerConfig:   playlist.SegmenterConfig(),
 	}
 
 	reader, err := s.streamPool.GetReader(ctx, streamReq)

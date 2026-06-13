@@ -19,7 +19,7 @@ type segmenter struct {
 	streamKey    string
 	dir          string
 	playlistPath string
-	config       proxy.Segmenter
+	config       proxy.RunnerConfig
 	streamer     *shell.Streamer
 
 	ctx    context.Context
@@ -34,7 +34,7 @@ type segmenter struct {
 	startErr  error
 }
 
-func newSegmenter(parentCtx context.Context, streamKey string, baseDir string, cfg proxy.Segmenter, streamURL string, extraVars map[string]any) (*segmenter, error) {
+func newSegmenter(parentCtx context.Context, streamKey string, baseDir string, cfg proxy.RunnerConfig, streamURL string, extraVars map[string]any) (*segmenter, error) {
 	dir := segmentDir(baseDir, streamKey)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return nil, fmt.Errorf("create segment dir: %w", err)
@@ -42,7 +42,7 @@ func newSegmenter(parentCtx context.Context, streamKey string, baseDir string, c
 
 	playlistPath := filepath.Join(dir, "stream.m3u8")
 
-	base, err := shell.NewShellStreamer(cfg.Command, cfg.EnvVars, cfg.TemplateVars)
+	base, err := shell.NewShellStreamer(cfg.GetCommand(), cfg.GetEnvVars(), cfg.GetTemplateVars())
 	if err != nil {
 		return nil, fmt.Errorf("parse segmenter command: %w", err)
 	}
@@ -94,7 +94,7 @@ func (s *segmenter) setReady(err error) {
 }
 
 func (s *segmenter) waitForSegments() {
-	deadline := time.After(time.Duration(*s.config.ReadyTimeout))
+	deadline := time.After(time.Duration(*s.config.GetReadyTimeout()))
 	ticker := time.NewTicker(segmentReadyPoll)
 	defer ticker.Stop()
 
@@ -107,7 +107,7 @@ func (s *segmenter) waitForSegments() {
 			s.setReady(fmt.Errorf("timeout waiting for segments"))
 			return
 		case <-ticker.C:
-			if s.countSegments() >= *s.config.InitSegments {
+			if s.countSegments() >= *s.config.GetInitSegments() {
 				s.setReady(nil)
 				return
 			}

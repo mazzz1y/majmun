@@ -13,9 +13,9 @@ type Config struct {
 	YamlSnippets  map[string]any     `yaml:",inline"`
 	Server        ServerConfig       `yaml:"server"`
 	Logs          Logs               `yaml:"logs"`
-	StateDir      string             `yaml:"state_dir"`
 	URLGenerator  URLGeneratorConfig `yaml:"url_generator"`
 	Proxy         proxy.Proxy        `yaml:"proxy"`
+	Playout       proxy.Playout      `yaml:"playout"`
 	Clients       []Client           `yaml:"clients"`
 	Playlists     []Playlist         `yaml:"playlists"`
 	EPGs          []EPG              `yaml:"epgs"`
@@ -46,6 +46,10 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("proxy configuration validation failed: %w", err)
 	}
 
+	if err := c.Playout.Validate(); err != nil {
+		return fmt.Errorf("playout configuration validation failed: %w", err)
+	}
+
 	playlistNames := make(map[string]bool)
 	epgNames := make(map[string]bool)
 
@@ -73,21 +77,14 @@ func (c *Config) Validate() error {
 		}
 	}
 
-	hasChannels := false
-
 	for _, pl := range c.Playlists {
 		channelNames := make(map[string]bool)
 		for _, ch := range pl.Channels {
-			hasChannels = true
 			if channelNames[ch.Name] {
 				return fmt.Errorf("duplicate channel name %q in playlist %q", ch.Name, pl.Name)
 			}
 			channelNames[ch.Name] = true
 		}
-	}
-
-	if hasChannels && c.StateDir == "" {
-		return fmt.Errorf("state_dir is required when channels are configured")
 	}
 
 	clientNames := make(map[string]bool)

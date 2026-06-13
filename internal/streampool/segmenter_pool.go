@@ -18,7 +18,7 @@ func newSegmenterPool() *segmenterPool {
 	}
 }
 
-func (p *segmenterPool) getOrCreate(streamKey string, ctx context.Context, baseDir string, cfg proxy.Segmenter, streamURL string, extraVars map[string]any) (*segmenter, bool, error) {
+func (p *segmenterPool) getOrCreate(streamKey string, ctx context.Context, baseDir string, cfg proxy.RunnerConfig, streamURL string, extraVars map[string]any) (*segmenter, bool, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 

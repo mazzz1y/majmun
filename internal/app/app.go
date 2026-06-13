@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"majmun/internal/channelgen"
 	"majmun/internal/config"
+	"majmun/internal/config/proxy"
 	"majmun/internal/hashid"
 	"majmun/internal/httpclient"
 	"majmun/internal/logging"
@@ -52,14 +53,16 @@ func NewManager(cfg *config.Config) (*Manager, error) {
 		return nil, err
 	}
 
-	if cfg.StateDir != "" {
-		var ids []string
-		for _, pl := range cfg.Playlists {
-			for _, ch := range pl.Channels {
-				ids = append(ids, hashid.New(pl.Name, ch.Name))
-			}
+	idsByStateDir := map[string][]string{}
+	for _, pl := range cfg.Playlists {
+		for _, ch := range pl.Channels {
+			playout := mergePlayouts(cfg.Playout, pl.Playout, ch.Playout)
+			dir := playout.ResolvedStateDir()
+			idsByStateDir[dir] = append(idsByStateDir[dir], hashid.New(pl.Name, ch.Name))
 		}
-		if err := channelgen.PruneSchedules(cfg.StateDir, ids); err != nil {
+	}
+	for dir, ids := range idsByStateDir {
+		if err := channelgen.PruneSchedules(dir, ids); err != nil {
 			logging.Error(context.Background(), err, "failed to prune orphaned channel schedules")
 		}
 	}
@@ -184,8 +187,9 @@ func (m *Manager) addPlaylistProvider(cl *Client, playlistConf config.Playlist) 
 	}
 
 	for _, channelConf := range playlistConf.Channels {
-		gen := m.channelGenerator(playlistConf.Name, channelConf)
-		if err := cl.BuildChannelProvider(playlistConf, channelConf, m.config.Proxy, gen, pl); err != nil {
+		playout := mergePlayouts(m.config.Playout, playlistConf.Playout, channelConf.Playout)
+		gen := m.channelGenerator(playlistConf.Name, channelConf, playout)
+		if err := cl.BuildChannelProvider(playlistConf, channelConf, playout, m.config.Proxy, gen, pl); err != nil {
 			return fmt.Errorf(
 				"failed to build channel '%s' for client '%s': %w",
 				channelConf.Name, cl.name, err)
@@ -204,23 +208,23 @@ func (m *Manager) addEPGProvider(cl *Client, epgConf config.EPG) error {
 	return nil
 }
 
-func (m *Manager) channelGenerator(parentPlaylist string, channelConf config.Channel) *channelgen.Channel {
+func (m *Manager) channelGenerator(parentPlaylist string, channelConf config.Channel, playout proxy.Playout) *channelgen.Channel {
 	key := parentPlaylist + "/" + channelConf.Name
 	if gen, ok := m.channelGens[key]; ok {
 		return gen
 	}
-	swapHour, swapMin := channelConf.ResolvedScheduleSwapAt()
+	swapHour, swapMin := playout.ResolvedScheduleSwapAt()
 	gen := channelgen.NewChannel(
 		parentPlaylist,
 		channelConf.Name,
 		channelConf.Sources,
-		channelConf.ResolvedExtensions(),
-		channelConf.RandomOrder,
-		channelConf.ResolvedRefreshInterval(),
-		channelConf.ResolvedEPGDuration(),
+		playout.ResolvedExtensions(),
+		playout.ResolvedRandomOrder(),
+		playout.ResolvedRefreshInterval(),
+		playout.ResolvedEPGDuration(),
 		swapHour,
 		swapMin,
-		m.config.StateDir,
+		playout.ResolvedStateDir(),
 	)
 	m.channelGens[key] = gen
 	return gen

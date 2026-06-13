@@ -18,7 +18,7 @@ import (
 
 const testStreamURL = "testsrc=duration=60:size=320x240:rate=10"
 
-var testSegmenterCfg = proxy.Segmenter{
+var testSegmenterCfg = &proxy.Segmenter{
 	Command: common.StringOrArr{
 		"ffmpeg",
 		"-v", "fatal",
@@ -285,7 +285,7 @@ func TestGetReader_SingleClientReceivesData(t *testing.T) {
 		StreamKey:      "test-single",
 		StreamURL:      testStreamURL,
 		ClientStreamer: testClientStreamer,
-		Segmenter:      testSegmenterCfg,
+		RunnerConfig:   testSegmenterCfg,
 	}
 
 	reader, err := d.GetReader(ctx, req)
@@ -317,7 +317,7 @@ func TestGetReader_TwoClientsShareOneSegmenter(t *testing.T) {
 		StreamKey:      "test-multi",
 		StreamURL:      testStreamURL,
 		ClientStreamer: testClientStreamer,
-		Segmenter:      testSegmenterCfg,
+		RunnerConfig:   testSegmenterCfg,
 	}
 
 	reader1, err := d.GetReader(ctx, req)
@@ -368,7 +368,7 @@ func TestGetReader_ReadFailsAfterClose(t *testing.T) {
 		StreamKey:      "test-disconnect",
 		StreamURL:      testStreamURL,
 		ClientStreamer: testClientStreamer,
-		Segmenter:      testSegmenterCfg,
+		RunnerConfig:   testSegmenterCfg,
 	}
 
 	reader, err := d.GetReader(ctx, req)
@@ -406,7 +406,7 @@ func TestGetReader_SemaphoreBlocksSecondStream(t *testing.T) {
 		StreamURL:      testStreamURL,
 		ClientStreamer: testClientStreamer,
 		Semaphore:      sem,
-		Segmenter:      testSegmenterCfg,
+		RunnerConfig:   testSegmenterCfg,
 	}
 
 	reader1, err := d.GetReader(ctx1, req1)
@@ -425,7 +425,7 @@ func TestGetReader_SemaphoreBlocksSecondStream(t *testing.T) {
 		StreamURL:      testStreamURL,
 		ClientStreamer: testClientStreamer,
 		Semaphore:      sem,
-		Segmenter:      testSegmenterCfg,
+		RunnerConfig:   testSegmenterCfg,
 	}
 
 	_, err = d.GetReader(ctx2, req2)
@@ -450,7 +450,7 @@ func TestGetReader_JoiningExistingStreamDoesNotConsumeSemaphore(t *testing.T) {
 		StreamURL:      testStreamURL,
 		ClientStreamer: testClientStreamer,
 		Semaphore:      sem,
-		Segmenter:      testSegmenterCfg,
+		RunnerConfig:   testSegmenterCfg,
 	}
 
 	reader1, err := d.GetReader(ctx, req)
@@ -478,7 +478,7 @@ func TestStop_ReaderFailsAfterPoolStopped(t *testing.T) {
 		StreamKey:      "test-stop",
 		StreamURL:      testStreamURL,
 		ClientStreamer: testClientStreamer,
-		Segmenter:      testSegmenterCfg,
+		RunnerConfig:   testSegmenterCfg,
 	}
 
 	reader, err := d.GetReader(ctx, req)

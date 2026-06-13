@@ -6,6 +6,16 @@ import (
 	"majmun/internal/shell"
 )
 
+// RunnerConfig is the shared shape the stream pool needs to launch an FFmpeg process,
+// satisfied by both Segmenter (upstream proxied streams) and Playout (generated channels).
+type RunnerConfig interface {
+	GetCommand() common.StringOrArr
+	GetEnvVars() []common.NameValue
+	GetTemplateVars() []common.NameValue
+	GetInitSegments() *int
+	GetReadyTimeout() *common.Duration
+}
+
 type Segmenter struct {
 	Command      common.StringOrArr `yaml:"command,omitempty"`
 	TemplateVars []common.NameValue `yaml:"template_variables,omitempty"`
@@ -14,6 +24,12 @@ type Segmenter struct {
 	InitSegments *int             `yaml:"init_segments,omitempty"`
 	ReadyTimeout *common.Duration `yaml:"ready_timeout,omitempty"`
 }
+
+func (s *Segmenter) GetCommand() common.StringOrArr      { return s.Command }
+func (s *Segmenter) GetEnvVars() []common.NameValue      { return s.EnvVars }
+func (s *Segmenter) GetTemplateVars() []common.NameValue { return s.TemplateVars }
+func (s *Segmenter) GetInitSegments() *int               { return s.InitSegments }
+func (s *Segmenter) GetReadyTimeout() *common.Duration   { return s.ReadyTimeout }
 
 func mergeSegmenterVars(base, override *Segmenter) {
 	override.TemplateVars = common.MergeNameValues(base.TemplateVars, override.TemplateVars)

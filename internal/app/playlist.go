@@ -155,6 +155,6 @@ func (ps *Playlist) ClientStreamer(playlistPath string) streampool.Streamer {
 	return ps.streamer.WithTemplateVars(map[string]any{"input": playlistPath})
 }
 
-func (ps *Playlist) SegmenterConfig() proxy.Segmenter {
-	return ps.proxyConfig.Segmenter
+func (ps *Playlist) SegmenterConfig() proxy.RunnerConfig {
+	return &ps.proxyConfig.Segmenter
 }
