@@ -88,6 +88,7 @@ func DefaultConfig() *Config {
 					"-flags", "+cgop",
 					"-sc_threshold", "0",
 					"-force_key_frames", "expr:gte(t,n_forced*{{ .segment_duration }})",
+					"-af", "aresample=async=1:first_pts=0",
 					"-c:a", "aac",
 					"-ar", "{{ .audio_rate }}",
 					"-ac", "{{ .audio_channels }}",

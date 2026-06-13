@@ -22,6 +22,8 @@ type Channel struct {
 	randomOrder bool
 	refresh     time.Duration
 	epgDuration time.Duration
+	swapHour    int
+	swapMin     int
 	stateDir    string
 	prober      prober
 
@@ -31,9 +33,12 @@ type Channel struct {
 	dirty     bool
 	lastBuilt time.Time
 	building  atomic.Bool
+
+	pending   *Schedule
+	promoteAt time.Time
 }
 
-func NewChannel(playlist, name string, sources, extensions []string, randomOrder bool, refresh, epgDuration time.Duration, stateDir string) *Channel {
+func NewChannel(playlist, name string, sources, extensions []string, randomOrder bool, refresh, epgDuration time.Duration, swapHour, swapMin int, stateDir string) *Channel {
 	return &Channel{
 		id:          hashid.New(playlist, name),
 		playlist:    playlist,
@@ -43,6 +48,8 @@ func NewChannel(playlist, name string, sources, extensions []string, randomOrder
 		randomOrder: randomOrder,
 		refresh:     refresh,
 		epgDuration: epgDuration,
+		swapHour:    swapHour,
+		swapMin:     swapMin,
 		stateDir:    stateDir,
 		prober:      ffprobeProber{},
 	}
@@ -54,14 +61,49 @@ func NewChannel(playlist, name string, sources, extensions []string, randomOrder
 func (c *Channel) current(now time.Time) *Schedule {
 	c.mu.Lock()
 	c.ensureLoadedLocked()
+	promoted := c.promotePendingLocked(now)
 	s := c.schedule
 	need := c.needsBuildLocked(now)
 	c.mu.Unlock()
 
+	if promoted != nil {
+		if err := saveSchedule(c.stateDir, promoted); err != nil {
+			logging.Error(c.logCtx(context.Background()), err, "failed to persist channel schedule")
+		}
+	}
 	if need {
 		c.maybeBuild(now)
 	}
 	return s
+}
+
+// promotePendingLocked adopts a deferred schedule once its swap time has arrived and the
+// programme playing at that time has finished. It returns the newly adopted schedule (to be
+// persisted by the caller outside the lock) or nil. Callers must hold c.mu.
+func (c *Channel) promotePendingLocked(now time.Time) *Schedule {
+	if c.pending == nil || now.Before(c.promoteAt) {
+		return nil
+	}
+	if c.schedule != nil {
+		// Boundary is anchored at promoteAt (the programme airing at the swap time), not now,
+		// so a long gap since promoteAt still promotes (the boundary is then in the past).
+		if _, _, _, boundary, ok := locate(c.schedule, c.promoteAt); ok && now.Before(boundary) {
+			return nil
+		}
+	}
+	s := c.pending
+	c.schedule = s
+	c.pending = nil
+	c.promoteAt = time.Time{}
+	return s
+}
+
+func (c *Channel) nextSwap(now time.Time) time.Time {
+	t := time.Date(now.Year(), now.Month(), now.Day(), c.swapHour, c.swapMin, 0, 0, now.Location())
+	if !t.After(now) {
+		t = t.AddDate(0, 0, 1)
+	}
+	return t
 }
 
 // WarmUp builds the schedule synchronously when it is not yet ready, so the first viewer
@@ -152,14 +194,44 @@ func (c *Channel) build(ctx context.Context, now time.Time) {
 			"items", len(s.Items), "took", time.Since(started).Round(time.Millisecond))
 	}
 
+	c.mu.Lock()
+	c.lastBuilt = now
+
+	changed := old != nil && !old.isEmpty() && s.Fingerprint != old.Fingerprint && !s.isEmpty()
+	if changed {
+		swapAt := c.nextSwap(now)
+		// A removed file is skipped live, but that desyncs playout from the EPG once its slot
+		// is reached. Adopt the new schedule early only when a removed file would air before
+		// the swap; otherwise the swap adopts the corrected schedule first, so defer as usual.
+		air, removed := earliestRemovedAir(old, s, now)
+		if !removed || !air.Before(swapAt) {
+			// Keep an already-scheduled swap time so repeated refresh rebuilds of the same
+			// change do not keep pushing the promotion to the next day.
+			if c.pending == nil || c.pending.Fingerprint != s.Fingerprint {
+				c.promoteAt = swapAt
+				logging.Info(ctx, "channel schedule change deferred", "swap_at", c.promoteAt.Format(time.RFC3339))
+			}
+			c.pending = s
+			c.mu.Unlock()
+			return
+		}
+		logging.Info(ctx, "removed file airs before swap, adopting schedule early",
+			"airs_at", air.Format(time.RFC3339), "swap_at", swapAt.Format(time.RFC3339))
+	}
+
+	if s.isEmpty() && old != nil && !old.isEmpty() {
+		c.mu.Unlock()
+		return
+	}
+
+	c.pending = nil
+	c.promoteAt = time.Time{}
+	c.schedule = s
+	c.mu.Unlock()
+
 	if old == nil || s.Fingerprint != old.Fingerprint {
 		if err := saveSchedule(c.stateDir, s); err != nil {
 			logging.Error(ctx, err, "failed to persist channel schedule")
 		}
 	}
-
-	c.mu.Lock()
-	c.schedule = s
-	c.lastBuilt = now
-	c.mu.Unlock()
 }

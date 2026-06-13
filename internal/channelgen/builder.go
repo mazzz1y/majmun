@@ -147,6 +147,40 @@ func locate(s *Schedule, now time.Time) (index int, item Item, offset float64, n
 	return lastIdx, last, last.Duration, boundary, true
 }
 
+// earliestRemovedAir returns the soonest next occurrence in old's looping timeline of a file
+// present in old but absent from s, and whether any such file exists. The result lies in
+// [now, now+total): a removed file that is airing right now reports its next loop occurrence,
+// which is exactly when the running transcode would reopen (and fail on) the deleted file. It
+// is used to decide whether a removal must be adopted before the daily swap.
+func earliestRemovedAir(old, s *Schedule, now time.Time) (time.Time, bool) {
+	total := old.total()
+	if total <= 0 {
+		return time.Time{}, false
+	}
+
+	present := make(map[string]struct{}, len(s.Items))
+	for _, it := range s.Items {
+		present[it.File] = struct{}{}
+	}
+
+	elapsed := mathMod(float64(now.Unix()-old.Anchor), total)
+
+	var acc float64
+	best := time.Time{}
+	found := false
+	for _, it := range old.Items {
+		if _, ok := present[it.File]; !ok {
+			delta := mathMod(acc-elapsed, total)
+			air := now.Add(time.Duration(delta * float64(time.Second)))
+			if !found || air.Before(best) {
+				best, found = air, true
+			}
+		}
+		acc += it.Duration
+	}
+	return best, found
+}
+
 func mathMod(a, m float64) float64 {
 	if m <= 0 {
 		return 0

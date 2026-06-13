@@ -56,6 +56,44 @@ func TestChannelResolvedEPGDuration(t *testing.T) {
 	}
 }
 
+func TestChannelResolvedScheduleSwapAt(t *testing.T) {
+	c := Channel{Name: "c", Sources: common.StringOrArr{"/m"}}
+	if h, m := c.ResolvedScheduleSwapAt(); h != defaultScheduleSwapHour || m != defaultScheduleSwapMinute {
+		t.Errorf("expected default %02d:%02d, got %02d:%02d", defaultScheduleSwapHour, defaultScheduleSwapMinute, h, m)
+	}
+
+	v := "23:45"
+	c.ScheduleSwapAt = &v
+	if h, m := c.ResolvedScheduleSwapAt(); h != 23 || m != 45 {
+		t.Errorf("expected 23:45, got %02d:%02d", h, m)
+	}
+}
+
+func TestParseSwapAt(t *testing.T) {
+	valid := map[string][2]int{
+		"00:00": {0, 0},
+		"04:00": {4, 0},
+		"23:59": {23, 59},
+		" 9:05": {9, 5},
+	}
+	for in, want := range valid {
+		h, m, err := parseSwapAt(in)
+		if err != nil {
+			t.Errorf("parseSwapAt(%q) unexpected error: %v", in, err)
+			continue
+		}
+		if h != want[0] || m != want[1] {
+			t.Errorf("parseSwapAt(%q) = %02d:%02d, want %02d:%02d", in, h, m, want[0], want[1])
+		}
+	}
+
+	for _, in := range []string{"", "4", "4:00:00", "24:00", "04:60", "-1:00", "aa:bb", "04.00"} {
+		if _, _, err := parseSwapAt(in); err == nil {
+			t.Errorf("parseSwapAt(%q) expected error, got nil", in)
+		}
+	}
+}
+
 func validBaseConfig() Config {
 	u, _ := url.Parse("http://example.com")
 	return Config{

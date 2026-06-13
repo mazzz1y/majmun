@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"majmun/internal/config/common"
 	"majmun/internal/shell"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -13,6 +15,8 @@ var defaultChannelExtensions = []string{
 const (
 	defaultChannelRefresh     = 5 * time.Minute
 	defaultChannelEPGDuration = 7 * 24 * time.Hour
+	defaultScheduleSwapHour   = 4
+	defaultScheduleSwapMinute = 0
 )
 
 type Channel struct {
@@ -25,6 +29,7 @@ type Channel struct {
 	Extensions      common.StringOrArr `yaml:"extensions,omitempty"`
 	RefreshInterval *common.Duration   `yaml:"refresh_interval,omitempty"`
 	EPGDuration     *common.Duration   `yaml:"epg_duration,omitempty"`
+	ScheduleSwapAt  *string            `yaml:"schedule_swap_at,omitempty"`
 }
 
 type ChannelField struct {
@@ -73,7 +78,28 @@ func (c *Channel) Validate() error {
 			return fmt.Errorf("template_variables[%d]: %q is a reserved variable", i, templateVar.Name)
 		}
 	}
+	if c.ScheduleSwapAt != nil {
+		if _, _, err := parseSwapAt(*c.ScheduleSwapAt); err != nil {
+			return fmt.Errorf("schedule_swap_at: %w", err)
+		}
+	}
 	return nil
+}
+
+func parseSwapAt(v string) (hour, minute int, err error) {
+	parts := strings.Split(strings.TrimSpace(v), ":")
+	if len(parts) != 2 {
+		return 0, 0, fmt.Errorf("must be in HH:MM format, got %q", v)
+	}
+	hour, err = strconv.Atoi(parts[0])
+	if err != nil || hour < 0 || hour > 23 {
+		return 0, 0, fmt.Errorf("hour must be 0-23, got %q", v)
+	}
+	minute, err = strconv.Atoi(parts[1])
+	if err != nil || minute < 0 || minute > 59 {
+		return 0, 0, fmt.Errorf("minute must be 0-59, got %q", v)
+	}
+	return hour, minute, nil
 }
 
 func (c *Channel) ResolvedExtensions() []string {
@@ -95,4 +121,15 @@ func (c *Channel) ResolvedEPGDuration() time.Duration {
 		return defaultChannelEPGDuration
 	}
 	return time.Duration(*c.EPGDuration)
+}
+
+func (c *Channel) ResolvedScheduleSwapAt() (hour, minute int) {
+	if c.ScheduleSwapAt == nil {
+		return defaultScheduleSwapHour, defaultScheduleSwapMinute
+	}
+	hour, minute, err := parseSwapAt(*c.ScheduleSwapAt)
+	if err != nil {
+		return defaultScheduleSwapHour, defaultScheduleSwapMinute
+	}
+	return hour, minute
 }

@@ -209,6 +209,7 @@ func (m *Manager) channelGenerator(parentPlaylist string, channelConf config.Cha
 	if gen, ok := m.channelGens[key]; ok {
 		return gen
 	}
+	swapHour, swapMin := channelConf.ResolvedScheduleSwapAt()
 	gen := channelgen.NewChannel(
 		parentPlaylist,
 		channelConf.Name,
@@ -217,6 +218,8 @@ func (m *Manager) channelGenerator(parentPlaylist string, channelConf config.Cha
 		channelConf.RandomOrder,
 		channelConf.ResolvedRefreshInterval(),
 		channelConf.ResolvedEPGDuration(),
+		swapHour,
+		swapMin,
 		m.config.StateDir,
 	)
 	m.channelGens[key] = gen

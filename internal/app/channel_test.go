@@ -43,6 +43,7 @@ func newChannelProvider(t *testing.T, parentPlaylist string, conf config.Channel
 		conf.RandomOrder,
 		conf.ResolvedRefreshInterval(),
 		conf.ResolvedEPGDuration(),
+		4, 0,
 		"state",
 	)
 	pl, err := NewPlaylistProvider(parentPlaylist, urlGen, nil, mergedProxy, nil, nil, httpclient.NewDirectClient(nil), false)

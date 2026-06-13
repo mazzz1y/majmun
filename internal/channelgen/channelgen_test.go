@@ -564,7 +564,7 @@ func TestProgrammesGrid(t *testing.T) {
 // resolves a channel by the app-side id while the generator loads its schedule by this one,
 // so the two must agree or schedule lookup breaks silently.
 func TestNewChannelIDContract(t *testing.T) {
-	c := NewChannel("local", "cartoons", nil, testExtensions, false, 0, 24*time.Hour, "state")
+	c := NewChannel("local", "cartoons", nil, testExtensions, false, 0, 24*time.Hour, 4, 0, "state")
 	if c.id != hashid.New("local", "cartoons") {
 		t.Errorf("expected id to hash the playlist and channel names, got %s", c.id)
 	}
@@ -575,7 +575,7 @@ func TestBuildPersistsScheduleFlat(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "a.mkv"))
 	p := newFakeProber()
 	// Hostile characters in names never reach the filesystem: the id is a hashid.
-	c := NewChannel("local", "name with? hostile/chars ", []string{dir}, testExtensions, false, 0, 24*time.Hour, t.TempDir())
+	c := NewChannel("local", "name with? hostile/chars ", []string{dir}, testExtensions, false, 0, 24*time.Hour, 4, 0, t.TempDir())
 	c.prober = p
 	stateDir := c.stateDir
 
@@ -756,5 +756,258 @@ func TestDirtySignalDuringBuildSurvives(t *testing.T) {
 	c.mu.Unlock()
 	if !dirty {
 		t.Error("dirty signal arriving mid-build must survive, so the next access rebuilds")
+	}
+}
+
+func TestScheduleChangeDeferredUntilSwapTime(t *testing.T) {
+	dir := t.TempDir()
+	a := filepath.Join(dir, "a.mkv")
+	writeFile(t, a)
+	p := newFakeProber()
+	p.durations[a] = 60
+	c, _ := newTestChannel(t, "c", []string{dir}, p)
+	c.refresh = time.Hour
+	c.swapHour, c.swapMin = 4, 0
+
+	t0 := time.Date(2024, 1, 1, 10, 0, 0, 0, time.Local)
+	warmUp(t, c, t0)
+	first := c.schedule
+	if first == nil {
+		t.Fatal("expected first schedule adopted immediately")
+	}
+
+	writeFile(t, filepath.Join(dir, "b.mkv"))
+	warmUp(t, c, t0.Add(2*time.Hour))
+
+	c.mu.Lock()
+	pending, active, promoteAt := c.pending, c.schedule, c.promoteAt
+	c.mu.Unlock()
+	if pending == nil {
+		t.Fatal("expected changed schedule to be deferred in pending")
+	}
+	if active != first {
+		t.Error("live schedule must keep playing until the swap time")
+	}
+	want := time.Date(2024, 1, 2, 4, 0, 0, 0, time.Local)
+	if !promoteAt.Equal(want) {
+		t.Errorf("promoteAt = %v, want next 04:00 = %v", promoteAt, want)
+	}
+
+	if got, _ := c.Resolve(t0.Add(2 * time.Hour)); got.Fingerprint != first.Fingerprint {
+		t.Error("schedule must not change before the swap time")
+	}
+
+	if got, _ := c.Resolve(want.Add(time.Second)); got.Fingerprint != first.Fingerprint {
+		t.Error("swap must wait for the current item to finish, not cut mid-show")
+	}
+	c.mu.Lock()
+	heldPending := c.pending
+	c.mu.Unlock()
+	if heldPending == nil {
+		t.Error("pending must still be held until the item boundary")
+	}
+
+	got, ok := c.Resolve(want.Add(60 * time.Second).Add(time.Second))
+	if !ok {
+		t.Fatal("resolve failed after item boundary")
+	}
+	if got.Fingerprint == first.Fingerprint {
+		t.Error("expected pending schedule to be promoted after the item boundary")
+	}
+	c.mu.Lock()
+	stillPending := c.pending
+	c.mu.Unlock()
+	if stillPending != nil {
+		t.Error("pending should be cleared after promotion")
+	}
+}
+
+func TestDeferredSwapTimeNotPostponedByRebuilds(t *testing.T) {
+	dir := t.TempDir()
+	a := filepath.Join(dir, "a.mkv")
+	writeFile(t, a)
+	p := newFakeProber()
+	p.durations[a] = 60
+	c, _ := newTestChannel(t, "c", []string{dir}, p)
+	c.refresh = 5 * time.Minute
+	c.swapHour, c.swapMin = 4, 0
+
+	t0 := time.Date(2024, 1, 1, 10, 0, 0, 0, time.Local)
+	warmUp(t, c, t0)
+
+	writeFile(t, filepath.Join(dir, "b.mkv"))
+	warmUp(t, c, t0.Add(10*time.Minute))
+
+	c.mu.Lock()
+	first := c.promoteAt
+	pendingFp := c.pending.Fingerprint
+	c.mu.Unlock()
+	want := time.Date(2024, 1, 2, 4, 0, 0, 0, time.Local)
+	if !first.Equal(want) {
+		t.Fatalf("promoteAt = %v, want %v", first, want)
+	}
+
+	// Subsequent refresh rebuilds of the same pending change must not push the swap time out.
+	for _, d := range []time.Duration{20 * time.Minute, 6 * time.Hour, 16 * time.Hour} {
+		warmUp(t, c, t0.Add(d))
+		c.mu.Lock()
+		got, fp := c.promoteAt, c.pending.Fingerprint
+		c.mu.Unlock()
+		if !got.Equal(want) {
+			t.Errorf("at +%v: promoteAt = %v, want unchanged %v", d, got, want)
+		}
+		if fp != pendingFp {
+			t.Errorf("at +%v: pending fingerprint changed unexpectedly", d)
+		}
+	}
+}
+
+func TestRemovedFileAiringBeforeSwapSwapsEarly(t *testing.T) {
+	dir := t.TempDir()
+	a := filepath.Join(dir, "a.mkv")
+	b := filepath.Join(dir, "b.mkv")
+	writeFile(t, a)
+	writeFile(t, b)
+	p := newFakeProber()
+	p.durations[a] = 60
+	p.durations[b] = 60
+	c, stateDir := newTestChannel(t, "c", []string{dir}, p)
+	c.refresh = time.Hour
+	c.swapHour, c.swapMin = 4, 0
+
+	t0 := time.Date(2024, 1, 1, 10, 0, 0, 0, time.Local)
+	warmUp(t, c, t0)
+	first := c.schedule
+
+	// Total cycle is 120s, so any surviving file airs again within minutes — well before the
+	// next 04:00. Removing one must adopt the corrected schedule immediately.
+	if err := os.Remove(b); err != nil {
+		t.Fatal(err)
+	}
+	warmUp(t, c, t0.Add(2*time.Hour))
+
+	c.mu.Lock()
+	active, pending, promoteAt := c.schedule, c.pending, c.promoteAt
+	c.mu.Unlock()
+	if active == first {
+		t.Error("removed file airing before swap must adopt the new schedule immediately")
+	}
+	if len(active.Items) != 1 {
+		t.Errorf("expected 1 surviving item, got %d", len(active.Items))
+	}
+	if pending != nil || !promoteAt.IsZero() {
+		t.Error("immediate adoption must clear any pending swap")
+	}
+
+	// The early-adopted schedule must be persisted, so a restart keeps it.
+	saved, err := loadSchedule(stateDir, "c")
+	if err != nil || saved == nil {
+		t.Fatalf("expected persisted schedule, got %v err %v", saved, err)
+	}
+	if saved.Fingerprint != active.Fingerprint {
+		t.Error("persisted schedule must match the early-adopted one")
+	}
+}
+
+func TestRemovedFileAiringAfterSwapDefers(t *testing.T) {
+	dir := t.TempDir()
+	keep := filepath.Join(dir, "a_keep.mkv")
+	gone := filepath.Join(dir, "z_gone.mkv")
+	writeFile(t, keep)
+	writeFile(t, gone)
+	p := newFakeProber()
+	// Long items so the playlist does not loop before the swap: the first item alone covers
+	// far beyond the next 04:00, pushing z_gone's slot past the swap time.
+	p.durations[keep] = 40 * 3600
+	p.durations[gone] = 40 * 3600
+	c, _ := newTestChannel(t, "c", []string{dir}, p)
+	c.refresh = time.Hour
+	c.swapHour, c.swapMin = 4, 0
+
+	t0 := time.Date(2024, 1, 1, 10, 0, 0, 0, time.Local)
+	warmUp(t, c, t0)
+	first := c.schedule
+
+	// Sanity: a_keep airs from anchor, z_gone only after 40h — past tomorrow 04:00 (18h away).
+	if err := os.Remove(gone); err != nil {
+		t.Fatal(err)
+	}
+	warmUp(t, c, t0.Add(2*time.Hour))
+
+	c.mu.Lock()
+	active, pending := c.schedule, c.pending
+	c.mu.Unlock()
+	if active != first {
+		t.Error("removal airing after the swap must defer, not switch early")
+	}
+	if pending == nil {
+		t.Error("expected the corrected schedule to be deferred in pending")
+	}
+}
+
+func TestRemovalSupersedesPendingAddition(t *testing.T) {
+	dir := t.TempDir()
+	a := filepath.Join(dir, "a.mkv")
+	b := filepath.Join(dir, "b.mkv")
+	writeFile(t, a)
+	writeFile(t, b)
+	p := newFakeProber()
+	p.durations[a] = 60
+	p.durations[b] = 60
+	c, _ := newTestChannel(t, "c", []string{dir}, p)
+	c.refresh = time.Hour
+	c.swapHour, c.swapMin = 4, 0
+
+	t0 := time.Date(2024, 1, 1, 10, 0, 0, 0, time.Local)
+	warmUp(t, c, t0)
+
+	// An addition is deferred.
+	writeFile(t, filepath.Join(dir, "c.mkv"))
+	warmUp(t, c, t0.Add(2*time.Hour))
+	c.mu.Lock()
+	deferred := c.pending != nil
+	c.mu.Unlock()
+	if !deferred {
+		t.Fatal("addition should have been deferred")
+	}
+
+	// A removal that airs before the swap must supersede the pending addition and adopt now.
+	if err := os.Remove(b); err != nil {
+		t.Fatal(err)
+	}
+	warmUp(t, c, t0.Add(3*time.Hour))
+	c.mu.Lock()
+	pending, promoteAt := c.pending, c.promoteAt
+	c.mu.Unlock()
+	if pending != nil || !promoteAt.IsZero() {
+		t.Error("removal airing before swap must supersede the pending addition and adopt now")
+	}
+}
+
+func TestEmptyRebuildKeepsPlayingSchedule(t *testing.T) {
+	dir := t.TempDir()
+	a := filepath.Join(dir, "a.mkv")
+	writeFile(t, a)
+	p := newFakeProber()
+	c, _ := newTestChannel(t, "c", []string{dir}, p)
+	c.refresh = time.Hour
+
+	t0 := time.Date(2024, 1, 1, 10, 0, 0, 0, time.Local)
+	warmUp(t, c, t0)
+	first := c.schedule
+
+	if err := os.Remove(a); err != nil {
+		t.Fatal(err)
+	}
+	warmUp(t, c, t0.Add(2*time.Hour))
+
+	c.mu.Lock()
+	active, pending := c.schedule, c.pending
+	c.mu.Unlock()
+	if active != first {
+		t.Error("emptied sources must not displace the playing schedule")
+	}
+	if pending != nil {
+		t.Error("an empty rebuild must not be queued as pending")
 	}
 }
