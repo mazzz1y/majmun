@@ -144,7 +144,9 @@ func (c *Channel) Programmes(ctx context.Context, now time.Time) ([]listing.Prog
 }
 
 func (c *Channel) ClientStreamer(playlistPath string) streampool.Streamer {
-	return c.streamer.WithTemplateVars(map[string]any{"input": playlistPath})
+	return c.streamer.WithTemplateVars(map[string]any{
+		"Stream": map[string]any{"PlaylistPath": playlistPath},
+	})
 }
 
 func (c *Channel) UpstreamErrorStreamer() *shell.Streamer {

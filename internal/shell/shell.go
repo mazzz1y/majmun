@@ -12,7 +12,9 @@ import (
 	"os"
 	"os/exec"
 	"slices"
+	"strings"
 	"text/template"
+	"unicode"
 
 	"github.com/Masterminds/sprig/v3"
 )
@@ -20,17 +22,18 @@ import (
 const (
 	maxRenderIterations = 10
 	bufferSize          = 64 * 1024
+	// envPrefix namespaces the environment variables derived from runtime template
+	// vars, e.g. {{ .Stream.PlaylistPath }} is also exposed as $MAJMUN_STREAM_PLAYLIST_PATH.
+	envPrefix = "MAJMUN_"
 )
 
-// reservedVars are template variable names injected at runtime into segmenter/playout
-// commands: url, segment_path and playlist_path by streampool's segmenter, input and the
-// Channel/Playlist namespaces by the server's channel stream handler. Config validation
-// rejects user-defined variables with these names.
+// reservedVars are the top-level template namespaces injected at runtime: Stream
+// (URL/SegmentPath/PlaylistPath) by streampool's segmenter, Playout (Input) and the
+// Channel/Playlist metadata namespaces by the server's channel stream handler. Config
+// validation rejects user-defined variables with these names.
 var reservedVars = []string{
-	"input",
-	"url",
-	"segment_path",
-	"playlist_path",
+	"Stream",
+	"Playout",
 	"Channel",
 	"Playlist",
 }
@@ -81,7 +84,7 @@ func NewShellStreamer(command []string, envVars []common.NameValue, tmplVars []c
 func (s *Streamer) WithTemplateVars(templateVars map[string]any) *Streamer {
 	clone := &Streamer{
 		cmdTmpl:  s.cmdTmpl,
-		envVars:  s.envVars,
+		envVars:  slices.Concat(s.envVars, envFromVars(templateVars)),
 		tmplVars: make(map[string]any),
 	}
 
@@ -89,6 +92,53 @@ func (s *Streamer) WithTemplateVars(templateVars map[string]any) *Streamer {
 	maps.Copy(clone.tmplVars, templateVars)
 
 	return clone
+}
+
+// envFromVars exposes runtime-injected template namespaces as process environment
+// variables so commands can read them as $MAJMUN_STREAM_PLAYLIST_PATH in addition to
+// {{ .Stream.PlaylistPath }}. Nested namespaces are flattened one level
+// (e.g. Stream.PlaylistPath -> MAJMUN_STREAM_PLAYLIST_PATH); scalar values map to
+// MAJMUN_<NAME>. Non-string and empty leaves are skipped.
+func envFromVars(vars map[string]any) []string {
+	var env []string
+	for name, value := range vars {
+		switch v := value.(type) {
+		case map[string]any:
+			for field, fieldValue := range v {
+				if str, ok := fieldValue.(string); ok && str != "" {
+					env = append(env, envPrefix+envName(name)+"_"+envName(field)+"="+str)
+				}
+			}
+		case string:
+			if v != "" {
+				env = append(env, envPrefix+envName(name)+"="+v)
+			}
+		}
+	}
+	slices.Sort(env)
+	return env
+}
+
+// envName converts a template variable name to an upper SNAKE_CASE environment
+// variable segment, splitting camelCase boundaries (PlaylistPath -> PLAYLIST_PATH)
+// while keeping acronyms intact (URL -> URL).
+func envName(name string) string {
+	var b strings.Builder
+	runes := []rune(name)
+	for i, r := range runes {
+		if i > 0 && unicode.IsUpper(r) {
+			prev := runes[i-1]
+			next := rune(0)
+			if i+1 < len(runes) {
+				next = runes[i+1]
+			}
+			if unicode.IsLower(prev) || (unicode.IsUpper(prev) && unicode.IsLower(next)) {
+				b.WriteByte('_')
+			}
+		}
+		b.WriteRune(unicode.ToUpper(r))
+	}
+	return b.String()
 }
 
 func (s *Streamer) Run(ctx context.Context) error {

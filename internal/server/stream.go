@@ -161,7 +161,9 @@ func (s *Server) handleChannelStream(
 		ClientStreamer: channel.ClientStreamer,
 		RunnerConfig:   channel.Playout(),
 		ExtraVars: map[string]any{
-			"input": concatPath,
+			"Playout": map[string]any{
+				"Input": concatPath,
+			},
 			"Channel": map[string]any{
 				"Name": channel.Name(),
 				"Logo": channel.Logo(),

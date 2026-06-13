@@ -47,11 +47,12 @@ func newSegmenter(parentCtx context.Context, streamKey string, baseDir string, c
 		return nil, fmt.Errorf("parse segmenter command: %w", err)
 	}
 
-	vars := map[string]any{
-		"url":           streamURL,
-		"segment_path":  filepath.Join(dir, "seg_%05d.ts"),
-		"playlist_path": playlistPath,
+	stream := map[string]any{
+		"URL":          streamURL,
+		"SegmentPath":  filepath.Join(dir, "seg_%05d.ts"),
+		"PlaylistPath": playlistPath,
 	}
+	vars := map[string]any{"Stream": stream}
 	maps.Copy(vars, extraVars)
 
 	streamer := base.WithTemplateVars(vars)

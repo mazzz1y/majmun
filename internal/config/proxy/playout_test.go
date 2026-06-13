@@ -117,7 +117,7 @@ func TestPlayoutValidate(t *testing.T) {
 		t.Error("expected error for invalid schedule_swap_at")
 	}
 
-	reserved := Playout{TemplateVars: []common.NameValue{{Name: "input", Value: "x"}}}
+	reserved := Playout{TemplateVars: []common.NameValue{{Name: "Playout", Value: "x"}}}
 	if err := reserved.Validate(); err == nil {
 		t.Error("expected error for reserved template variable")
 	}

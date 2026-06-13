@@ -15,7 +15,7 @@ import (
 func testChannelProxy() proxy.Proxy {
 	return proxy.Proxy{
 		Stream: proxy.Handler{
-			Command: common.StringOrArr{"ffmpeg", "-i", "{{ .input }}", "-f", "mpegts", "pipe:1"},
+			Command: common.StringOrArr{"ffmpeg", "-i", "{{ .Stream.PlaylistPath }}", "-f", "mpegts", "pipe:1"},
 		},
 		Error: proxy.Error{
 			UpstreamError: proxy.Handler{
@@ -27,7 +27,7 @@ func testChannelProxy() proxy.Proxy {
 
 func testPlayout() proxy.Playout {
 	return proxy.Playout{
-		Command: common.StringOrArr{"ffmpeg", "-i", "{{ .input }}", "-f", "hls", "{{ .playlist_path }}"},
+		Command: common.StringOrArr{"ffmpeg", "-i", "{{ .Playout.Input }}", "-f", "hls", "{{ .Stream.PlaylistPath }}"},
 	}
 }
 

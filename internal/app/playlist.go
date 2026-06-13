@@ -152,7 +152,9 @@ func (ps *Playlist) ExpiredLinkStreamer() *shell.Streamer {
 }
 
 func (ps *Playlist) ClientStreamer(playlistPath string) streampool.Streamer {
-	return ps.streamer.WithTemplateVars(map[string]any{"input": playlistPath})
+	return ps.streamer.WithTemplateVars(map[string]any{
+		"Stream": map[string]any{"PlaylistPath": playlistPath},
+	})
 }
 
 func (ps *Playlist) SegmenterConfig() proxy.RunnerConfig {

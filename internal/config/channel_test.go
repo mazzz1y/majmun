@@ -103,7 +103,7 @@ func TestChannelValidate(t *testing.T) {
 		{
 			name: "invalid playout propagates",
 			channel: Channel{Name: "c", Sources: common.StringOrArr{"/m"},
-				Playout: proxy.Playout{TemplateVars: []common.NameValue{{Name: "input", Value: "x"}}}},
+				Playout: proxy.Playout{TemplateVars: []common.NameValue{{Name: "Playout", Value: "x"}}}},
 			expectError: true,
 		},
 	}
