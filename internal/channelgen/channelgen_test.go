@@ -445,86 +445,78 @@ func TestLoadScheduleMissing(t *testing.T) {
 	}
 }
 
-func TestBuildConcatWindowSkipsMissing(t *testing.T) {
+func activeFingerprint(c *Channel) string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.schedule == nil {
+		return ""
+	}
+	return c.schedule.Fingerprint
+}
+
+func TestResolveCurrentSkipsMissing(t *testing.T) {
 	dir := t.TempDir()
 	good := filepath.Join(dir, "good.mkv")
 	writeFile(t, good)
 
-	s := &Schedule{
+	p := newFakeProber()
+	c, _ := newTestChannel(t, "c", []string{dir}, p)
+
+	// Inject a schedule whose first item is gone so the current slot must skip forward.
+	// loaded + lastBuilt + high refresh keep current() from rebuilding it out from under us.
+	gone := filepath.Join(dir, "gone.mkv")
+	now := time.Unix(1030, 0) // 30s into the (missing) first slot
+	c.refresh = time.Hour
+	c.loaded = true
+	c.lastBuilt = now
+	c.schedule = &Schedule{
+		Channel: c.id,
+		Anchor:  1000,
 		Items: []Item{
-			{File: filepath.Join(dir, "gone.mkv"), Duration: 100},
+			{File: gone, Duration: 100},
 			{File: good, Duration: 100},
 		},
 	}
-	w := buildConcatWindow(s, 0, 30)
-	if !w.dirty {
-		t.Error("expected dirty flag")
+
+	it, ok := c.ResolveCurrent(now)
+	if !ok {
+		t.Fatal("resolve failed")
 	}
-	if w.offset != 0 {
-		t.Errorf("expected offset reset to 0, got %f", w.offset)
+	if it.File != good {
+		t.Errorf("expected surviving file, got %q", it.File)
 	}
-	if len(w.files) != 1 || w.files[0].File != good {
-		t.Errorf("expected only the surviving file, got %+v", w.files)
+	if it.Offset != 0 {
+		t.Errorf("expected offset reset to 0, got %f", it.Offset)
 	}
 }
 
-func TestResolveWritesConcatList(t *testing.T) {
+func TestResolveCurrentOffset(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, filepath.Join(dir, "a.mkv"))
 
 	p := newFakeProber()
+	p.durations[filepath.Join(dir, "a.mkv")] = 100
 	c, _ := newTestChannel(t, "c", []string{dir}, p)
 	now := time.Unix(1000, 0)
 	warmUp(t, c, now)
 
-	res, ok := c.Resolve(now)
+	it, ok := c.ResolveCurrent(now.Add(30 * time.Second))
 	if !ok {
 		t.Fatal("resolve failed")
 	}
-	segDir := t.TempDir()
-	path, err := res.WriteConcatList(segDir)
-	if err != nil {
-		t.Fatalf("write concat list: %v", err)
-	}
-	if _, err := os.Stat(path); err != nil {
-		t.Errorf("concat list not written: %v", err)
+	if it.Offset != 30 {
+		t.Errorf("expected offset 30, got %f", it.Offset)
 	}
 }
 
-func TestWriteConcatListInpoint(t *testing.T) {
-	dir := t.TempDir()
-	files := []Item{{File: "/m/a.mkv"}, {File: "/m/b.mkv"}}
-
-	path, err := writeConcatList(dir, files, 12.5)
-	if err != nil {
-		t.Fatal(err)
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	got := string(data)
-	want := "file '/m/a.mkv'\ninpoint 12.500\nfile '/m/b.mkv'\n"
-	if got != want {
-		t.Errorf("concat list mismatch:\n got: %q\nwant: %q", got, want)
-	}
-
-	// Zero offset omits inpoint entirely.
-	path, _ = writeConcatList(dir, files, 0)
-	data, _ = os.ReadFile(path)
-	if strings.Contains(string(data), "inpoint") {
-		t.Errorf("expected no inpoint at offset 0, got %q", data)
-	}
-}
-
-func TestResolveEmptyChannel(t *testing.T) {
+func TestResolveCurrentEmptyChannel(t *testing.T) {
 	dir := t.TempDir() // no media files
 	p := newFakeProber()
 	c, _ := newTestChannel(t, "c", []string{dir}, p)
 	now := time.Unix(1000, 0)
 	warmUp(t, c, now)
 
-	_, ok := c.Resolve(now)
+	_, ok := c.ResolveCurrent(now)
 	if ok {
 		t.Error("expected ok=false for empty channel")
 	}
@@ -665,13 +657,13 @@ func TestResolveDoesNotBlockOnFirstBuild(t *testing.T) {
 	now := time.Unix(1000, 0)
 
 	// First call must return immediately without a built schedule.
-	if _, ok := c.Resolve(now); ok {
+	if _, ok := c.ResolveCurrent(now); ok {
 		t.Error("expected ok=false while first build runs")
 	}
 
 	warmUp(t, c, now)
 
-	if _, ok := c.Resolve(now); !ok {
+	if _, ok := c.ResolveCurrent(now); !ok {
 		t.Error("expected ok=true after build completes")
 	}
 }
@@ -793,11 +785,13 @@ func TestScheduleChangeDeferredUntilSwapTime(t *testing.T) {
 		t.Errorf("promoteAt = %v, want next 04:00 = %v", promoteAt, want)
 	}
 
-	if got, _ := c.Resolve(t0.Add(2 * time.Hour)); got.Fingerprint != first.Fingerprint {
+	c.ResolveCurrent(t0.Add(2 * time.Hour))
+	if activeFingerprint(c) != first.Fingerprint {
 		t.Error("schedule must not change before the swap time")
 	}
 
-	if got, _ := c.Resolve(want.Add(time.Second)); got.Fingerprint != first.Fingerprint {
+	c.ResolveCurrent(want.Add(time.Second))
+	if activeFingerprint(c) != first.Fingerprint {
 		t.Error("swap must wait for the current item to finish, not cut mid-show")
 	}
 	c.mu.Lock()
@@ -807,11 +801,10 @@ func TestScheduleChangeDeferredUntilSwapTime(t *testing.T) {
 		t.Error("pending must still be held until the item boundary")
 	}
 
-	got, ok := c.Resolve(want.Add(60 * time.Second).Add(time.Second))
-	if !ok {
+	if _, ok := c.ResolveCurrent(want.Add(60 * time.Second).Add(time.Second)); !ok {
 		t.Fatal("resolve failed after item boundary")
 	}
-	if got.Fingerprint == first.Fingerprint {
+	if activeFingerprint(c) == first.Fingerprint {
 		t.Error("expected pending schedule to be promoted after the item boundary")
 	}
 	c.mu.Lock()

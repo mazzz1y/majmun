@@ -1,16 +1,26 @@
 package channelgen
 
 type Item struct {
-	File        string  `json:"file"`
-	Title       string  `json:"title"`
-	Description string  `json:"description,omitempty"`
-	Category    string  `json:"category,omitempty"`
-	Date        string  `json:"date,omitempty"`
-	Season      int     `json:"season,omitempty"`
-	Episode     int     `json:"episode,omitempty"`
-	Size        int64   `json:"size"`
-	MTime       int64   `json:"mtime"`
-	Duration    float64 `json:"duration"`
+	File           string   `json:"file"`
+	Title          string   `json:"title"`
+	Description    string   `json:"description,omitempty"`
+	Category       string   `json:"category,omitempty"`
+	Date           string   `json:"date,omitempty"`
+	Season         int      `json:"season,omitempty"`
+	Episode        int      `json:"episode,omitempty"`
+	Size           int64    `json:"size"`
+	MTime          int64    `json:"mtime"`
+	Duration       float64  `json:"duration"`
+	VideoCodec     string   `json:"video_codec,omitempty"`
+	Width          int      `json:"width,omitempty"`
+	Height         int      `json:"height,omitempty"`
+	PixelFormat    string   `json:"pixel_format,omitempty"`
+	FrameRate      string   `json:"frame_rate,omitempty"`
+	FieldOrder     string   `json:"field_order,omitempty"`
+	AudioCodec     string   `json:"audio_codec,omitempty"`
+	AudioChannels  int      `json:"audio_channels,omitempty"`
+	SampleRate     int      `json:"sample_rate,omitempty"`
+	AudioLanguages []string `json:"audio_languages,omitempty"`
 }
 
 type Schedule struct {
@@ -38,13 +48,23 @@ func (s *Schedule) probeCache() map[probeKey]probeResult {
 	cache := make(map[probeKey]probeResult, len(s.Items))
 	for _, it := range s.Items {
 		cache[probeKey{file: it.File, size: it.Size, mtime: it.MTime}] = probeResult{
-			Duration:    it.Duration,
-			Title:       it.Title,
-			Description: it.Description,
-			Category:    it.Category,
-			Date:        it.Date,
-			Season:      it.Season,
-			Episode:     it.Episode,
+			Duration:       it.Duration,
+			Title:          it.Title,
+			Description:    it.Description,
+			Category:       it.Category,
+			Date:           it.Date,
+			Season:         it.Season,
+			Episode:        it.Episode,
+			VideoCodec:     it.VideoCodec,
+			Width:          it.Width,
+			Height:         it.Height,
+			PixelFormat:    it.PixelFormat,
+			FrameRate:      it.FrameRate,
+			FieldOrder:     it.FieldOrder,
+			AudioCodec:     it.AudioCodec,
+			AudioChannels:  it.AudioChannels,
+			SampleRate:     it.SampleRate,
+			AudioLanguages: it.AudioLanguages,
 		}
 	}
 	return cache

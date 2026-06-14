@@ -28,9 +28,10 @@ const (
 )
 
 // reservedVars are the top-level template namespaces injected at runtime: Stream
-// (URL/SegmentPath/PlaylistPath) by streampool's segmenter, Playout (Input) and the
-// Channel/Playlist metadata namespaces by the server's channel stream handler. Config
-// validation rejects user-defined variables with these names.
+// (URL/SegmentPath/PlaylistPath) by streampool's segmenter, Playout (Input/Offset plus the
+// probed media parameters, set per file by the playout supervisor) and the Channel/Playlist
+// metadata namespaces by the server's channel stream handler. Config validation rejects
+// user-defined variables with these names.
 var reservedVars = []string{
 	"Stream",
 	"Playout",

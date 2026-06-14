@@ -1,6 +1,7 @@
 package channelgen
 
 import (
+	"reflect"
 	"testing"
 
 	"golang.org/x/text/encoding/charmap"
@@ -17,6 +18,88 @@ func TestParseProbeOutputUTF8(t *testing.T) {
 	}
 	if res.Category != "Drama" {
 		t.Errorf("category = %q, want %q", res.Category, "Drama")
+	}
+}
+
+func TestParseProbeOutputVideoCodec(t *testing.T) {
+	out := []byte(`{"streams":[{"codec_type":"audio","codec_name":"aac"},` +
+		`{"codec_type":"video","codec_name":"hevc"}],"format":{"duration":"60.0"}}`)
+	res, err := parseProbeOutput(out)
+	if err != nil {
+		t.Fatalf("parseProbeOutput: %v", err)
+	}
+	if res.VideoCodec != "hevc" {
+		t.Errorf("video codec = %q, want %q", res.VideoCodec, "hevc")
+	}
+
+	out = []byte(`{"streams":[{"codec_type":"audio","codec_name":"mp3"}],"format":{"duration":"60.0"}}`)
+	res, err = parseProbeOutput(out)
+	if err != nil {
+		t.Fatalf("parseProbeOutput: %v", err)
+	}
+	if res.VideoCodec != "" {
+		t.Errorf("video codec = %q, want empty", res.VideoCodec)
+	}
+}
+
+func TestParseProbeOutputMediaParams(t *testing.T) {
+	out := []byte(`{"streams":[` +
+		`{"codec_type":"video","codec_name":"h264","width":1920,"height":1080,` +
+		`"pix_fmt":"yuv420p","r_frame_rate":"30000/1001","field_order":"tt"},` +
+		`{"codec_type":"audio","codec_name":"aac","channels":6,"sample_rate":"48000",` +
+		`"tags":{"language":"eng"}}],` +
+		`"format":{"duration":"60.0"}}`)
+	res, err := parseProbeOutput(out)
+	if err != nil {
+		t.Fatalf("parseProbeOutput: %v", err)
+	}
+
+	want := probeResult{
+		Duration: 60.0, VideoCodec: "h264", Width: 1920, Height: 1080,
+		PixelFormat: "yuv420p", FrameRate: "30000/1001", FieldOrder: "tt",
+		AudioCodec: "aac", AudioChannels: 6, SampleRate: 48000,
+		AudioLanguages: []string{"eng"},
+	}
+	if !reflect.DeepEqual(res, want) {
+		t.Errorf("media params:\n got %+v\nwant %+v", res, want)
+	}
+}
+
+func TestParseProbeOutputAudioLanguages(t *testing.T) {
+	// Languages collected from every audio stream in order; untagged tracks become "und".
+	out := []byte(`{"streams":[` +
+		`{"codec_type":"video","codec_name":"h264"},` +
+		`{"codec_type":"audio","codec_name":"aac","tags":{"language":"eng"}},` +
+		`{"codec_type":"audio","codec_name":"ac3","tags":{"language":"rus"}},` +
+		`{"codec_type":"audio","codec_name":"aac"}],` +
+		`"format":{"duration":"60"}}`)
+	res, err := parseProbeOutput(out)
+	if err != nil {
+		t.Fatalf("parseProbeOutput: %v", err)
+	}
+	want := []string{"eng", "rus", "und"}
+	if !reflect.DeepEqual(res.AudioLanguages, want) {
+		t.Errorf("audio languages = %v, want %v", res.AudioLanguages, want)
+	}
+}
+
+func TestParseProbeOutputFirstStreamOfEachType(t *testing.T) {
+	// Multiple video/audio streams: only the first of each kind is captured.
+	out := []byte(`{"streams":[` +
+		`{"codec_type":"video","codec_name":"hevc","width":3840,"height":2160},` +
+		`{"codec_type":"video","codec_name":"mjpeg","width":320,"height":240},` +
+		`{"codec_type":"audio","codec_name":"eac3","channels":8},` +
+		`{"codec_type":"audio","codec_name":"aac","channels":2}],` +
+		`"format":{"duration":"10"}}`)
+	res, err := parseProbeOutput(out)
+	if err != nil {
+		t.Fatalf("parseProbeOutput: %v", err)
+	}
+	if res.VideoCodec != "hevc" || res.Width != 3840 || res.Height != 2160 {
+		t.Errorf("video = %q %dx%d, want hevc 3840x2160", res.VideoCodec, res.Width, res.Height)
+	}
+	if res.AudioCodec != "eac3" || res.AudioChannels != 8 {
+		t.Errorf("audio = %q %dch, want eac3 8ch", res.AudioCodec, res.AudioChannels)
 	}
 }
 

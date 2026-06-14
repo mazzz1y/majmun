@@ -52,16 +52,26 @@ func buildSchedule(ctx context.Context, p prober, id string, sources, extensions
 			season, episode = parseEpisode(titleFromPath(f.path))
 		}
 		items = append(items, Item{
-			File:        f.path,
-			Title:       title,
-			Description: res.Description,
-			Category:    res.Category,
-			Date:        res.Date,
-			Season:      season,
-			Episode:     episode,
-			Size:        f.size,
-			MTime:       f.mtime,
-			Duration:    res.Duration,
+			File:           f.path,
+			Title:          title,
+			Description:    res.Description,
+			Category:       res.Category,
+			Date:           res.Date,
+			Season:         season,
+			Episode:        episode,
+			Size:           f.size,
+			MTime:          f.mtime,
+			Duration:       res.Duration,
+			VideoCodec:     res.VideoCodec,
+			Width:          res.Width,
+			Height:         res.Height,
+			PixelFormat:    res.PixelFormat,
+			FrameRate:      res.FrameRate,
+			FieldOrder:     res.FieldOrder,
+			AudioCodec:     res.AudioCodec,
+			AudioChannels:  res.AudioChannels,
+			SampleRate:     res.SampleRate,
+			AudioLanguages: res.AudioLanguages,
 		})
 	}
 

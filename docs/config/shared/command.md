@@ -49,7 +49,18 @@ them without templating.
 | `{{ .Stream.URL }}`          | `MAJMUN_STREAM_URL`           | segmenter               | Upstream stream URL                                   |
 | `{{ .Stream.SegmentPath }}`  | `MAJMUN_STREAM_SEGMENT_PATH`  | segmenter, playout      | Segment filename pattern (e.g. `/tmp/.../seg_%05d.ts`)|
 | `{{ .Stream.PlaylistPath }}` | `MAJMUN_STREAM_PLAYLIST_PATH` | segmenter, stream, playout | HLS playlist path (e.g. `/tmp/.../stream.m3u8`)    |
-| `{{ .Playout.Input }}`       | `MAJMUN_PLAYOUT_INPUT`        | playout                 | FFmpeg concat list (the rotated, seeked schedule)     |
+| `{{ .Playout.Input }}`       | `MAJMUN_PLAYOUT_INPUT`        | playout                 | Path of the file to play now                          |
+| `{{ .Playout.Offset }}`      | `MAJMUN_PLAYOUT_OFFSET`       | playout                 | Seek position (seconds) into the file; empty at start |
+| `{{ .Playout.VideoCodec }}`  | `MAJMUN_PLAYOUT_VIDEO_CODEC`  | playout                 | The file's video codec (e.g. `h264`, `hevc`)          |
+| `{{ .Playout.Width }}`       | `MAJMUN_PLAYOUT_WIDTH`        | playout                 | Video width in pixels                                 |
+| `{{ .Playout.Height }}`      | `MAJMUN_PLAYOUT_HEIGHT`       | playout                 | Video height in pixels                                |
+| `{{ .Playout.PixelFormat }}` | `MAJMUN_PLAYOUT_PIXEL_FORMAT` | playout                 | Video pixel format (e.g. `yuv420p`)                   |
+| `{{ .Playout.FrameRate }}`   | `MAJMUN_PLAYOUT_FRAME_RATE`   | playout                 | Video frame rate as a fraction (e.g. `30000/1001`)    |
+| `{{ .Playout.FieldOrder }}`  | `MAJMUN_PLAYOUT_FIELD_ORDER`  | playout                 | Field order (`progressive`, `tt`, `bb`, …); for deinterlace decisions |
+| `{{ .Playout.AudioCodec }}`  | `MAJMUN_PLAYOUT_AUDIO_CODEC`  | playout                 | First audio stream codec (e.g. `aac`)                 |
+| `{{ .Playout.AudioChannels }}` | `MAJMUN_PLAYOUT_AUDIO_CHANNELS` | playout             | First audio stream channel count                      |
+| `{{ .Playout.SampleRate }}`  | `MAJMUN_PLAYOUT_SAMPLE_RATE`  | playout                 | First audio stream sample rate in Hz                  |
+| `{{ .Playout.AudioLanguages }}` | `MAJMUN_PLAYOUT_AUDIO_LANGUAGES` | playout            | Space-separated language tag of each audio stream, in order (`und` when untagged), e.g. `eng rus und` |
 | `{{ .Channel.Name }}`        | `MAJMUN_CHANNEL_NAME`         | playout                 | The channel's `name`                                  |
 | `{{ .Channel.Logo }}`        | `MAJMUN_CHANNEL_LOGO`         | playout                 | The resolved `logo` (`""` when unset)                 |
 | `{{ .Playlist.Name }}`       | `MAJMUN_PLAYLIST_NAME`        | playout                 | The parent playlist's name                            |

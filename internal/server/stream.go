@@ -5,7 +5,6 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"strings"
 	"syscall"
 	"time"
 
@@ -131,8 +130,8 @@ func (s *Server) handleChannelStream(
 	// The token routes by hashed channel ID; logs and metrics labels carry the human names.
 	ctx = ctxutil.WithProviderName(ctx, channel.Playlist().Name())
 
-	res, ok := channel.Generator().Resolve(time.Now())
-	if !ok {
+	gen := channel.Generator()
+	if _, ok := gen.ResolveCurrent(time.Now()); !ok {
 		logging.Info(ctx, "channel not ready, serving placeholder")
 		w.Header().Set("Content-Type", streamContentType)
 		if _, err := channel.UpstreamErrorStreamer().RunWithStdout(ctx, w); err != nil {
@@ -141,29 +140,35 @@ func (s *Server) handleChannelStream(
 		return
 	}
 
-	streamKey := channelStreamKey(channel.ID(), res.Fingerprint)
-	dir, err := s.streamPool.SegmentDir(streamKey)
-	if err != nil {
-		logging.Error(ctx, err, "failed to prepare channel segment dir")
-		http.Error(w, http.StatusText(http.StatusBadGateway), http.StatusBadGateway)
-		return
-	}
-
-	concatPath, err := res.WriteConcatList(dir)
-	if err != nil {
-		logging.Error(ctx, err, "failed to write channel concat list")
-		http.Error(w, http.StatusText(http.StatusBadGateway), http.StatusBadGateway)
-		return
-	}
+	// The supervisor re-resolves the file to play before every item, so a single segmenter
+	// per channel persists across schedule swaps; the key needs no fingerprint.
+	streamKey := channel.ID()
 
 	streamReq := streampool.Request{
 		StreamKey:      streamKey,
 		ClientStreamer: channel.ClientStreamer,
 		RunnerConfig:   channel.Playout(),
+		NextItem: func(now time.Time) (streampool.PlayItem, bool) {
+			it, ok := gen.ResolveCurrent(now)
+			if !ok {
+				return streampool.PlayItem{}, false
+			}
+			return streampool.PlayItem{
+				File:           it.File,
+				Offset:         it.Offset,
+				VideoCodec:     it.VideoCodec,
+				Width:          it.Width,
+				Height:         it.Height,
+				PixelFormat:    it.PixelFormat,
+				FrameRate:      it.FrameRate,
+				FieldOrder:     it.FieldOrder,
+				AudioCodec:     it.AudioCodec,
+				AudioChannels:  it.AudioChannels,
+				SampleRate:     it.SampleRate,
+				AudioLanguages: it.AudioLanguages,
+			}, true
+		},
 		ExtraVars: map[string]any{
-			"Playout": map[string]any{
-				"Input": concatPath,
-			},
 			"Channel": map[string]any{
 				"Name": channel.Name(),
 				"Logo": channel.Logo(),
@@ -183,15 +188,6 @@ func (s *Server) handleChannelStream(
 	defer func() { _ = reader.Close() }()
 
 	s.streamToResponse(ctx, w, reader)
-}
-
-// channelStreamKey ties the segmenter identity to the schedule fingerprint, so a rebuilt
-// schedule spawns a fresh segmenter that reads the new concat list while the old one drains.
-func channelStreamKey(channelID, fingerprint string) string {
-	if fingerprint == "" {
-		return channelID
-	}
-	return channelID + "@" + strings.TrimPrefix(fingerprint, "sha256:")
 }
 
 func (s *Server) tryAllStreams(

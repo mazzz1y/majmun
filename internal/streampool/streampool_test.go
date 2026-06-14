@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -47,6 +48,14 @@ func intPtr(i int) *int { return &i }
 func durationPtr(d time.Duration) *common.Duration {
 	cd := common.Duration(d)
 	return &cd
+}
+
+func testReq(streamKey string) Request {
+	return Request{
+		StreamKey:    streamKey,
+		StreamURL:    testStreamURL,
+		RunnerConfig: testSegmenterCfg,
+	}
 }
 
 var testClientStreamer = ClientStreamerFunc(func(playlistPath string) Streamer {
@@ -114,7 +123,7 @@ func TestSegmenterPool_CreateAndRemove(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
 
-	seg1, isNew, err := pool.getOrCreate("stream-1", ctx, dir, testSegmenterCfg, testStreamURL, nil)
+	seg1, isNew, err := pool.getOrCreate(ctx, dir, testReq("stream-1"))
 	if err != nil {
 		t.Fatalf("getOrCreate failed: %v", err)
 	}
@@ -125,7 +134,7 @@ func TestSegmenterPool_CreateAndRemove(t *testing.T) {
 		t.Fatal("expected non-nil segmenter")
 	}
 
-	seg2, isNew2, err := pool.getOrCreate("stream-1", ctx, dir, testSegmenterCfg, testStreamURL, nil)
+	seg2, isNew2, err := pool.getOrCreate(ctx, dir, testReq("stream-1"))
 	if err != nil {
 		t.Fatalf("getOrCreate failed: %v", err)
 	}
@@ -136,9 +145,9 @@ func TestSegmenterPool_CreateAndRemove(t *testing.T) {
 		t.Error("expected same segmenter instance")
 	}
 
-	pool.remove("stream-1")
+	pool.remove(seg1)
 
-	seg3, isNew3, err := pool.getOrCreate("stream-1", ctx, dir, testSegmenterCfg, testStreamURL, nil)
+	seg3, isNew3, err := pool.getOrCreate(ctx, dir, testReq("stream-1"))
 	if err != nil {
 		t.Fatalf("getOrCreate failed: %v", err)
 	}
@@ -155,8 +164,8 @@ func TestSegmenterPool_StopAllClearsMap(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
 
-	_, _, _ = pool.getOrCreate("stream-1", ctx, dir, testSegmenterCfg, testStreamURL, nil)
-	_, _, _ = pool.getOrCreate("stream-2", ctx, dir, testSegmenterCfg, testStreamURL, nil)
+	_, _, _ = pool.getOrCreate(ctx, dir, testReq("stream-1"))
+	_, _, _ = pool.getOrCreate(ctx, dir, testReq("stream-2"))
 
 	pool.stopAll()
 
@@ -173,7 +182,7 @@ func TestSegmenter_InitialClientCountIsOne(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	seg, err := newSegmenter(ctx, "test", t.TempDir(), testSegmenterCfg, testStreamURL, nil)
+	seg, err := newSegmenter(ctx, t.TempDir(), testReq("test"))
 	if err != nil {
 		t.Fatalf("newSegmenter failed: %v", err)
 	}
@@ -187,13 +196,14 @@ func TestSegmenter_EmptySignalOnLastClientRemoved(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	seg, err := newSegmenter(ctx, "test", t.TempDir(), testSegmenterCfg, testStreamURL, nil)
+	seg, err := newSegmenter(ctx, t.TempDir(), testReq("test"))
 	if err != nil {
 		t.Fatalf("newSegmenter failed: %v", err)
 	}
 
-	seg.addClient()
-	seg.addClient()
+	if !seg.join() || !seg.join() {
+		t.Fatal("join should succeed on a live segmenter")
+	}
 
 	if seg.clientCount.Load() != 3 {
 		t.Errorf("expected 3 clients, got %d", seg.clientCount.Load())
@@ -214,6 +224,74 @@ func TestSegmenter_EmptySignalOnLastClientRemoved(t *testing.T) {
 	case <-seg.waitEmpty():
 	case <-time.After(100 * time.Millisecond):
 		t.Error("expected empty signal after all clients removed")
+	}
+}
+
+func TestSegmenter_JoinFailsAfterDrained(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	seg, err := newSegmenter(ctx, t.TempDir(), testReq("test"))
+	if err != nil {
+		t.Fatalf("newSegmenter failed: %v", err)
+	}
+
+	seg.removeClient()
+
+	if seg.join() {
+		t.Error("join must fail once the segmenter has drained")
+	}
+}
+
+func TestSegmenterPool_JoinAfterDrainGetsFreshSegmenter(t *testing.T) {
+	pool := newSegmenterPool()
+	ctx := context.Background()
+	dir := t.TempDir()
+
+	seg1, isNew, err := pool.getOrCreate(ctx, dir, testReq("chan"))
+	if err != nil || !isNew {
+		t.Fatalf("first getOrCreate: isNew=%v err=%v", isNew, err)
+	}
+
+	// Last client leaves but the entry has not been removed from the map yet (the race
+	// window): the next client must get a fresh segmenter, not the drained one.
+	pool.leave(seg1)
+
+	seg2, isNew2, err := pool.getOrCreate(ctx, dir, testReq("chan"))
+	if err != nil {
+		t.Fatalf("second getOrCreate: %v", err)
+	}
+	if !isNew2 {
+		t.Error("expected a fresh segmenter after the previous one drained")
+	}
+	if seg2 == seg1 {
+		t.Error("must not reuse the drained segmenter")
+	}
+}
+
+func TestSegmenterPool_LateRemoveKeepsReplacement(t *testing.T) {
+	pool := newSegmenterPool()
+	ctx := context.Background()
+	dir := t.TempDir()
+
+	seg1, _, _ := pool.getOrCreate(ctx, dir, testReq("chan"))
+	pool.leave(seg1)
+	seg2, _, _ := pool.getOrCreate(ctx, dir, testReq("chan"))
+
+	// seg1's teardown runs only now, after seg2 has taken its key. It must not evict or
+	// clean up seg2, and seg2 must keep its own (distinct) segment dir.
+	pool.remove(seg1)
+
+	if seg1.dir == seg2.dir {
+		t.Fatal("replacement must not share the drained segmenter's dir")
+	}
+	if _, err := os.Stat(seg2.dir); os.IsNotExist(err) {
+		t.Error("seg2 dir must survive seg1 teardown")
+	}
+
+	got, isNew, _ := pool.getOrCreate(ctx, dir, testReq("chan"))
+	if isNew || got != seg2 {
+		t.Error("seg2 must still be the registered segmenter after seg1 teardown")
 	}
 }
 
@@ -243,13 +321,12 @@ func TestSegmenter_DirCreatedOnInit(t *testing.T) {
 	defer cancel()
 
 	baseDir := t.TempDir()
-	_, err := newSegmenter(ctx, "test-stream", baseDir, testSegmenterCfg, testStreamURL, nil)
+	seg, err := newSegmenter(ctx, baseDir, testReq("test-stream"))
 	if err != nil {
 		t.Fatalf("newSegmenter failed: %v", err)
 	}
 
-	expectedDir := segmentDir(baseDir, "test-stream")
-	if _, err := os.Stat(expectedDir); os.IsNotExist(err) {
+	if _, err := os.Stat(seg.dir); os.IsNotExist(err) {
 		t.Error("expected segment directory to exist")
 	}
 }
@@ -259,16 +336,94 @@ func TestSegmenter_CleanupRemovesDir(t *testing.T) {
 	defer cancel()
 
 	baseDir := t.TempDir()
-	seg, err := newSegmenter(ctx, "test-stream", baseDir, testSegmenterCfg, testStreamURL, nil)
+	seg, err := newSegmenter(ctx, baseDir, testReq("test-stream"))
 	if err != nil {
 		t.Fatalf("newSegmenter failed: %v", err)
 	}
 
+	dir := seg.dir
 	seg.cleanup()
 
-	expectedDir := segmentDir(baseDir, "test-stream")
-	if _, err := os.Stat(expectedDir); !os.IsNotExist(err) {
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
 		t.Error("expected segment directory to be removed")
+	}
+}
+
+func TestRunPlayout_AdvancesPerFileAndStopsOnCancel(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// A run longer than minRunDuration exercises the normal advance path (no backoff).
+	cfg := &proxy.Segmenter{
+		Command:      common.StringOrArr{"sleep", "1.1"},
+		InitSegments: intPtr(1),
+		ReadyTimeout: durationPtr(time.Second),
+	}
+
+	var mu sync.Mutex
+	var seen []PlayItem
+	const want = 2
+
+	req := Request{
+		StreamKey:    "playout",
+		RunnerConfig: cfg,
+		NextItem: func(now time.Time) (PlayItem, bool) {
+			mu.Lock()
+			defer mu.Unlock()
+			it := PlayItem{File: "/m/file.mkv", Offset: 12.5, VideoCodec: "h264"}
+			seen = append(seen, it)
+			if len(seen) >= want {
+				cancel()
+			}
+			return it, true
+		},
+	}
+
+	seg, err := newSegmenter(ctx, t.TempDir(), req)
+	if err != nil {
+		t.Fatalf("newSegmenter: %v", err)
+	}
+
+	seg.start(ctx)
+
+	mu.Lock()
+	got := len(seen)
+	mu.Unlock()
+	if got < want {
+		t.Errorf("expected supervisor to advance >= %d files, got %d", want, got)
+	}
+}
+
+func TestRunPlayout_BacksOffWhenNoItem(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	cfg := &proxy.Segmenter{
+		Command:      common.StringOrArr{"true"},
+		InitSegments: intPtr(1),
+		ReadyTimeout: durationPtr(time.Second),
+	}
+
+	var calls atomic.Int64
+	req := Request{
+		StreamKey:    "playout-empty",
+		RunnerConfig: cfg,
+		NextItem: func(now time.Time) (PlayItem, bool) {
+			calls.Add(1)
+			return PlayItem{}, false
+		},
+	}
+
+	seg, err := newSegmenter(ctx, t.TempDir(), req)
+	if err != nil {
+		t.Fatalf("newSegmenter: %v", err)
+	}
+
+	seg.start(ctx)
+
+	// With a 1s backoff and a 50ms deadline, the loop should not have spun more than twice.
+	if n := calls.Load(); n > 2 {
+		t.Errorf("expected backoff to limit calls, got %d", n)
 	}
 }
 

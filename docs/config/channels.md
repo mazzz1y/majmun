@@ -22,8 +22,8 @@ removed. To avoid cutting off a show, a changed file set is not adopted the mome
 - **Added files** appear at the next [`schedule_swap_at`](./playout.md) time (local, default `04:00`), and only once
   the programme playing then finishes — so turnover always lands on a programme boundary.
 - **Removed files** are also deferred to that swap, *unless* a removed file is next due to air before the swap lands
-  (i.e. before the programme spanning the swap time finishes). Since the looping transcode would crash when it reopens
-  a missing file, that case triggers an immediate, controlled restart.
+  (i.e. before the programme spanning the swap time finishes). A missing file would otherwise be skipped live, so that
+  case triggers an immediate, controlled adoption of the new file set instead.
 
 The first build is immediate (the channel starts right away), and if all sources disappear the channel keeps playing
 its last good schedule.
@@ -87,8 +87,9 @@ conventions work. Tags that are absent or in an unrecognized format are simply o
 A channel is transcoded by [`playout`](./playout.md), which loops its sources into one continuous live stream. You
 must provide the FFmpeg `command` — there is no default, since the right one depends on your hardware.
 
-See the [Playout](./playout.md) page for what a command must do (normalize mixed sources, loop, pace at realtime) and
-[Examples → Playout](../examples/playout.md) for ready-to-use commands, including hardware acceleration.
+See the [Playout](./playout.md) page for what a command must do (normalize mixed sources, append to the live playlist,
+pace at realtime) and [Examples → Playout](../examples/playout.md) for ready-to-use commands, including hardware
+acceleration.
 
 ## Examples
 

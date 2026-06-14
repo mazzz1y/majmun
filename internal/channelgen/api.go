@@ -3,44 +3,75 @@ package channelgen
 import (
 	"context"
 	"math"
+	"os"
 	"time"
 )
 
-type Resolution struct {
-	Fingerprint string
-	files       []Item
-	offset      float64
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }
 
-// Resolve prepares a playable window for now without blocking on a scan or probe. It
+// PlayItem is the single file the supervisor should play next, with the seek offset into it
+// and the media parameters probed from the file so a transcode script can adapt per file.
+type PlayItem struct {
+	File           string
+	Offset         float64
+	VideoCodec     string
+	Width          int
+	Height         int
+	PixelFormat    string
+	FrameRate      string
+	FieldOrder     string
+	AudioCodec     string
+	AudioChannels  int
+	SampleRate     int
+	AudioLanguages []string
+}
+
+// ResolveCurrent returns the file to play at now without blocking on a scan or probe. It
 // returns ok=false while the schedule is still building (caller serves a placeholder) or
-// when the channel has no playable items. A deleted file in the window triggers a
-// background rebuild while playback continues on the surviving files.
-func (c *Channel) Resolve(now time.Time) (Resolution, bool) {
+// when the channel has no playable items. Missing files are skipped (offset resets to the
+// start of the next surviving file) and trigger a background rebuild while playback
+// continues.
+func (c *Channel) ResolveCurrent(now time.Time) (PlayItem, bool) {
 	s := c.current(now)
 	if s == nil {
-		return Resolution{}, false
+		return PlayItem{}, false
 	}
 
 	index, _, offset, _, ok := locate(s, now)
 	if !ok {
-		return Resolution{}, false
+		return PlayItem{}, false
 	}
 
-	window := buildConcatWindow(s, index, offset)
-	if window.dirty {
-		c.markDirty(now)
-	}
-	if len(window.files) == 0 {
-		return Resolution{}, false
+	n := len(s.Items)
+	for k := range n {
+		it := s.Items[(index+k)%n]
+		if k > 0 {
+			offset = 0
+		}
+		if !fileExists(it.File) {
+			c.markDirty(now)
+			continue
+		}
+		return PlayItem{
+			File:           it.File,
+			Offset:         offset,
+			VideoCodec:     it.VideoCodec,
+			Width:          it.Width,
+			Height:         it.Height,
+			PixelFormat:    it.PixelFormat,
+			FrameRate:      it.FrameRate,
+			FieldOrder:     it.FieldOrder,
+			AudioCodec:     it.AudioCodec,
+			AudioChannels:  it.AudioChannels,
+			SampleRate:     it.SampleRate,
+			AudioLanguages: it.AudioLanguages,
+		}, true
 	}
 
-	return Resolution{Fingerprint: s.Fingerprint, files: window.files, offset: window.offset}, true
-}
-
-// WriteConcatList writes the resolved window's concat list into dir, returning its path.
-func (r Resolution) WriteConcatList(dir string) (string, error) {
-	return writeConcatList(dir, r.files, r.offset)
+	return PlayItem{}, false
 }
 
 type Programme struct {

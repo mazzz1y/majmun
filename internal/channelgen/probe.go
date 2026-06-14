@@ -48,6 +48,19 @@ type probeResult struct {
 	Date        string // normalized YYYYMMDD, empty if absent/unparseable
 	Season      int
 	Episode     int
+
+	// Media parameters of the first video/audio stream, for scripts to branch their
+	// transcode on. All are empty/zero when the corresponding stream or field is absent.
+	VideoCodec     string
+	Width          int
+	Height         int
+	PixelFormat    string
+	FrameRate      string // "30000/1001" form, as reported by ffprobe
+	FieldOrder     string // progressive, tt, bb, tb, bt; empty if unknown
+	AudioCodec     string
+	AudioChannels  int
+	SampleRate     int
+	AudioLanguages []string // language tag per audio stream, in order; "und" when untagged
 }
 
 type prober interface {
@@ -61,7 +74,9 @@ func (ffprobeProber) Probe(ctx context.Context, file string) (probeResult, error
 	// the default (replace) substitutes them with U+FFFD before we could transcode.
 	cmd := exec.CommandContext(ctx, "ffprobe",
 		"-v", "error",
-		"-show_entries", "format=duration:format_tags",
+		"-show_entries",
+		"format=duration:format_tags:stream_tags=language:"+
+			"stream=codec_type,codec_name,width,height,pix_fmt,r_frame_rate,field_order,channels,sample_rate",
 		"-of", "json=string_validation=ignore",
 		file,
 	)
@@ -82,6 +97,18 @@ func parseProbeOutput(out []byte) (probeResult, error) {
 	}
 
 	var parsed struct {
+		Streams []struct {
+			CodecType  string            `json:"codec_type"`
+			CodecName  string            `json:"codec_name"`
+			Width      int               `json:"width"`
+			Height     int               `json:"height"`
+			PixFmt     string            `json:"pix_fmt"`
+			RFrameRate string            `json:"r_frame_rate"`
+			FieldOrder string            `json:"field_order"`
+			Channels   int               `json:"channels"`
+			SampleRate string            `json:"sample_rate"`
+			Tags       map[string]string `json:"tags"`
+		} `json:"streams"`
 		Format struct {
 			Duration string            `json:"duration"`
 			Tags     map[string]string `json:"tags"`
@@ -89,6 +116,37 @@ func parseProbeOutput(out []byte) (probeResult, error) {
 	}
 	if err := json.Unmarshal(out, &parsed); err != nil {
 		return probeResult{}, err
+	}
+
+	var res probeResult
+	var haveVideo, haveAudio bool
+	for _, st := range parsed.Streams {
+		switch st.CodecType {
+		case "video":
+			if haveVideo {
+				continue
+			}
+			haveVideo = true
+			res.VideoCodec = st.CodecName
+			res.Width = st.Width
+			res.Height = st.Height
+			res.PixelFormat = st.PixFmt
+			res.FrameRate = st.RFrameRate
+			res.FieldOrder = st.FieldOrder
+		case "audio":
+			lang := strings.TrimSpace(st.Tags["language"])
+			if lang == "" {
+				lang = "und"
+			}
+			res.AudioLanguages = append(res.AudioLanguages, lang)
+			if haveAudio {
+				continue
+			}
+			haveAudio = true
+			res.AudioCodec = st.CodecName
+			res.AudioChannels = st.Channels
+			res.SampleRate, _ = strconv.Atoi(strings.TrimSpace(st.SampleRate))
+		}
 	}
 
 	dur, err := strconv.ParseFloat(strings.TrimSpace(parsed.Format.Duration), 64)
@@ -103,15 +161,15 @@ func parseProbeOutput(out []byte) (probeResult, error) {
 
 	season, episode := parseEpisode(firstTag(tags, "episode_id", "episode_sort", "episode"))
 
-	return probeResult{
-		Duration:    dur,
-		Title:       firstTag(tags, "title"),
-		Description: firstTag(tags, "description", "synopsis", "summary", "comment"),
-		Category:    firstTag(tags, "genre"),
-		Date:        parseDate(firstTag(tags, "date", "year", "date_released")),
-		Season:      season,
-		Episode:     episode,
-	}, nil
+	res.Duration = dur
+	res.Title = firstTag(tags, "title")
+	res.Description = firstTag(tags, "description", "synopsis", "summary", "comment")
+	res.Category = firstTag(tags, "genre")
+	res.Date = parseDate(firstTag(tags, "date", "year", "date_released"))
+	res.Season = season
+	res.Episode = episode
+
+	return res, nil
 }
 
 func decodeWindows1251(b []byte) []byte {

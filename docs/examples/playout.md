@@ -10,6 +10,11 @@ The command lives in a shell script that reads its paths from the
 `MAJMUN_*` [environment variables](../config/shared/command.md#reserved-variables) and keeps encoding settings as shell
 variables at the top.
 
+Playout runs the script **once per file** (see [How It Works](../config/playout.md#how-it-works)): it receives the
+current file in `$MAJMUN_PLAYOUT_INPUT`, the seek position in `$MAJMUN_PLAYOUT_OFFSET`, and the file's video codec in
+`$MAJMUN_PLAYOUT_VIDEO_CODEC`. What the command does with them is up to you. It must **append** to the shared HLS
+playlist and mark a discontinuity at the join (`-hls_flags append_list+omit_endlist` plus `discont_start`).
+
 ## Basic Channels
 
 Two generated channels from local folders — one with a logo, one shuffled. The global `command` points at the
@@ -75,8 +80,8 @@ playlists:
 
 ## Software Transcode
 
-A CPU (libx264) transcode with normalization, looping, and a startup burst — a works-everywhere starting point. Point
-`command` at the script:
+A CPU (libx264) transcode with normalization, per-file seek, and a startup burst — a works-everywhere starting point.
+Point `command` at the script:
 
 ```yaml
 playout:
@@ -98,20 +103,27 @@ audio_channels=2
 
 exec ffmpeg -v fatal \
   -re -readrate_initial_burst "$initial_burst" \
-  -fflags +genpts -stream_loop -1 \
-  -f concat -safe 0 -i "$MAJMUN_PLAYOUT_INPUT" \
+  -fflags +genpts \
+  -ss "${MAJMUN_PLAYOUT_OFFSET:-0}" -i "$MAJMUN_PLAYOUT_INPUT" \
   -vf "scale=iw*sar:ih,setsar=1,\
 scale=${width}:${height}:force_original_aspect_ratio=decrease,\
 pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=${fps},format=yuv420p" \
   -c:v libx264 -preset veryfast \
   -flags +cgop -sc_threshold 0 \
   -force_key_frames "expr:gte(t,n_forced*${segment_duration})" \
-  -af "aresample=async=1:first_pts=0" \
   -c:a aac -ar "$audio_rate" -ac "$audio_channels" \
   -f hls -hls_time "$segment_duration" -hls_list_size "$max_segments" \
-  -hls_flags "delete_segments+append_list+independent_segments+omit_endlist" \
+  -hls_flags "delete_segments+append_list+independent_segments+omit_endlist+discont_start" \
   -hls_segment_filename "$MAJMUN_STREAM_SEGMENT_PATH" "$MAJMUN_STREAM_PLAYLIST_PATH"
 ```
+
+`$MAJMUN_PLAYOUT_OFFSET`, `$MAJMUN_PLAYOUT_VIDEO_CODEC`, and the other [reserved
+variables](../config/shared/command.md#reserved-variables) are yours to use — e.g. select an audio track with `-map`,
+or pick a decoder from the codec. What the command does with them is entirely up to you.
+
+`$MAJMUN_PLAYOUT_OFFSET` is non-zero only when a viewer joins partway through a programme. The examples pass it as an
+input seek (`-ss` before `-i`), which is fast but can be imprecise on long-GOP or AV1 sources; for frame-accurate joins
+use an output seek (`-ss` after `-i`) at the cost of decoding from the previous keyframe.
 
 ## Logo Overlay (Watermark)
 
@@ -148,8 +160,8 @@ audio_channels=2
 
 exec ffmpeg -v fatal \
   -re -readrate_initial_burst "$initial_burst" \
-  -fflags +genpts -stream_loop -1 \
-  -f concat -safe 0 -i "$MAJMUN_PLAYOUT_INPUT" \
+  -fflags +genpts \
+  -ss "${MAJMUN_PLAYOUT_OFFSET:-0}" -i "$MAJMUN_PLAYOUT_INPUT" \
   -i "$MAJMUN_CHANNEL_LOGO" \
   -filter_complex "\
 [0:v]scale=iw*sar:ih,setsar=1,\
@@ -162,7 +174,7 @@ pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=${fps}[base];\
   -force_key_frames "expr:gte(t,n_forced*${segment_duration})" \
   -c:a aac -ar "$audio_rate" -ac "$audio_channels" \
   -f hls -hls_time "$segment_duration" -hls_list_size "$max_segments" \
-  -hls_flags "delete_segments+append_list+independent_segments+omit_endlist" \
+  -hls_flags "delete_segments+append_list+independent_segments+omit_endlist+discont_start" \
   -hls_segment_filename "$MAJMUN_STREAM_SEGMENT_PATH" "$MAJMUN_STREAM_PLAYLIST_PATH"
 ```
 
@@ -194,8 +206,8 @@ These are **starting points, not tested** across GPU generations and FFmpeg buil
 
     exec ffmpeg -v fatal \
       -re -readrate_initial_burst "$initial_burst" \
-      -fflags +genpts -stream_loop -1 \
-      -f concat -safe 0 -i "$MAJMUN_PLAYOUT_INPUT" \
+      -fflags +genpts \
+      -ss "${MAJMUN_PLAYOUT_OFFSET:-0}" -i "$MAJMUN_PLAYOUT_INPUT" \
       -vf "scale=iw*sar:ih,setsar=1,\
     scale=${width}:${height}:force_original_aspect_ratio=decrease,\
     pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=${fps},format=yuv420p" \
@@ -203,7 +215,7 @@ These are **starting points, not tested** across GPU generations and FFmpeg buil
       -force_key_frames "expr:gte(t,n_forced*${segment_duration})" \
       -c:a aac -ar "$audio_rate" -ac "$audio_channels" \
       -f hls -hls_time "$segment_duration" -hls_list_size "$max_segments" \
-      -hls_flags "delete_segments+append_list+independent_segments+omit_endlist" \
+      -hls_flags "delete_segments+append_list+independent_segments+omit_endlist+discont_start" \
       -hls_segment_filename "$MAJMUN_STREAM_SEGMENT_PATH" "$MAJMUN_STREAM_PLAYLIST_PATH"
     ```
 
@@ -222,8 +234,8 @@ These are **starting points, not tested** across GPU generations and FFmpeg buil
 
     exec ffmpeg -v fatal -vaapi_device /dev/dri/renderD128 \
       -re -readrate_initial_burst "$initial_burst" \
-      -fflags +genpts -stream_loop -1 \
-      -f concat -safe 0 -i "$MAJMUN_PLAYOUT_INPUT" \
+      -fflags +genpts \
+      -ss "${MAJMUN_PLAYOUT_OFFSET:-0}" -i "$MAJMUN_PLAYOUT_INPUT" \
       -vf "scale=iw*sar:ih,setsar=1,\
     scale=${width}:${height}:force_original_aspect_ratio=decrease,\
     pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=${fps},format=nv12,hwupload" \
@@ -231,7 +243,7 @@ These are **starting points, not tested** across GPU generations and FFmpeg buil
       -force_key_frames "expr:gte(t,n_forced*${segment_duration})" \
       -c:a aac -ar "$audio_rate" -ac "$audio_channels" \
       -f hls -hls_time "$segment_duration" -hls_list_size "$max_segments" \
-      -hls_flags "delete_segments+append_list+independent_segments+omit_endlist" \
+      -hls_flags "delete_segments+append_list+independent_segments+omit_endlist+discont_start" \
       -hls_segment_filename "$MAJMUN_STREAM_SEGMENT_PATH" "$MAJMUN_STREAM_PLAYLIST_PATH"
     ```
 
@@ -249,8 +261,8 @@ These are **starting points, not tested** across GPU generations and FFmpeg buil
 
     exec ffmpeg -v fatal \
       -re -readrate_initial_burst "$initial_burst" \
-      -fflags +genpts -stream_loop -1 \
-      -f concat -safe 0 -i "$MAJMUN_PLAYOUT_INPUT" \
+      -fflags +genpts \
+      -ss "${MAJMUN_PLAYOUT_OFFSET:-0}" -i "$MAJMUN_PLAYOUT_INPUT" \
       -vf "scale=iw*sar:ih,setsar=1,\
     scale=${width}:${height}:force_original_aspect_ratio=decrease,\
     pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=${fps},format=yuv420p" \
@@ -258,7 +270,7 @@ These are **starting points, not tested** across GPU generations and FFmpeg buil
       -force_key_frames "expr:gte(t,n_forced*${segment_duration})" \
       -c:a aac -ar "$audio_rate" -ac "$audio_channels" \
       -f hls -hls_time "$segment_duration" -hls_list_size "$max_segments" \
-      -hls_flags "delete_segments+append_list+independent_segments+omit_endlist" \
+      -hls_flags "delete_segments+append_list+independent_segments+omit_endlist+discont_start" \
       -hls_segment_filename "$MAJMUN_STREAM_SEGMENT_PATH" "$MAJMUN_STREAM_PLAYLIST_PATH"
     ```
 

@@ -15,17 +15,24 @@ import (
 
 const segmentReadyPoll = 100 * time.Millisecond
 
+// segmenterSeq makes each segmenter's on-disk dir unique, so a drained segmenter that is
+// still shutting down never shares its segment dir with the fresh one that replaced it at
+// the same stream key.
+var segmenterSeq atomic.Uint64
+
 type segmenter struct {
 	streamKey    string
 	dir          string
 	playlistPath string
 	config       proxy.RunnerConfig
 	streamer     *shell.Streamer
+	nextItem     NextItemFunc
 
 	ctx    context.Context
 	cancel context.CancelFunc
 
 	clientCount atomic.Int64
+	done        bool // guarded by segmenterPool.mu; mutate only via join/removeClient
 	emptyChan   chan struct{}
 	emptyOnce   sync.Once
 
@@ -34,37 +41,39 @@ type segmenter struct {
 	startErr  error
 }
 
-func newSegmenter(parentCtx context.Context, streamKey string, baseDir string, cfg proxy.RunnerConfig, streamURL string, extraVars map[string]any) (*segmenter, error) {
-	dir := segmentDir(baseDir, streamKey)
+func newSegmenter(parentCtx context.Context, baseDir string, req Request) (*segmenter, error) {
+	dir := segmentDir(baseDir, req.StreamKey) + fmt.Sprintf("-%d", segmenterSeq.Add(1))
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return nil, fmt.Errorf("create segment dir: %w", err)
 	}
 
 	playlistPath := filepath.Join(dir, "stream.m3u8")
 
+	cfg := req.RunnerConfig
 	base, err := shell.NewShellStreamer(cfg.GetCommand(), cfg.GetEnvVars(), cfg.GetTemplateVars())
 	if err != nil {
 		return nil, fmt.Errorf("parse segmenter command: %w", err)
 	}
 
 	stream := map[string]any{
-		"URL":          streamURL,
+		"URL":          req.StreamURL,
 		"SegmentPath":  filepath.Join(dir, "seg_%05d.ts"),
 		"PlaylistPath": playlistPath,
 	}
 	vars := map[string]any{"Stream": stream}
-	maps.Copy(vars, extraVars)
+	maps.Copy(vars, req.ExtraVars)
 
 	streamer := base.WithTemplateVars(vars)
 
 	ctx, cancel := context.WithCancel(parentCtx)
 
 	s := &segmenter{
-		streamKey:    streamKey,
+		streamKey:    req.StreamKey,
 		dir:          dir,
 		playlistPath: playlistPath,
 		config:       cfg,
 		streamer:     streamer,
+		nextItem:     req.NextItem,
 		ctx:          ctx,
 		cancel:       cancel,
 		emptyChan:    make(chan struct{}),
@@ -79,7 +88,12 @@ func newSegmenter(parentCtx context.Context, streamKey string, baseDir string, c
 func (s *segmenter) start(ctx context.Context) {
 	go s.waitForSegments()
 
-	err := s.streamer.Run(ctx)
+	var err error
+	if s.nextItem != nil {
+		err = s.runPlayout(ctx)
+	} else {
+		err = s.streamer.Run(ctx)
+	}
 	if err != nil && ctx.Err() == nil {
 		s.setReady(fmt.Errorf("segmenter process: %w", err))
 	} else {
@@ -130,12 +144,17 @@ func (s *segmenter) countSegments() int {
 	return count
 }
 
-func (s *segmenter) addClient() {
+func (s *segmenter) join() bool {
+	if s.done {
+		return false
+	}
 	s.clientCount.Add(1)
+	return true
 }
 
 func (s *segmenter) removeClient() {
 	if s.clientCount.Add(-1) <= 0 {
+		s.done = true
 		s.notifyEmpty()
 	}
 }

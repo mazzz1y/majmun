@@ -15,36 +15,43 @@ local files.
 
 ## How It Works
 
-On each request, majmun resolves the channel's current position from its [persisted schedule](./channels.md#how-it-works),
-writes an FFmpeg **concat list** to a scratch dir, and launches the command. It runs until the last viewer leaves.
+Playout runs **one FFmpeg process per file**. A supervisor resolves the channel's current file from its
+[persisted schedule](./channels.md#how-it-works), launches the command for that single file, and when it finishes
+advances to the next file — looping the schedule forever. All processes write into one shared HLS directory, so viewers
+read a single continuous stream with a brief discontinuity at each file boundary. The supervisor runs until the last
+viewer leaves.
 
-The command reads one input and writes a live HLS stream on disk:
+Per-file invocation lets the command tailor itself to each file using the per-file variables (e.g. stream mapping or
+decoder choice) — decisions a single whole-schedule process cannot make. How it uses them is up to you.
 
-- **Input:** `{{ .Playout.Input }}` — a [concat demuxer](https://ffmpeg.org/ffmpeg-formats.html#concat-1) list: the
-  full schedule, rotated so the currently-airing file is first and seeked to the live position. The files are raw media
-  with mixed codecs, resolutions, and audio layouts.
+The command reads one file and writes a live HLS stream on disk:
+
+- **Input:** `{{ .Playout.Input }}` — the path of the file to play now, with `{{ .Playout.Offset }}` the seek position
+  (seconds) for the live point. The file's probed media parameters (`VideoCodec`, `Width`, `Height`, `PixelFormat`,
+  `FrameRate`, `FieldOrder`, `AudioCodec`, `AudioChannels`, `SampleRate`, `AudioLanguages`) are exposed too, so the
+  command can adapt its decoder, scaling, deinterlace, or audio track per file — see
+  [Reserved Template Variables](#reserved-template-variables).
 - **Output:** `{{ .Stream.SegmentPath }}` (segment files like `/tmp/.../seg_%05d.ts`) and `{{ .Stream.PlaylistPath }}`
   (a live, rolling HLS playlist — no `EXT-X-ENDLIST`, old segments deleted).
 
 Two things matter here:
 
-- **Pace output at realtime.** The schedule loops forever, so a command that encodes as fast as possible would race
-  through your whole library and fill the disk with segments. Realtime pacing (`-re`) emits ~1 second of video per
-  second of wall time.
+- **Pace output at realtime.** Without it a command encodes as fast as possible, racing through the file and filling the
+  disk with segments. Realtime pacing (`-re`) emits ~1 second of video per second of wall time.
 - **Startup.** majmun starts serving viewers once `init_segments` segments exist (or `ready_timeout` passes).
 
-Any command that satisfies this — reads the input, writes a paced live HLS stream — works; the exact FFmpeg flags are
+Any command that satisfies this — reads the file, writes a paced live HLS stream — works; the exact FFmpeg flags are
 up to you.
 
 ### What a command must take care of
 
 The default command handles all of these; a custom command must too.
 
-- **Normalization** — scale/letterbox every source to one `width`×`height`×`fps` canvas and normalize audio, or the
-  stream breaks at the first file that differs. Skip this only if all sources are already uniform.
-- **Looping** — repeat the schedule forever (`-stream_loop -1`). Legacy containers (MPEG-PS/AVI) need
-  `-af aresample=async=1:first_pts=0` to keep audio timestamps monotonic across loop wraps, or playback stalls after
-  the first wrap.
+- **Normalization** — scale/letterbox every source to one `width`×`height`×`fps` canvas and normalize audio, so the
+  stream stays uniform across files. Skip this only if all sources are already uniform.
+- **Appending to the live playlist** — each file's process writes into the same HLS directory, so the command must
+  append rather than truncate (`-hls_flags append_list+omit_endlist`) and mark a discontinuity at the join
+  (`discont_start`).
 - **Segment alignment** — keyframes on segment boundaries, so joins are fast and segments uniform.
 - **Buffering** — realtime pacing leaves only ~one segment of headroom. `-readrate_initial_burst` emits the first
   `initial_burst` seconds at full speed to build a buffer without delaying start (see [Startup Buffer](#startup-buffer)).
@@ -114,7 +121,17 @@ The playout command receives these runtime variables (also as `MAJMUN_*` environ
 
 | Variable | Environment variable | Description |
 | --- | --- | --- |
-| `{{ .Playout.Input }}` | `MAJMUN_PLAYOUT_INPUT` | The FFmpeg concat list (the rotated, seeked schedule). |
+| `{{ .Playout.Input }}` | `MAJMUN_PLAYOUT_INPUT` | Path of the file to play now. |
+| `{{ .Playout.Offset }}` | `MAJMUN_PLAYOUT_OFFSET` | Seek position (seconds) into the file for the live point. Empty at the file's start. |
+| `{{ .Playout.VideoCodec }}` | `MAJMUN_PLAYOUT_VIDEO_CODEC` | The file's video codec (e.g. `h264`, `hevc`), for selecting a decoder. Empty if unknown. |
+| `{{ .Playout.Width }}` / `{{ .Playout.Height }}` | `MAJMUN_PLAYOUT_WIDTH` / `MAJMUN_PLAYOUT_HEIGHT` | Video dimensions in pixels. |
+| `{{ .Playout.PixelFormat }}` | `MAJMUN_PLAYOUT_PIXEL_FORMAT` | Video pixel format (e.g. `yuv420p`). |
+| `{{ .Playout.FrameRate }}` | `MAJMUN_PLAYOUT_FRAME_RATE` | Video frame rate as a fraction (e.g. `30000/1001`). |
+| `{{ .Playout.FieldOrder }}` | `MAJMUN_PLAYOUT_FIELD_ORDER` | Field order (`progressive`, `tt`, `bb`, …), for deinterlace decisions. |
+| `{{ .Playout.AudioCodec }}` | `MAJMUN_PLAYOUT_AUDIO_CODEC` | First audio stream codec (e.g. `aac`). |
+| `{{ .Playout.AudioChannels }}` | `MAJMUN_PLAYOUT_AUDIO_CHANNELS` | First audio stream channel count. |
+| `{{ .Playout.SampleRate }}` | `MAJMUN_PLAYOUT_SAMPLE_RATE` | First audio stream sample rate in Hz. |
+| `{{ .Playout.AudioLanguages }}` | `MAJMUN_PLAYOUT_AUDIO_LANGUAGES` | Space-separated language of each audio stream, in order (`und` when untagged), e.g. `eng rus und`. |
 | `{{ .Stream.SegmentPath }}` | `MAJMUN_STREAM_SEGMENT_PATH` | Output segment file path pattern. |
 | `{{ .Stream.PlaylistPath }}` | `MAJMUN_STREAM_PLAYLIST_PATH` | Output HLS playlist path. |
 | `{{ .Channel.Name }}` | `MAJMUN_CHANNEL_NAME` | Channel name. |

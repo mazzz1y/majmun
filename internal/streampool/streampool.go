@@ -31,6 +31,27 @@ type Streamer interface {
 
 type ClientStreamerFunc func(playlistPath string) Streamer
 
+// PlayItem is the next file a per-file playout supervisor should run: the file, the seek
+// offset into it, and the media parameters probed from the file for the transcode script.
+type PlayItem struct {
+	File           string
+	Offset         float64
+	VideoCodec     string
+	Width          int
+	Height         int
+	PixelFormat    string
+	FrameRate      string
+	FieldOrder     string
+	AudioCodec     string
+	AudioChannels  int
+	SampleRate     int
+	AudioLanguages []string
+}
+
+// NextItemFunc resolves the file to play at the current time. ok=false means no playable
+// item is available yet (the supervisor backs off and retries).
+type NextItemFunc func(now time.Time) (PlayItem, bool)
+
 type Request struct {
 	StreamKey      string
 	StreamURL      string
@@ -38,6 +59,9 @@ type Request struct {
 	ClientStreamer ClientStreamerFunc
 	Semaphore      *semaphore.Weighted
 	RunnerConfig   proxy.RunnerConfig
+	// NextItem, when set, switches the segmenter to per-file playout: it runs one process
+	// per resolved file instead of a single long-lived command.
+	NextItem NextItemFunc
 }
 
 type StreamPool struct {
@@ -61,34 +85,24 @@ func (d *StreamPool) Stop() {
 	_ = os.RemoveAll(d.baseDir)
 }
 
-func (d *StreamPool) SegmentDir(streamKey string) (string, error) {
-	dir := segmentDir(d.baseDir, streamKey)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return "", err
-	}
-	return dir, nil
-}
-
 func (d *StreamPool) GetReader(ctx context.Context, req Request) (io.ReadCloser, error) {
 	clientCtx := ctxutil.WithStreamID(ctx, hashid.New(req.StreamKey))
 	streamCtx := context.WithoutCancel(clientCtx)
 
-	seg, isNew, err := d.pool.getOrCreate(
-		req.StreamKey, streamCtx, d.baseDir, req.RunnerConfig, req.StreamURL, req.ExtraVars)
+	seg, isNew, err := d.pool.getOrCreate(streamCtx, d.baseDir, req)
 	if err != nil {
 		return nil, err
 	}
 
 	if isNew {
 		if !utils.AcquireSemaphore(streamCtx, req.Semaphore, semaphoreTimeout, "subscription") {
-			d.pool.remove(req.StreamKey)
+			d.pool.remove(seg)
 			return nil, ErrSubscriptionSemaphore
 		}
 		logging.Debug(streamCtx, "acquired subscription semaphore")
 		go d.runSegmenter(streamCtx, req, seg)
 		logging.Info(streamCtx, "started new segmenter")
 	} else {
-		seg.addClient()
 		metrics.IncStreamsReused(ctx)
 		logging.Info(clientCtx, "joined existing segmenter")
 	}
@@ -96,12 +110,12 @@ func (d *StreamPool) GetReader(ctx context.Context, req Request) (io.ReadCloser,
 	select {
 	case <-seg.ready:
 	case <-clientCtx.Done():
-		seg.removeClient()
+		d.pool.leave(seg)
 		return nil, clientCtx.Err()
 	}
 
 	if seg.startErr != nil {
-		seg.removeClient()
+		d.pool.leave(seg)
 		return nil, fmt.Errorf("%w: %v", ErrSegmenterFailed, seg.startErr)
 	}
 
@@ -109,6 +123,7 @@ func (d *StreamPool) GetReader(ctx context.Context, req Request) (io.ReadCloser,
 
 	return &clientReader{
 		clientStream: cs,
+		pool:         d.pool,
 		seg:          seg,
 	}, nil
 }
@@ -116,7 +131,7 @@ func (d *StreamPool) GetReader(ctx context.Context, req Request) (io.ReadCloser,
 func (d *StreamPool) runSegmenter(ctx context.Context, req Request, seg *segmenter) {
 	metrics.IncPlaylistStreamsActive(ctx)
 	defer metrics.DecPlaylistStreamsActive(ctx)
-	defer d.pool.remove(req.StreamKey)
+	defer d.pool.remove(seg)
 	defer func() {
 		if req.Semaphore != nil {
 			req.Semaphore.Release(1)
