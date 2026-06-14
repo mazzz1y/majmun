@@ -17,6 +17,7 @@ func fileExists(path string) bool {
 type PlayItem struct {
 	File           string
 	Offset         float64
+	NextBoundary   time.Time
 	VideoCodec     string
 	Width          int
 	Height         int
@@ -40,7 +41,7 @@ func (c *Channel) ResolveCurrent(now time.Time) (PlayItem, bool) {
 		return PlayItem{}, false
 	}
 
-	index, _, offset, _, ok := locate(s, now)
+	index, _, offset, boundary, ok := locate(s, now)
 	if !ok {
 		return PlayItem{}, false
 	}
@@ -50,6 +51,7 @@ func (c *Channel) ResolveCurrent(now time.Time) (PlayItem, bool) {
 		it := s.Items[(index+k)%n]
 		if k > 0 {
 			offset = 0
+			boundary = boundary.Add(time.Duration(it.Duration * float64(time.Second)))
 		}
 		if !fileExists(it.File) {
 			c.markDirty(now)
@@ -58,6 +60,7 @@ func (c *Channel) ResolveCurrent(now time.Time) (PlayItem, bool) {
 		return PlayItem{
 			File:           it.File,
 			Offset:         offset,
+			NextBoundary:   boundary,
 			VideoCodec:     it.VideoCodec,
 			Width:          it.Width,
 			Height:         it.Height,

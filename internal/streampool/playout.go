@@ -55,6 +55,17 @@ func (s *segmenter) runPlayout(ctx context.Context) error {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
+
+		// Clean exit before the slot boundary means the file ended early (its real content is
+		// shorter than its scheduled duration). Wait out the slot instead of re-resolving now,
+		// which would reopen the same file and replay its tail.
+		if err == nil && !item.NextBoundary.IsZero() && time.Now().Before(item.NextBoundary) {
+			if !sleepUntil(ctx, item.NextBoundary) {
+				return ctx.Err()
+			}
+			continue
+		}
+
 		if err != nil || time.Since(started) < minRunDuration {
 			if !sleep(ctx, playoutBackoff) {
 				return ctx.Err()
@@ -78,6 +89,15 @@ func formatInt(n int) string {
 		return ""
 	}
 	return strconv.Itoa(n)
+}
+
+// sleepUntil waits until t, returning false if ctx was cancelled first.
+func sleepUntil(ctx context.Context, t time.Time) bool {
+	d := time.Until(t)
+	if d <= 0 {
+		return true
+	}
+	return sleep(ctx, d)
 }
 
 // sleep returns false if ctx was cancelled before d elapsed.

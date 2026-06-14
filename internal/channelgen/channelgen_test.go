@@ -500,12 +500,18 @@ func TestResolveCurrentOffset(t *testing.T) {
 	now := time.Unix(1000, 0)
 	warmUp(t, c, now)
 
-	it, ok := c.ResolveCurrent(now.Add(30 * time.Second))
+	resolveAt := now.Add(30 * time.Second)
+	it, ok := c.ResolveCurrent(resolveAt)
 	if !ok {
 		t.Fatal("resolve failed")
 	}
 	if it.Offset != 30 {
 		t.Errorf("expected offset 30, got %f", it.Offset)
+	}
+	// Single 100s file: its slot ends 70s after a resolve at offset 30.
+	wantBoundary := resolveAt.Add(70 * time.Second)
+	if !it.NextBoundary.Equal(wantBoundary) {
+		t.Errorf("expected NextBoundary %v, got %v", wantBoundary, it.NextBoundary)
 	}
 }
 

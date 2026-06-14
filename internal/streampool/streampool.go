@@ -36,6 +36,7 @@ type ClientStreamerFunc func(playlistPath string) Streamer
 type PlayItem struct {
 	File           string
 	Offset         float64
+	NextBoundary   time.Time
 	VideoCodec     string
 	Width          int
 	Height         int

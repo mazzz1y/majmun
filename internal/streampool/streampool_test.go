@@ -427,6 +427,42 @@ func TestRunPlayout_BacksOffWhenNoItem(t *testing.T) {
 	}
 }
 
+// On a clean exit before the slot boundary the supervisor must wait, not re-resolve and
+// replay the same file. The command runs longer than minRunDuration and exits cleanly, so
+// without the fix the loop re-resolves immediately (spinning); with it, it waits at the
+// boundary and resolves only once before the deadline.
+func TestRunPlayout_WaitsOutSlotOnEarlyCleanExit(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2500*time.Millisecond)
+	defer cancel()
+
+	cfg := &proxy.Segmenter{
+		Command:      common.StringOrArr{"sleep", "1.1"},
+		InitSegments: intPtr(1),
+		ReadyTimeout: durationPtr(time.Second),
+	}
+
+	var calls atomic.Int64
+	req := Request{
+		StreamKey:    "playout-early-exit",
+		RunnerConfig: cfg,
+		NextItem: func(now time.Time) (PlayItem, bool) {
+			calls.Add(1)
+			return PlayItem{File: "/m/short.mp4", NextBoundary: now.Add(time.Hour)}, true
+		},
+	}
+
+	seg, err := newSegmenter(ctx, t.TempDir(), req)
+	if err != nil {
+		t.Fatalf("newSegmenter: %v", err)
+	}
+
+	seg.start(ctx)
+
+	if n := calls.Load(); n != 1 {
+		t.Errorf("expected supervisor to wait out the slot (1 resolve), got %d", n)
+	}
+}
+
 func TestGetReader_SingleClientReceivesData(t *testing.T) {
 	skipWithoutFFmpeg(t)
 

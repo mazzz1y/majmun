@@ -156,6 +156,7 @@ func (s *Server) handleChannelStream(
 			return streampool.PlayItem{
 				File:           it.File,
 				Offset:         it.Offset,
+				NextBoundary:   it.NextBoundary,
 				VideoCodec:     it.VideoCodec,
 				Width:          it.Width,
 				Height:         it.Height,
