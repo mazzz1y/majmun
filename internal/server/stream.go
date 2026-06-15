@@ -182,8 +182,14 @@ func (s *Server) handleChannelStream(
 
 	reader, err := s.streamPool.GetReader(ctx, streamReq)
 	if err != nil {
-		logging.Error(ctx, err, "failed to get channel stream")
-		http.Error(w, http.StatusText(http.StatusBadGateway), http.StatusBadGateway)
+		if errors.Is(err, context.Canceled) {
+			return
+		}
+		logging.Error(ctx, err, "failed to get channel stream, serving placeholder")
+		w.Header().Set("Content-Type", streamContentType)
+		if _, err := channel.UpstreamErrorStreamer().RunWithStdout(ctx, w); err != nil {
+			logging.Error(ctx, err, "failed to stream placeholder response")
+		}
 		return
 	}
 	defer func() { _ = reader.Close() }()
