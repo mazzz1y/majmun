@@ -3,14 +3,13 @@ package config
 import (
 	"fmt"
 	"majmun/internal/config/common"
-	"majmun/internal/config/proxy"
 )
 
 type Channel struct {
 	Name    string             `yaml:"name"`
 	Fields  []ChannelField     `yaml:"fields,omitempty"`
 	Sources common.StringOrArr `yaml:"sources"`
-	Playout proxy.Playout      `yaml:"playout,omitempty"`
+	Playout Playout            `yaml:"playout,omitempty"`
 }
 
 type ChannelField struct {

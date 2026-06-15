@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"majmun/internal/config/proxy"
+	"majmun/internal/config/common"
 	"majmun/internal/ctxutil"
 	"majmun/internal/hashid"
 	"majmun/internal/logging"
@@ -17,6 +17,16 @@ import (
 
 	"golang.org/x/sync/semaphore"
 )
+
+// RunnerSpec is the resolved command and timing the stream pool needs to launch an ffmpeg
+// process. Providers build it from their cascaded config, so the pool never sees unset values.
+type RunnerSpec struct {
+	Command      common.StringOrArr
+	EnvVars      []common.NameValue
+	TemplateVars []common.NameValue
+	InitSegments int
+	ReadyTimeout time.Duration
+}
 
 const semaphoreTimeout = 200 * time.Millisecond
 
@@ -59,7 +69,7 @@ type Request struct {
 	ExtraVars      map[string]any
 	ClientStreamer ClientStreamerFunc
 	Semaphore      *semaphore.Weighted
-	RunnerConfig   proxy.RunnerConfig
+	Runner         RunnerSpec
 	// NextItem, when set, switches the segmenter to per-file playout: it runs one process
 	// per resolved file instead of a single long-lived command.
 	NextItem NextItemFunc

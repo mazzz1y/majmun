@@ -99,7 +99,7 @@ func (c *Client) BuildPlaylistProvider(
 	return pr, nil
 }
 
-func (c *Client) BuildChannelProvider(playlistConf config.Playlist, channelConf config.Channel, playout proxy.Playout, serverProxy proxy.Proxy, gen *channelgen.Channel, playlist listing.Playlist) error {
+func (c *Client) BuildChannelProvider(playlistConf config.Playlist, channelConf config.Channel, playout config.Playout, serverProxy proxy.Proxy, gen *channelgen.Channel, playlist listing.Playlist) error {
 	mergedProxy := mergeProxies(serverProxy, playlistConf.Proxy, c.proxy)
 	httpClient := c.newHTTPClient(mergedProxy)
 

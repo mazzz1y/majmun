@@ -66,6 +66,7 @@ type Channel interface {
 	Playlist() Playlist
 	URLGenerator() *urlgen.Generator
 	Programmes(ctx context.Context, now time.Time) ([]Programme, error)
+	CatchupDays(now time.Time) int
 }
 
 // ChannelLogoURL wraps the channel's logo in a signed file URL, or returns "" when no logo is set.

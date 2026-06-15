@@ -2,7 +2,6 @@ package config
 
 import (
 	"majmun/internal/config/common"
-	"majmun/internal/config/proxy"
 	"net/url"
 	"strconv"
 	"testing"
@@ -30,7 +29,7 @@ func validBaseConfig() Config {
 		Server:       ServerConfig{ListenAddr: ":8080", PublicURL: common.URL(*u)},
 		Logs:         Logs{"info", "text"},
 		URLGenerator: URLGeneratorConfig{Secret: "test"},
-		Playout:      proxy.Playout{Command: common.StringOrArr{"ffmpeg"}},
+		Playout:      Playout{Command: common.StringOrArr{"ffmpeg"}},
 	}
 }
 
@@ -47,7 +46,7 @@ func TestChannelValidate(t *testing.T) {
 		},
 		{
 			name:        "valid random",
-			channel:     Channel{Name: "cartoons", Sources: common.StringOrArr{"/media/cartoons"}, Playout: proxy.Playout{RandomOrder: boolPtr(true)}},
+			channel:     Channel{Name: "cartoons", Sources: common.StringOrArr{"/media/cartoons"}, Playout: Playout{RandomOrder: boolPtr(true)}},
 			expectError: false,
 		},
 		{
@@ -98,13 +97,13 @@ func TestChannelValidate(t *testing.T) {
 		{
 			name: "valid playout template variable",
 			channel: Channel{Name: "c", Sources: common.StringOrArr{"/m"},
-				Playout: proxy.Playout{TemplateVars: []common.NameValue{{Name: "logo_width_pct", Value: "0.06"}}}},
+				Playout: Playout{TemplateVars: []common.NameValue{{Name: "logo_width_pct", Value: "0.06"}}}},
 			expectError: false,
 		},
 		{
 			name: "invalid playout propagates",
 			channel: Channel{Name: "c", Sources: common.StringOrArr{"/m"},
-				Playout: proxy.Playout{TemplateVars: []common.NameValue{{Name: "Playout", Value: "x"}}}},
+				Playout: Playout{TemplateVars: []common.NameValue{{Name: "Playout", Value: "x"}}}},
 			expectError: true,
 		},
 	}
@@ -187,7 +186,7 @@ func TestConfigChannelValidation(t *testing.T) {
 			mutate: func(c *Config) {
 				c.Playout.Command = nil
 				c.Playlists = []Playlist{{Name: "p1", Channels: []Channel{
-					{Name: "a", Sources: common.StringOrArr{"/m"}, Playout: proxy.Playout{Command: common.StringOrArr{"ffmpeg"}}},
+					{Name: "a", Sources: common.StringOrArr{"/m"}, Playout: Playout{Command: common.StringOrArr{"ffmpeg"}}},
 				}}}
 			},
 			expectError: false,

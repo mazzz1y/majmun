@@ -1,6 +1,7 @@
 package app
 
 import (
+	"majmun/internal/config"
 	"majmun/internal/config/common"
 	"majmun/internal/config/proxy"
 	"time"
@@ -105,10 +106,10 @@ func mergeSegmenter(dst *proxy.Segmenter, src proxy.Segmenter) {
 	}
 	dst.TemplateVars = common.MergeNameValues(dst.TemplateVars, src.TemplateVars)
 	dst.EnvVars = common.MergeNameValues(dst.EnvVars, src.EnvVars)
-	if src.InitSegments != nil {
+	if src.InitSegments != 0 {
 		dst.InitSegments = src.InitSegments
 	}
-	if src.ReadyTimeout != nil {
+	if src.ReadyTimeout != 0 {
 		dst.ReadyTimeout = src.ReadyTimeout
 	}
 }
@@ -116,18 +117,18 @@ func mergeSegmenter(dst *proxy.Segmenter, src proxy.Segmenter) {
 // mergePlayouts cascades playout config global -> playlist -> channel, each level overriding
 // the previous field by field. Template/env vars merge by name; scheduling/listing fields
 // keep their pointer/empty zero value when unset so the lower level inherits.
-func mergePlayouts(playouts ...proxy.Playout) proxy.Playout {
-	result := proxy.Playout{}
+func mergePlayouts(playouts ...config.Playout) config.Playout {
+	result := config.Playout{}
 	for _, p := range playouts {
 		if len(p.Command) > 0 {
 			result.Command = p.Command
 		}
 		result.TemplateVars = common.MergeNameValues(result.TemplateVars, p.TemplateVars)
 		result.EnvVars = common.MergeNameValues(result.EnvVars, p.EnvVars)
-		if p.InitSegments != nil {
+		if p.InitSegments != 0 {
 			result.InitSegments = p.InitSegments
 		}
-		if p.ReadyTimeout != nil {
+		if p.ReadyTimeout != 0 {
 			result.ReadyTimeout = p.ReadyTimeout
 		}
 		if p.StateDir != "" {
@@ -145,10 +146,10 @@ func mergePlayouts(playouts ...proxy.Playout) proxy.Playout {
 		if p.RefreshInterval != nil {
 			result.RefreshInterval = p.RefreshInterval
 		}
-		if p.EPGDuration != nil {
+		if p.EPGDuration != 0 {
 			result.EPGDuration = p.EPGDuration
 		}
-		if p.ScheduleSwapAt != nil {
+		if p.ScheduleSwapAt != "" {
 			result.ScheduleSwapAt = p.ScheduleSwapAt
 		}
 	}

@@ -4,7 +4,6 @@ import (
 	"context"
 	"io"
 	"majmun/internal/config/common"
-	"majmun/internal/config/proxy"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -19,7 +18,7 @@ import (
 
 const testStreamURL = "testsrc=duration=60:size=320x240:rate=10"
 
-var testSegmenterCfg = &proxy.Segmenter{
+var testSegmenterCfg = RunnerSpec{
 	Command: common.StringOrArr{
 		"ffmpeg",
 		"-v", "fatal",
@@ -40,21 +39,15 @@ var testSegmenterCfg = &proxy.Segmenter{
 		{Name: "segment_duration", Value: "2"},
 		{Name: "max_segments", Value: "15"},
 	},
-	InitSegments: intPtr(1),
-	ReadyTimeout: durationPtr(30 * time.Second),
-}
-
-func intPtr(i int) *int { return &i }
-func durationPtr(d time.Duration) *common.Duration {
-	cd := common.Duration(d)
-	return &cd
+	InitSegments: 1,
+	ReadyTimeout: 30 * time.Second,
 }
 
 func testReq(streamKey string) Request {
 	return Request{
-		StreamKey:    streamKey,
-		StreamURL:    testStreamURL,
-		RunnerConfig: testSegmenterCfg,
+		StreamKey: streamKey,
+		StreamURL: testStreamURL,
+		Runner:    testSegmenterCfg,
 	}
 }
 
@@ -354,10 +347,10 @@ func TestRunPlayout_AdvancesPerFileAndStopsOnCancel(t *testing.T) {
 	defer cancel()
 
 	// A run longer than minRunDuration exercises the normal advance path (no backoff).
-	cfg := &proxy.Segmenter{
+	cfg := RunnerSpec{
 		Command:      common.StringOrArr{"sleep", "1.1"},
-		InitSegments: intPtr(1),
-		ReadyTimeout: durationPtr(time.Second),
+		InitSegments: 1,
+		ReadyTimeout: time.Second,
 	}
 
 	var mu sync.Mutex
@@ -365,8 +358,8 @@ func TestRunPlayout_AdvancesPerFileAndStopsOnCancel(t *testing.T) {
 	const want = 2
 
 	req := Request{
-		StreamKey:    "playout",
-		RunnerConfig: cfg,
+		StreamKey: "playout",
+		Runner:    cfg,
 		NextItem: func(now time.Time) (PlayItem, bool) {
 			mu.Lock()
 			defer mu.Unlock()
@@ -398,16 +391,16 @@ func TestRunPlayout_BacksOffWhenNoItem(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 
-	cfg := &proxy.Segmenter{
+	cfg := RunnerSpec{
 		Command:      common.StringOrArr{"true"},
-		InitSegments: intPtr(1),
-		ReadyTimeout: durationPtr(time.Second),
+		InitSegments: 1,
+		ReadyTimeout: time.Second,
 	}
 
 	var calls atomic.Int64
 	req := Request{
-		StreamKey:    "playout-empty",
-		RunnerConfig: cfg,
+		StreamKey: "playout-empty",
+		Runner:    cfg,
 		NextItem: func(now time.Time) (PlayItem, bool) {
 			calls.Add(1)
 			return PlayItem{}, false
@@ -435,16 +428,16 @@ func TestRunPlayout_WaitsOutSlotOnEarlyCleanExit(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2500*time.Millisecond)
 	defer cancel()
 
-	cfg := &proxy.Segmenter{
+	cfg := RunnerSpec{
 		Command:      common.StringOrArr{"sleep", "1.1"},
-		InitSegments: intPtr(1),
-		ReadyTimeout: durationPtr(time.Second),
+		InitSegments: 1,
+		ReadyTimeout: time.Second,
 	}
 
 	var calls atomic.Int64
 	req := Request{
-		StreamKey:    "playout-early-exit",
-		RunnerConfig: cfg,
+		StreamKey: "playout-early-exit",
+		Runner:    cfg,
 		NextItem: func(now time.Time) (PlayItem, bool) {
 			calls.Add(1)
 			return PlayItem{File: "/m/short.mp4", NextBoundary: now.Add(time.Hour)}, true
@@ -476,7 +469,7 @@ func TestGetReader_SingleClientReceivesData(t *testing.T) {
 		StreamKey:      "test-single",
 		StreamURL:      testStreamURL,
 		ClientStreamer: testClientStreamer,
-		RunnerConfig:   testSegmenterCfg,
+		Runner:         testSegmenterCfg,
 	}
 
 	reader, err := d.GetReader(ctx, req)
@@ -508,7 +501,7 @@ func TestGetReader_TwoClientsShareOneSegmenter(t *testing.T) {
 		StreamKey:      "test-multi",
 		StreamURL:      testStreamURL,
 		ClientStreamer: testClientStreamer,
-		RunnerConfig:   testSegmenterCfg,
+		Runner:         testSegmenterCfg,
 	}
 
 	reader1, err := d.GetReader(ctx, req)
@@ -559,7 +552,7 @@ func TestGetReader_ReadFailsAfterClose(t *testing.T) {
 		StreamKey:      "test-disconnect",
 		StreamURL:      testStreamURL,
 		ClientStreamer: testClientStreamer,
-		RunnerConfig:   testSegmenterCfg,
+		Runner:         testSegmenterCfg,
 	}
 
 	reader, err := d.GetReader(ctx, req)
@@ -597,7 +590,7 @@ func TestGetReader_SemaphoreBlocksSecondStream(t *testing.T) {
 		StreamURL:      testStreamURL,
 		ClientStreamer: testClientStreamer,
 		Semaphore:      sem,
-		RunnerConfig:   testSegmenterCfg,
+		Runner:         testSegmenterCfg,
 	}
 
 	reader1, err := d.GetReader(ctx1, req1)
@@ -616,7 +609,7 @@ func TestGetReader_SemaphoreBlocksSecondStream(t *testing.T) {
 		StreamURL:      testStreamURL,
 		ClientStreamer: testClientStreamer,
 		Semaphore:      sem,
-		RunnerConfig:   testSegmenterCfg,
+		Runner:         testSegmenterCfg,
 	}
 
 	_, err = d.GetReader(ctx2, req2)
@@ -641,7 +634,7 @@ func TestGetReader_JoiningExistingStreamDoesNotConsumeSemaphore(t *testing.T) {
 		StreamURL:      testStreamURL,
 		ClientStreamer: testClientStreamer,
 		Semaphore:      sem,
-		RunnerConfig:   testSegmenterCfg,
+		Runner:         testSegmenterCfg,
 	}
 
 	reader1, err := d.GetReader(ctx, req)
@@ -669,7 +662,7 @@ func TestStop_ReaderFailsAfterPoolStopped(t *testing.T) {
 		StreamKey:      "test-stop",
 		StreamURL:      testStreamURL,
 		ClientStreamer: testClientStreamer,
-		RunnerConfig:   testSegmenterCfg,
+		Runner:         testSegmenterCfg,
 	}
 
 	reader, err := d.GetReader(ctx, req)

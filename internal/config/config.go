@@ -15,7 +15,7 @@ type Config struct {
 	Logs          Logs               `yaml:"logs"`
 	URLGenerator  URLGeneratorConfig `yaml:"url_generator"`
 	Proxy         proxy.Proxy        `yaml:"proxy"`
-	Playout       proxy.Playout      `yaml:"playout"`
+	Playout       Playout            `yaml:"playout"`
 	Clients       []Client           `yaml:"clients"`
 	Playlists     []Playlist         `yaml:"playlists"`
 	EPGs          []EPG              `yaml:"epgs"`

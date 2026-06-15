@@ -515,6 +515,65 @@ func TestResolveCurrentOffset(t *testing.T) {
 	}
 }
 
+func TestResolveCurrentCatchUp(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "a.mkv"))
+
+	p := newFakeProber()
+	p.durations[filepath.Join(dir, "a.mkv")] = 100
+	c, _ := newTestChannel(t, "c", []string{dir}, p)
+	now := time.Unix(1000, 0)
+	warmUp(t, c, now)
+
+	// 40s in the past wraps onto the 100s loop at offset 60.
+	it, ok := c.ResolveCurrent(now.Add(-40 * time.Second))
+	if !ok {
+		t.Fatal("resolve failed")
+	}
+	if it.Offset != 60 {
+		t.Errorf("expected offset 60, got %f", it.Offset)
+	}
+}
+
+func TestClampStart(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "a.mkv"))
+
+	p := newFakeProber()
+	p.durations[filepath.Join(dir, "a.mkv")] = 100
+	c, _ := newTestChannel(t, "c", []string{dir}, p)
+	now := time.Unix(10000, 0)
+	warmUp(t, c, now)
+
+	past := now.Add(-time.Hour)
+	if got := c.ClampStart(past, now); !got.Equal(past) {
+		t.Errorf("past: expected %v, got %v", past, got)
+	}
+	if got := c.ClampStart(now.Add(time.Hour), now); !got.Equal(now) {
+		t.Errorf("future: expected %v, got %v", now, got)
+	}
+}
+
+func TestCatchupWindow(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "a.mkv"))
+	p := newFakeProber()
+	p.durations[filepath.Join(dir, "a.mkv")] = 3600 // 1h loop
+	c, _ := newTestChannel(t, "c", []string{dir}, p)
+	c.epgDuration = 7 * 24 * time.Hour
+	now := time.Unix(1000, 0)
+	warmUp(t, c, now)
+
+	// loop (1h) < epg (7d) -> loop wins
+	if got := c.CatchupWindow(now); got != time.Hour {
+		t.Errorf("loop cap: expected 1h, got %v", got)
+	}
+	c.epgDuration = 30 * time.Minute
+	if got := c.CatchupWindow(now); got != 30*time.Minute {
+		t.Errorf("epg cap: expected 30m, got %v", got)
+	}
+}
+
 func TestResolveCurrentEmptyChannel(t *testing.T) {
 	dir := t.TempDir() // no media files
 	p := newFakeProber()

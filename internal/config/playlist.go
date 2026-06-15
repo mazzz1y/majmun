@@ -11,7 +11,7 @@ type Playlist struct {
 	Sources     common.StringOrArr `yaml:"sources,omitempty"`
 	Channels    []Channel          `yaml:"channels,omitempty"`
 	Proxy       proxy.Proxy        `yaml:"proxy,omitempty"`
-	Playout     proxy.Playout      `yaml:"playout,omitempty"`
+	Playout     Playout            `yaml:"playout,omitempty"`
 	SkipOnError bool               `yaml:"skip_on_error,omitempty"`
 }
 

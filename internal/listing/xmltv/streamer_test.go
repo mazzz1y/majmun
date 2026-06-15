@@ -647,6 +647,7 @@ func (m mockGenChannel) URLGenerator() *urlgen.Generator { return m.urlGen }
 func (m mockGenChannel) Programmes(_ context.Context, _ time.Time) ([]listing.Programme, error) {
 	return m.progs, nil
 }
+func (m mockGenChannel) CatchupDays(_ time.Time) int { return 1 }
 
 func TestStreamerEmitsGeneratedChannelEPG(t *testing.T) {
 	start := time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC)

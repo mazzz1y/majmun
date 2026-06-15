@@ -67,8 +67,8 @@ func DefaultConfig() *Config {
 					{Name: "segment_duration", Value: "2"},
 					{Name: "max_segments", Value: "15"},
 				},
-				InitSegments: intPtr(2),
-				ReadyTimeout: durationPtr(30 * time.Second),
+				InitSegments: 2,
+				ReadyTimeout: common.Duration(30 * time.Second),
 			},
 			Error: proxy.Error{
 				Handler: proxy.Handler{
@@ -109,18 +109,19 @@ func DefaultConfig() *Config {
 				},
 			},
 		},
-		Playout: proxy.Playout{
+		Playout: Playout{
 			// No default command or template variables: a transcode that keeps up
 			// depends on the host hardware, so the user must provide one (with its
 			// own variables). See docs/config/playout.md.
-			InitSegments: intPtr(4),
-			ReadyTimeout: durationPtr(30 * time.Second),
+			InitSegments:    4,
+			ReadyTimeout:    common.Duration(30 * time.Second),
+			StateDir:        "state",
+			Extensions:      common.StringOrArr{"mkv", "mp4", "avi", "mov", "m4v", "ts", "webm", "mpg", "mpeg", "flv", "wmv"},
+			RefreshInterval: durationPtr(30 * time.Minute),
+			EPGDuration:     common.Duration(7 * 24 * time.Hour),
+			ScheduleSwapAt:  "04:00",
 		},
 	}
-}
-
-func intPtr(i int) *int {
-	return &i
 }
 
 func boolPtr(b bool) *bool {

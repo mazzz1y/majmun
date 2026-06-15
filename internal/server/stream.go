@@ -5,10 +5,12 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"syscall"
 	"time"
 
 	"majmun/internal/app"
+	"majmun/internal/channelgen"
 	"majmun/internal/ctxutil"
 	"majmun/internal/logging"
 	"majmun/internal/metrics"
@@ -51,7 +53,7 @@ func (s *Server) handleStreamProxy(ctx context.Context, w http.ResponseWriter, r
 			return
 		}
 		defer s.releaseSemaphores(ctx)
-		s.handleChannelStream(ctx, w, client, data.StreamData.Streams[0])
+		s.handleChannelStream(ctx, w, r, client, data.StreamData.Streams[0])
 		return
 	}
 
@@ -114,7 +116,7 @@ func (s *Server) handleStreamProxy(ctx context.Context, w http.ResponseWriter, r
 }
 
 func (s *Server) handleChannelStream(
-	ctx context.Context, w http.ResponseWriter, client *app.Client, stream urlgen.Stream) {
+	ctx context.Context, w http.ResponseWriter, r *http.Request, client *app.Client, stream urlgen.Stream) {
 
 	ctx = ctxutil.WithRequestType(ctx, metrics.RequestTypeChannel)
 	ctx = ctxutil.WithProviderType(ctx, metrics.RequestTypeChannel)
@@ -131,7 +133,12 @@ func (s *Server) handleChannelStream(
 	ctx = ctxutil.WithProviderName(ctx, channel.Playlist().Name())
 
 	gen := channel.Generator()
-	if _, ok := gen.ResolveCurrent(time.Now()); !ok {
+
+	// shift offsets wall-clock to a past start (TiviMate-style ?utc=); zero = live.
+	now := time.Now()
+	shift := now.Sub(channelStart(gen, r, now))
+
+	if _, ok := gen.ResolveCurrent(now.Add(-shift)); !ok {
 		logging.Info(ctx, "channel not ready, serving placeholder")
 		w.Header().Set("Content-Type", streamContentType)
 		if _, err := channel.UpstreamErrorStreamer().RunWithStdout(ctx, w); err != nil {
@@ -140,16 +147,18 @@ func (s *Server) handleChannelStream(
 		return
 	}
 
-	// The supervisor re-resolves the file to play before every item, so a single segmenter
-	// per channel persists across schedule swaps; the key needs no fingerprint.
+	// Live clients share one segmenter per channel; each distinct catch-up position gets its own.
 	streamKey := channel.ID()
+	if shift > 0 {
+		streamKey = channel.ID() + ":utc=" + strconv.FormatInt(now.Add(-shift).Unix(), 10)
+	}
 
 	streamReq := streampool.Request{
 		StreamKey:      streamKey,
 		ClientStreamer: channel.ClientStreamer,
-		RunnerConfig:   channel.Playout(),
+		Runner:         channel.Playout(),
 		NextItem: func(now time.Time) (streampool.PlayItem, bool) {
-			it, ok := gen.ResolveCurrent(now)
+			it, ok := gen.ResolveCurrent(now.Add(-shift))
 			if !ok {
 				return streampool.PlayItem{}, false
 			}
@@ -195,6 +204,20 @@ func (s *Server) handleChannelStream(
 	defer func() { _ = reader.Close() }()
 
 	s.streamToResponse(ctx, w, reader)
+}
+
+// channelStart parses ?utc=<unix-seconds> for catch-up; missing/invalid/future = live.
+// ?lutc is accepted but ignored (the stream is continuous).
+func channelStart(gen *channelgen.Channel, r *http.Request, now time.Time) time.Time {
+	raw := r.URL.Query().Get("utc")
+	if raw == "" {
+		return now
+	}
+	secs, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil {
+		return now
+	}
+	return gen.ClampStart(time.Unix(secs, 0), now)
 }
 
 func (s *Server) tryAllStreams(
@@ -258,7 +281,7 @@ func (s *Server) tryStream(
 		StreamURL:      streamURL,
 		ClientStreamer: playlist.ClientStreamer,
 		Semaphore:      playlist.Semaphore(),
-		RunnerConfig:   playlist.SegmenterConfig(),
+		Runner:         playlist.SegmenterConfig(),
 	}
 
 	reader, err := s.streamPool.GetReader(ctx, streamReq)

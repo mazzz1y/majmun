@@ -28,6 +28,22 @@ removed. To avoid cutting off a show, a changed file set is not adopted the mome
 The first build is immediate (the channel starts right away), and if all sources disappear the channel keeps playing
 its last good schedule.
 
+### Catch-Up
+
+Channels support rewind: a viewer can start watching from an earlier point in the guide instead of the live edge.
+Players like TiviMate, Kodi, and IPTV-Smarters show a catch-up UI for any past programme and handle this automatically —
+no setup needed.
+
+Behind the scenes the player just adds a `?utc=<unix-time>` parameter to the channel URL, and the stream starts there
+and plays forward toward live:
+
+```
+http://host/<channel-url>?utc=1718200000
+```
+
+How far back rewind goes is set automatically from your `epg_duration` (capped at one full loop of the channel's
+content). Requesting a time in the future simply plays live.
+
 ## YAML Structure
 
 ```yaml

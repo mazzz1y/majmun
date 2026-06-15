@@ -1,6 +1,7 @@
 package app
 
 import (
+	"majmun/internal/config"
 	"majmun/internal/config/common"
 	"majmun/internal/config/proxy"
 	"reflect"
@@ -132,17 +133,17 @@ func TestMergeProxies(t *testing.T) {
 }
 
 func TestMergePlayoutsCascade(t *testing.T) {
-	global := proxy.Playout{
+	global := config.Playout{
 		Command:         common.StringOrArr{"ffmpeg", "global"},
 		TemplateVars:    []common.NameValue{{Name: "ffmpeg_log_level", Value: "fatal"}},
-		ScheduleSwapAt:  strPtr("04:00"),
+		ScheduleSwapAt:  "04:00",
 		RefreshInterval: durPtr(5 * time.Minute),
 	}
-	playlist := proxy.Playout{
+	playlist := config.Playout{
 		TemplateVars:   []common.NameValue{{Name: "segment_duration", Value: "4"}},
-		ScheduleSwapAt: strPtr("03:00"),
+		ScheduleSwapAt: "03:00",
 	}
-	channel := proxy.Playout{
+	channel := config.Playout{
 		Command:      common.StringOrArr{"ffmpeg", "channel"},
 		TemplateVars: []common.NameValue{{Name: "video_bitrate_kbps", Value: "6000"}},
 	}
@@ -158,15 +159,13 @@ func TestMergePlayoutsCascade(t *testing.T) {
 	}) {
 		t.Errorf("expected accumulated playout template vars, got %v", result.TemplateVars)
 	}
-	if result.ScheduleSwapAt == nil || *result.ScheduleSwapAt != "03:00" {
+	if result.ScheduleSwapAt != "03:00" {
 		t.Errorf("expected playlist schedule_swap_at to win, got %v", result.ScheduleSwapAt)
 	}
 	if result.RefreshInterval == nil || time.Duration(*result.RefreshInterval) != 5*time.Minute {
 		t.Errorf("expected global refresh_interval to be inherited, got %v", result.RefreshInterval)
 	}
 }
-
-func strPtr(s string) *string { return &s }
 
 func durPtr(d time.Duration) *common.Duration {
 	cd := common.Duration(d)

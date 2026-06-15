@@ -25,28 +25,28 @@ func testChannelProxy() proxy.Proxy {
 	}
 }
 
-func testPlayout() proxy.Playout {
-	return proxy.Playout{
+func testPlayout() config.Playout {
+	return config.Playout{
 		Command: common.StringOrArr{"ffmpeg", "-i", "{{ .Playout.Input }}", "-f", "hls", "{{ .Stream.PlaylistPath }}"},
 	}
 }
 
-func newChannelProvider(t *testing.T, parentPlaylist string, conf config.Channel, playout proxy.Playout) *Channel {
+func newChannelProvider(t *testing.T, parentPlaylist string, conf config.Channel, po config.Playout) *Channel {
 	t.Helper()
 	urlGen, err := urlgen.NewGenerator("http://localhost", "secret", time.Hour, time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}
 	mergedProxy := testChannelProxy()
-	swapHour, swapMin := playout.ResolvedScheduleSwapAt()
+	swapHour, swapMin := po.ResolvedScheduleSwapAt()
 	gen := channelgen.NewChannel(
 		parentPlaylist,
 		conf.Name,
 		conf.Sources,
-		playout.ResolvedExtensions(),
-		playout.ResolvedRandomOrder(),
-		playout.ResolvedRefreshInterval(),
-		playout.ResolvedEPGDuration(),
+		po.Extensions,
+		po.ResolvedRandomOrder(),
+		po.ResolvedRefreshInterval(),
+		time.Duration(po.EPGDuration),
 		swapHour, swapMin,
 		"state",
 	)
@@ -54,7 +54,7 @@ func newChannelProvider(t *testing.T, parentPlaylist string, conf config.Channel
 	if err != nil {
 		t.Fatal(err)
 	}
-	ch, err := NewChannelProvider(pl, conf, playout, urlGen, gen, httpclient.NewDirectClient(nil), mergedProxy)
+	ch, err := NewChannelProvider(pl, conf, po, urlGen, gen, httpclient.NewDirectClient(nil), mergedProxy)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +87,7 @@ func TestChannelProviderPlayoutCommand(t *testing.T) {
 		Sources: common.StringOrArr{"/media"},
 	}, testPlayout())
 
-	got := ch.Playout().GetCommand()
+	got := ch.Playout().Command
 	if len(got) == 0 || got[0] != "ffmpeg" {
 		t.Errorf("expected playout command, got %v", got)
 	}

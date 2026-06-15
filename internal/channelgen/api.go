@@ -77,6 +77,23 @@ func (c *Channel) ResolveCurrent(now time.Time) (PlayItem, bool) {
 	return PlayItem{}, false
 }
 
+// ClampStart caps a catch-up start at now (future = live). Past times wrap on the loop.
+func (c *Channel) ClampStart(requested, now time.Time) time.Time {
+	if requested.After(now) {
+		return now
+	}
+	return requested
+}
+
+// CatchupWindow is min(epgDuration, one loop); 0 when no schedule is built.
+func (c *Channel) CatchupWindow(now time.Time) time.Duration {
+	s := c.current(now)
+	if s == nil || s.isEmpty() {
+		return 0
+	}
+	return min(c.epgDuration, time.Duration(s.total()*float64(time.Second)))
+}
+
 type Programme struct {
 	Title       string
 	Description string
@@ -88,10 +105,6 @@ type Programme struct {
 	Stop        time.Time
 }
 
-// epgPast is the small backfill window so an in-progress programme is shown; the forward
-// horizon is the per-channel configured epgDuration.
-const epgPast = -time.Hour
-
 func (c *Channel) Programmes(_ context.Context, now time.Time) ([]Programme, error) {
 	s := c.current(now)
 	if s == nil || s.isEmpty() {
@@ -99,7 +112,10 @@ func (c *Channel) Programmes(_ context.Context, now time.Time) ([]Programme, err
 	}
 
 	total := s.total()
-	start := now.Add(epgPast)
+	// Backfill matches the advertised catch-up window so EPG-driven clients can rewind it.
+	loop := time.Duration(total * float64(time.Second))
+	backfill := min(c.epgDuration, loop)
+	start := now.Add(-backfill)
 	end := now.Add(c.epgDuration)
 
 	elapsed := float64(start.Unix() - s.Anchor)

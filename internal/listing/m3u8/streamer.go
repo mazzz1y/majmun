@@ -13,6 +13,8 @@ import (
 	"majmun/internal/logging"
 	"majmun/internal/parser/m3u8"
 	"majmun/internal/urlgen"
+	"strconv"
+	"time"
 )
 
 type Streamer struct {
@@ -87,6 +89,10 @@ func (s *Streamer) injectChannels(st *store.Store) error {
 			Tags:   make(map[string]string),
 		}
 		track.Attrs[m3u8.AttrTvgID] = ch.ID()
+		days := strconv.Itoa(ch.CatchupDays(time.Now()))
+		track.Attrs[m3u8.AttrCatchup] = "default"
+		track.Attrs[m3u8.AttrCatchupDays] = days
+		track.Attrs[m3u8.AttrTvgRec] = days
 		logo, err := listing.ChannelLogoURL(ch)
 		if err != nil {
 			return err

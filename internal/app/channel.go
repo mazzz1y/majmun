@@ -22,7 +22,7 @@ type Channel struct {
 	fields       []config.ChannelField
 	urlGenerator *urlgen.Generator
 	httpClient   listing.HTTPClient
-	playout      proxy.Playout
+	playout      config.Playout
 	gen          *channelgen.Channel
 
 	streamer              *shell.Streamer
@@ -32,7 +32,7 @@ type Channel struct {
 func NewChannelProvider(
 	playlist listing.Playlist,
 	channelConf config.Channel,
-	playout proxy.Playout,
+	po config.Playout,
 	urlGen *urlgen.Generator,
 	gen *channelgen.Channel,
 	httpClient listing.HTTPClient,
@@ -60,11 +60,11 @@ func NewChannelProvider(
 		name:                  channelConf.Name,
 		id:                    hashid.New(playlist.Name(), channelConf.Name),
 		playlist:              playlist,
-		logo:                  playout.Logo,
+		logo:                  po.Logo,
 		fields:                channelConf.Fields,
 		urlGenerator:          urlGen,
 		httpClient:            httpClient,
-		playout:               playout,
+		playout:               po,
 		gen:                   gen,
 		streamer:              streamStreamer,
 		upstreamErrorStreamer: upstreamErrorStreamer,
@@ -114,12 +114,30 @@ func (c *Channel) ExpiredLinkStreamer() *shell.Streamer {
 	return nil
 }
 
-func (c *Channel) Playout() proxy.RunnerConfig {
-	return &c.playout
+func (c *Channel) Playout() streampool.RunnerSpec {
+	return streampool.RunnerSpec{
+		Command:      c.playout.Command,
+		EnvVars:      c.playout.EnvVars,
+		TemplateVars: c.playout.TemplateVars,
+		InitSegments: c.playout.InitSegments,
+		ReadyTimeout: time.Duration(c.playout.ReadyTimeout),
+	}
 }
 
 func (c *Channel) Generator() *channelgen.Channel {
 	return c.gen
+}
+
+func (c *Channel) CatchupDays(now time.Time) int {
+	w := c.gen.CatchupWindow(now)
+	if w <= 0 {
+		w = time.Duration(c.playout.EPGDuration)
+	}
+	days := int((w + 12*time.Hour) / (24 * time.Hour))
+	if days < 1 {
+		days = 1
+	}
+	return days
 }
 
 func (c *Channel) Programmes(ctx context.Context, now time.Time) ([]listing.Programme, error) {

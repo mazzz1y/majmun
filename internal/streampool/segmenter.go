@@ -3,7 +3,6 @@ package streampool
 import (
 	"context"
 	"fmt"
-	"majmun/internal/config/proxy"
 	"majmun/internal/shell"
 	"maps"
 	"os"
@@ -24,7 +23,7 @@ type segmenter struct {
 	streamKey    string
 	dir          string
 	playlistPath string
-	config       proxy.RunnerConfig
+	runner       RunnerSpec
 	streamer     *shell.Streamer
 	nextItem     NextItemFunc
 
@@ -49,8 +48,8 @@ func newSegmenter(parentCtx context.Context, baseDir string, req Request) (*segm
 
 	playlistPath := filepath.Join(dir, "stream.m3u8")
 
-	cfg := req.RunnerConfig
-	base, err := shell.NewShellStreamer(cfg.GetCommand(), cfg.GetEnvVars(), cfg.GetTemplateVars())
+	r := req.Runner
+	base, err := shell.NewShellStreamer(r.Command, r.EnvVars, r.TemplateVars)
 	if err != nil {
 		return nil, fmt.Errorf("parse segmenter command: %w", err)
 	}
@@ -71,7 +70,7 @@ func newSegmenter(parentCtx context.Context, baseDir string, req Request) (*segm
 		streamKey:    req.StreamKey,
 		dir:          dir,
 		playlistPath: playlistPath,
-		config:       cfg,
+		runner:       r,
 		streamer:     streamer,
 		nextItem:     req.NextItem,
 		ctx:          ctx,
@@ -109,7 +108,7 @@ func (s *segmenter) setReady(err error) {
 }
 
 func (s *segmenter) waitForSegments() {
-	deadline := time.After(time.Duration(*s.config.GetReadyTimeout()))
+	deadline := time.After(s.runner.ReadyTimeout)
 	ticker := time.NewTicker(segmentReadyPoll)
 	defer ticker.Stop()
 
@@ -122,7 +121,7 @@ func (s *segmenter) waitForSegments() {
 			s.setReady(fmt.Errorf("timeout waiting for segments"))
 			return
 		case <-ticker.C:
-			if s.countSegments() >= *s.config.GetInitSegments() {
+			if s.countSegments() >= s.runner.InitSegments {
 				s.setReady(nil)
 				return
 			}

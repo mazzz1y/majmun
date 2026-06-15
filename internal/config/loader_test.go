@@ -89,7 +89,7 @@ playlists:
               value: "6000"`,
 			expectError: false,
 			validate: func(t *testing.T, cfg *Config) {
-				if cfg.Playout.ScheduleSwapAt == nil || *cfg.Playout.ScheduleSwapAt != "03:00" {
+				if cfg.Playout.ScheduleSwapAt != "03:00" {
 					t.Errorf("expected global schedule_swap_at 03:00, got %v", cfg.Playout.ScheduleSwapAt)
 				}
 				if len(cfg.Playout.TemplateVars) != 1 || cfg.Playout.TemplateVars[0].Value != "3000" {

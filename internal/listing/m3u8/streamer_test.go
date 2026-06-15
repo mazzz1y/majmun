@@ -80,6 +80,7 @@ func (m mockChannel) URLGenerator() *urlgen.Generator { return m.urlGen }
 func (m mockChannel) Programmes(_ context.Context, _ time.Time) ([]listing.Programme, error) {
 	return nil, nil
 }
+func (m mockChannel) CatchupDays(_ time.Time) int { return 1 }
 
 func channelField(t *testing.T, selectorRaw, templateStr string) config.ChannelField {
 	t.Helper()

@@ -9,6 +9,7 @@ import (
 	"majmun/internal/shell"
 	"majmun/internal/streampool"
 	"majmun/internal/urlgen"
+	"time"
 
 	"golang.org/x/sync/semaphore"
 )
@@ -157,6 +158,13 @@ func (ps *Playlist) ClientStreamer(playlistPath string) streampool.Streamer {
 	})
 }
 
-func (ps *Playlist) SegmenterConfig() proxy.RunnerConfig {
-	return &ps.proxyConfig.Segmenter
+func (ps *Playlist) SegmenterConfig() streampool.RunnerSpec {
+	s := ps.proxyConfig.Segmenter
+	return streampool.RunnerSpec{
+		Command:      s.Command,
+		EnvVars:      s.EnvVars,
+		TemplateVars: s.TemplateVars,
+		InitSegments: s.InitSegments,
+		ReadyTimeout: time.Duration(s.ReadyTimeout),
+	}
 }
