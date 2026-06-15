@@ -15,46 +15,44 @@ local files.
 
 ## How It Works
 
-Playout runs **one FFmpeg process per file**. A supervisor resolves the channel's current file from its
-[persisted schedule](./channels.md#how-it-works), launches the command for that single file, and when it finishes
-advances to the next file — looping the schedule forever. All processes write into one shared HLS directory, so viewers
-read a single continuous stream with a brief discontinuity at each file boundary. The supervisor runs until the last
-viewer leaves.
+Playout runs your command **once per file**. A supervisor resolves the channel's current file from its
+[persisted schedule](./channels.md#how-it-works), runs the command for that file, and advances to the next when it
+finishes — looping forever. Every run writes into one shared HLS directory, so viewers get a single continuous stream.
+Per-file invocation is what lets the command adapt to each file via the
+[`Playout.*` variables](#reserved-template-variables); a single whole-schedule process could not.
 
-Per-file invocation lets the command tailor itself to each file using the per-file variables (e.g. stream mapping or
-decoder choice) — decisions a single whole-schedule process cannot make. How it uses them is up to you.
+The command takes one input and produces one output:
 
-The command reads one file and writes a live HLS stream on disk:
+- **Input:** `{{ .Playout.Input }}`, seeked to `{{ .Playout.Offset }}` (seconds). The file's probed parameters
+  (`VideoCodec`, `Width`, `AudioLanguages`, …) are exposed too, so the command can pick its decoder, scaling, or audio
+  track per file — see [Reserved Template Variables](#reserved-template-variables).
+- **Output:** a rolling HLS stream at `{{ .Stream.PlaylistPath }}` with segments at `{{ .Stream.SegmentPath }}`.
 
-- **Input:** `{{ .Playout.Input }}` — the path of the file to play now, with `{{ .Playout.Offset }}` the seek position
-  (seconds) for the live point. The file's probed media parameters (`VideoCodec`, `Width`, `Height`, `PixelFormat`,
-  `FrameRate`, `FieldOrder`, `AudioCodec`, `AudioChannels`, `SampleRate`, `AudioLanguages`) are exposed too, so the
-  command can adapt its decoder, scaling, deinterlace, or audio track per file — see
-  [Reserved Template Variables](#reserved-template-variables).
-- **Output:** `{{ .Stream.SegmentPath }}` (segment files like `/tmp/.../seg_%05d.ts`) and `{{ .Stream.PlaylistPath }}`
-  (a live, rolling HLS playlist — no `EXT-X-ENDLIST`, old segments deleted).
+Any command that does this works; the FFmpeg flags are up to you. The [next section](#what-a-command-must-take-care-of)
+lists what a correct command must handle.
 
-Two things matter here:
+!!! warning "No default command"
 
-- **Pace output at realtime.** Without it a command encodes as fast as possible, racing through the file and filling the
-  disk with segments. Realtime pacing (`-re`) emits ~1 second of video per second of wall time.
-- **Startup.** majmun starts serving viewers once `init_segments` segments exist (or `ready_timeout` passes).
-
-Any command that satisfies this — reads the file, writes a paced live HLS stream — works; the exact FFmpeg flags are
-up to you.
+    There is **no default `command`** — a transcode that keeps up in realtime depends on your hardware (CPU vs. a GPU
+    encoder like NVENC/VAAPI/QSV), so majmun cannot pick one for you. If channels are configured but no `command` is set
+    (at the global, playlist, or channel level), startup fails with an error. Start from a ready-to-use command in
+    [Examples → Playout](../examples/playout.md) and adjust it to your hardware.
 
 ### What a command must take care of
 
-The default command handles all of these; a custom command must too.
+A correct command handles all of these.
 
+- **Realtime pacing** — emit ~1 second of video per second of wall time (`-re`). Without it the command races through
+  the file as fast as it can encode, flooding the disk with segments.
 - **Normalization** — scale/letterbox every source to one `width`×`height`×`fps` canvas and normalize audio, so the
   stream stays uniform across files. Skip this only if all sources are already uniform.
 - **Appending to the live playlist** — each file's process writes into the same HLS directory, so the command must
   append rather than truncate (`-hls_flags append_list+omit_endlist`) and mark a discontinuity at the join
   (`discont_start`).
 - **Segment alignment** — keyframes on segment boundaries, so joins are fast and segments uniform.
-- **Buffering** — realtime pacing leaves only ~one segment of headroom. `-readrate_initial_burst` emits the first
-  `initial_burst` seconds at full speed to build a buffer without delaying start (see [Startup Buffer](#startup-buffer)).
+- **Buffering** — realtime pacing leaves only ~one segment of headroom, and majmun waits for `init_segments` segments
+  before serving. `-readrate_initial_burst` emits the first few seconds at full speed to build that buffer without
+  delaying start.
 
 ## YAML Structure
 
@@ -88,7 +86,7 @@ playlists:
 
 | Field                | Type                                          | Required | Description                                                                                             |
 | -------------------- | --------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------- |
-| `command`            | [`Command`](./shared/command.md)              | **Yes**  | Transcoder command. No default — see [Choosing a Command](#choosing-a-command).                          |
+| `command`            | [`Command`](./shared/command.md)              | **Yes**  | Transcoder command. No default — see [How It Works](#how-it-works).                                      |
 | `template_variables` | [`[]NameValue`](./shared/name-value.md)       | No       | User variables for the command. Merged by name across cascade levels.                                  |
 | `env_variables`      | [`[]NameValue`](./shared/name-value.md)       | No       | Environment variables for the command. Merged by name across cascade levels.                            |
 | `init_segments`      | `int`                                         | No       | Number of segments that must exist before clients can start reading (default: `4`). Must be at least 1. |
@@ -105,14 +103,6 @@ playlists:
 | `refresh_interval` | [`duration`](./shared/duration.md) | No       | How often `sources` is re-scanned for added/removed files (see [adopting changes](./channels.md#picking-up-file-changes)). Default `30m`; `0` disables re-scanning.                          |
 | `epg_duration`     | [`duration`](./shared/duration.md) | No       | How far into the future the EPG is generated. Default `1w`.                                                                                                                               |
 | `schedule_swap_at` | `string` (`HH:MM`)                 | No       | Local time of day after which a changed file set is adopted by the live stream — deferred further to the end of the programme then playing, so a show is never cut off mid-way. Default `04:00`. |
-
-### Choosing a Command
-
-There is **no default `command`** — a transcode that keeps up in realtime depends on your hardware (CPU vs. a
-GPU encoder like NVENC/VAAPI/QSV), so majmun cannot pick one for you. If channels are configured but no `command` is set
-(at the global, playlist, or channel level), startup fails with an error.
-
-Start from a ready-to-use command in [Examples → Playout](../examples/playout.md) and adjust it to your hardware.
 
 ### Reserved Template Variables
 
@@ -137,19 +127,6 @@ The playout command receives these runtime variables (also as `MAJMUN_*` environ
 | `{{ .Channel.Name }}` | `MAJMUN_CHANNEL_NAME` | Channel name. |
 | `{{ .Channel.Logo }}` | `MAJMUN_CHANNEL_LOGO` | Channel logo path/URL, e.g. `-i "{{ .Channel.Logo }}"` for a watermark. |
 | `{{ .Playlist.Name }}` | `MAJMUN_PLAYLIST_NAME` | Parent playlist name. |
-
-## Startup Buffer
-
-When a viewer connects, majmun waits for the transcode to produce `init_segments` segments (default `4`, about 8s at
-2s each) before it starts serving. This head start matters: it gives the player a few seconds of video in reserve, so a
-brief encoder slowdown doesn't immediately stall playback. The `initial_burst` setting lets the transcode render those
-first segments faster than realtime, keeping the wait short.
-
-Tuning:
-
-- **Lower `init_segments`** → viewers start sooner, but with less buffer to absorb hiccups.
-- **Raise `init_segments`** (and `initial_burst`) → more buffer, better on slow encoders, at the cost of a longer
-  initial wait.
 
 ## Examples
 
