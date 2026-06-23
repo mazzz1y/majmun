@@ -90,7 +90,7 @@ playlists:
         sources:
           - /media/shows/comedy
         playout:
-          random_order: true
+          order: shuffle
 
 epgs:
   - name: movies

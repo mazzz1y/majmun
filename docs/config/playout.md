@@ -66,7 +66,7 @@ playout:
   state_dir: state
   logo: ""
   extensions: []
-  random_order: false
+  order: sequential
   refresh_interval: 30m
   epg_duration: 1w
   schedule_swap_at: "04:00"
@@ -99,7 +99,7 @@ playlists:
 | `state_dir`        | `string`                           | No       | Directory where channel schedules are persisted. Default `state`.                                                                                                                          |
 | `logo`             | `string`                           | No       | Channel logo: an http(s) URL or a local file path. Available in commands as `{{ .Channel.Logo }}`.                                                                                         |
 | `extensions`       | `[]string`                         | No       | Video file extensions to include. Default: `mkv, mp4, avi, mov, m4v, ts, webm, mpg, mpeg, flv, wmv`.                                                                                       |
-| `random_order`     | `bool`                             | No       | When `true`, files play in a stable shuffled order; otherwise [episode order](./channels.md#playback-order). Default `false`.                                                              |
+| `order`            | `string`                           | No       | Playback order: `sequential` (episode order), `shuffle` (stable random), or `interleave` (rotate episodes across shows). Default `sequential`. See [Playback Order](./channels.md#playback-order). |
 | `refresh_interval` | [`duration`](./shared/duration.md) | No       | How often `sources` is re-scanned for added/removed files (see [adopting changes](./channels.md#picking-up-file-changes)). Default `30m`; `0` disables re-scanning.                          |
 | `epg_duration`     | [`duration`](./shared/duration.md) | No       | How far into the future the EPG is generated. Default `1w`.                                                                                                                               |
 | `schedule_swap_at` | `string` (`HH:MM`)                 | No       | Local time of day after which a changed file set is adopted by the live stream — deferred further to the end of the programme then playing, so a show is never cut off mid-way. Default `04:00`. |

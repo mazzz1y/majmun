@@ -140,8 +140,8 @@ func mergePlayouts(playouts ...config.Playout) config.Playout {
 		if len(p.Extensions) > 0 {
 			result.Extensions = p.Extensions
 		}
-		if p.RandomOrder != nil {
-			result.RandomOrder = p.RandomOrder
+		if p.Order != "" {
+			result.Order = p.Order
 		}
 		if p.RefreshInterval != nil {
 			result.RefreshInterval = p.RefreshInterval

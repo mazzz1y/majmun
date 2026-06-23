@@ -89,7 +89,7 @@ playlists:
       - name: "Movie Marathon"
         sources: [/media/movies]
         playout:
-          random_order: true
+          order: shuffle
 ```
 
 ### Skip Failing Sources

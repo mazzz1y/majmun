@@ -44,7 +44,7 @@ playlists:
         sources:
           - /media/shows/comedy
         playout:
-          random_order: true # reshuffled when the file set changes
+          order: shuffle # reshuffled when the file set changes
 
 clients:
   - name: "tv"

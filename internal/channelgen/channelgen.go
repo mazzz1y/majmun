@@ -19,7 +19,7 @@ type Channel struct {
 	name        string
 	sources     []string
 	extensions  []string
-	randomOrder bool
+	order       string
 	refresh     time.Duration
 	epgDuration time.Duration
 	swapHour    int
@@ -38,14 +38,14 @@ type Channel struct {
 	promoteAt time.Time
 }
 
-func NewChannel(playlist, name string, sources, extensions []string, randomOrder bool, refresh, epgDuration time.Duration, swapHour, swapMin int, stateDir string) *Channel {
+func NewChannel(playlist, name string, sources, extensions []string, order string, refresh, epgDuration time.Duration, swapHour, swapMin int, stateDir string) *Channel {
 	return &Channel{
 		id:          hashid.New(playlist, name),
 		playlist:    playlist,
 		name:        name,
 		sources:     sources,
 		extensions:  extensions,
-		randomOrder: randomOrder,
+		order:       order,
 		refresh:     refresh,
 		epgDuration: epgDuration,
 		swapHour:    swapHour,
@@ -173,7 +173,7 @@ func (c *Channel) build(ctx context.Context, now time.Time) {
 	logging.Info(ctx, "building channel schedule", "sources", c.sources)
 	started := time.Now()
 
-	s, err := buildSchedule(ctx, c.prober, c.id, c.sources, c.extensions, c.randomOrder, old, now)
+	s, err := buildSchedule(ctx, c.prober, c.id, c.sources, c.extensions, c.order, old, now)
 	if err != nil {
 		logging.Error(ctx, err, "failed to build channel schedule")
 		c.mu.Lock()

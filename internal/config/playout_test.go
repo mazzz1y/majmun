@@ -29,15 +29,14 @@ func TestPlayoutResolvedScheduleSwapAt(t *testing.T) {
 	}
 }
 
-func TestPlayoutResolvedRandomOrder(t *testing.T) {
-	var p Playout
-	if p.ResolvedRandomOrder() {
-		t.Error("expected false when unset")
+func TestPlayoutValidateOrder(t *testing.T) {
+	for _, ok := range []string{"", "sequential", "shuffle", "interleave"} {
+		if err := (&Playout{Order: ok}).Validate(); err != nil {
+			t.Errorf("order %q should be valid: %v", ok, err)
+		}
 	}
-	tr := true
-	p.RandomOrder = &tr
-	if !p.ResolvedRandomOrder() {
-		t.Error("expected true when set true")
+	if err := (&Playout{Order: "bogus"}).Validate(); err == nil {
+		t.Error("expected error for invalid order")
 	}
 }
 

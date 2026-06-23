@@ -60,7 +60,7 @@ playlists:
 
 ## Fields
 
-A channel itself has only three fields plus an optional `playout` override. Everything else — `logo`, `random_order`,
+A channel itself has only three fields plus an optional `playout` override. Everything else — `logo`, `order`,
 `extensions`, `refresh_interval`, `epg_duration`, `schedule_swap_at`, the transcode command and its
 `template_variables` — lives in the [`playout`](./playout.md) block and cascades global ➡ playlist ➡ channel.
 
@@ -74,16 +74,6 @@ A channel itself has only three fields plus an optional `playout` override. Ever
 A channel belongs to its parent playlist: the [`playout`](./playout.md) config cascades global ➡ playlist (group
 channels that need the same command into one playlist) ➡ channel, and [channel rules](./rules/index.md) with a
 `condition.playlists` match the channel by its **parent playlist name**.
-
-## Playback Order
-
-Unless [`playout.random_order`](./playout.md) is set, files play in episode order:
-
-1. Files are grouped by directory; directories compare in natural order (`Season 2` before `Season 10`).
-2. Within a directory, files with season/episode info play in `season, episode` order. The info comes from container
-   tags (`episode_id`, `episode_sort`, `episode`) or, when absent, from the filename — `S01E05`, `1x05`, `ep05`,
-   `Episode 5`, and `E05` style patterns are recognized.
-3. Files without episode info compare by filename in natural order, so `ep2.mkv` plays before `ep10.mkv`.
 
 ## EPG Metadata
 
@@ -152,10 +142,10 @@ playlists:
         sources: [/media/football]
 ```
 
-### Multiple Sources and Random Order
+### Multiple Sources and Shuffle
 
-Directories are scanned recursively; individual files can be mixed in. `random_order` shuffles playback with a stable,
-persisted seed. Both `random_order` and `extensions` are [`playout`](./playout.md) fields, set here at the channel level:
+Directories are scanned recursively; individual files can be mixed in. `order: shuffle` shuffles playback with a stable,
+persisted seed. Both `order` and `extensions` are [`playout`](./playout.md) fields, set here at the channel level:
 
 ```yaml
 playlists:
@@ -166,6 +156,6 @@ playlists:
           - /media/movies
           - /media/extra/feature.mkv
         playout:
-          random_order: true
+          order: shuffle
           extensions: [mkv, mp4]
 ```

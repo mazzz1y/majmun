@@ -46,7 +46,7 @@ func TestChannelValidate(t *testing.T) {
 		},
 		{
 			name:        "valid random",
-			channel:     Channel{Name: "cartoons", Sources: common.StringOrArr{"/media/cartoons"}, Playout: Playout{RandomOrder: boolPtr(true)}},
+			channel:     Channel{Name: "cartoons", Sources: common.StringOrArr{"/media/cartoons"}, Playout: Playout{Order: "shuffle"}},
 			expectError: false,
 		},
 		{

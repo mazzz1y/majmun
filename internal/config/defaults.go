@@ -117,6 +117,7 @@ func DefaultConfig() *Config {
 			ReadyTimeout:    common.Duration(30 * time.Second),
 			StateDir:        "state",
 			Extensions:      common.StringOrArr{"mkv", "mp4", "avi", "mov", "m4v", "ts", "webm", "mpg", "mpeg", "flv", "wmv"},
+			Order:           "sequential",
 			RefreshInterval: durationPtr(30 * time.Minute),
 			EPGDuration:     common.Duration(7 * 24 * time.Hour),
 			ScheduleSwapAt:  "04:00",

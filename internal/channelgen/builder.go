@@ -7,16 +7,17 @@ import (
 	"math/rand"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 )
 
-func buildSchedule(ctx context.Context, p prober, id string, sources, extensions []string, randomOrder bool, old *Schedule, now time.Time) (*Schedule, error) {
+func buildSchedule(ctx context.Context, p prober, id string, sources, extensions []string, order string, old *Schedule, now time.Time) (*Schedule, error) {
 	files, err := scanSources(sources, extensions)
 	if err != nil {
 		return nil, err
 	}
 
-	fp := fingerprint(files, randomOrder)
+	fp := fingerprint(files, order)
 	if old != nil && old.Fingerprint == fp {
 		return old, nil
 	}
@@ -79,12 +80,15 @@ func buildSchedule(ctx context.Context, p prober, id string, sources, extensions
 	if old != nil {
 		seed = old.Seed
 	}
-	if randomOrder {
+	switch order {
+	case "shuffle":
 		if old == nil || old.Seed == 0 {
 			seed = now.UnixNano()
 		}
 		shuffle(items, seed)
-	} else {
+	case "interleave":
+		items = interleave(items, sources)
+	default:
 		sort.Slice(items, func(i, j int) bool {
 			return itemLess(items[i], items[j])
 		})
@@ -119,6 +123,49 @@ func itemLess(a, b Item) bool {
 		return a.Episode < b.Episode
 	}
 	return natsort.Less(filepath.Base(a.File), filepath.Base(b.File))
+}
+
+// seriesKey is the first path segment below the matched source root, i.e. the show folder.
+// A file sitting directly in a source falls back to its filename (a series of one).
+func seriesKey(file string, sources []string) string {
+	for _, src := range sources {
+		rel, err := filepath.Rel(src, file)
+		if err != nil || strings.HasPrefix(rel, "..") {
+			continue
+		}
+		if i := strings.IndexRune(rel, filepath.Separator); i >= 0 {
+			return rel[:i]
+		}
+		return rel // file directly under the source
+	}
+	return filepath.Base(file)
+}
+
+// interleave round-robins episodes across shows: each show is sorted by episode order, then
+// position k from every show is taken in turn. Shorter shows drop out as they run out.
+func interleave(items []Item, sources []string) []Item {
+	groups := map[string][]Item{}
+	for _, it := range items {
+		k := seriesKey(it.File, sources)
+		groups[k] = append(groups[k], it)
+	}
+	keys := make([]string, 0, len(groups))
+	for k, g := range groups {
+		sort.Slice(g, func(i, j int) bool { return itemLess(g[i], g[j]) })
+		groups[k] = g
+		keys = append(keys, k)
+	}
+	sort.Slice(keys, func(i, j int) bool { return natsort.Less(keys[i], keys[j]) })
+
+	out := make([]Item, 0, len(items))
+	for round := 0; len(out) < len(items); round++ {
+		for _, k := range keys {
+			if g := groups[k]; round < len(g) {
+				out = append(out, g[round])
+			}
+		}
+	}
+	return out
 }
 
 func shuffle(items []Item, seed int64) {

@@ -66,8 +66,8 @@ func newTestChannel(t *testing.T, id string, sources []string, p prober) (*Chann
 	return c, stateDir
 }
 
-func buildTestSchedule(p prober, dir string, randomOrder bool, old *Schedule, now time.Time) (*Schedule, error) {
-	return buildSchedule(context.Background(), p, "c", []string{dir}, testExtensions, randomOrder, old, now)
+func buildTestSchedule(p prober, dir string, order string, old *Schedule, now time.Time) (*Schedule, error) {
+	return buildSchedule(context.Background(), p, "c", []string{dir}, testExtensions, order, old, now)
 }
 
 // warmUp triggers a build and blocks until it has completed, so synchronous assertions
@@ -117,18 +117,18 @@ func TestFingerprintChangesWithFiles(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "b.mkv"))
 	f2, _ := scanSources([]string{dir}, testExtensions)
 
-	if fingerprint(f1, false) == fingerprint(f2, false) {
+	if fingerprint(f1, "sequential") == fingerprint(f2, "sequential") {
 		t.Error("fingerprint should change when files change")
 	}
 }
 
-func TestFingerprintChangesWithRandomOrder(t *testing.T) {
+func TestFingerprintChangesWithOrder(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, filepath.Join(dir, "a.mkv"))
 	files, _ := scanSources([]string{dir}, testExtensions)
 
-	if fingerprint(files, false) == fingerprint(files, true) {
-		t.Error("fingerprint should change when random_order changes")
+	if fingerprint(files, "sequential") == fingerprint(files, "shuffle") {
+		t.Error("fingerprint should change when order changes")
 	}
 }
 
@@ -143,7 +143,7 @@ func TestBuildScheduleSequential(t *testing.T) {
 
 	now := time.Unix(1000, 0)
 
-	s, err := buildTestSchedule(p, dir, false, nil, now)
+	s, err := buildTestSchedule(p, dir, "sequential", nil, now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -166,7 +166,7 @@ func TestBuildScheduleNaturalOrder(t *testing.T) {
 		writeFile(t, filepath.Join(dir, f))
 	}
 
-	s, err := buildTestSchedule(newFakeProber(), dir, false, nil, time.Unix(1000, 0))
+	s, err := buildTestSchedule(newFakeProber(), dir, "sequential", nil, time.Unix(1000, 0))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -191,7 +191,7 @@ func TestBuildScheduleMixedTaggedUntagged(t *testing.T) {
 	p.results[filepath.Join(dir, "zfinale.mkv")] = probeResult{Duration: 60, Season: 2, Episode: 1}
 	p.results[filepath.Join(dir, "apilot.mkv")] = probeResult{Duration: 60, Season: 1, Episode: 1}
 
-	s, err := buildTestSchedule(p, dir, false, nil, time.Unix(1000, 0))
+	s, err := buildTestSchedule(p, dir, "sequential", nil, time.Unix(1000, 0))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -217,7 +217,7 @@ func TestBuildScheduleEpisodeOrder(t *testing.T) {
 	p.results[filepath.Join(dir, "bbb.mkv")] = probeResult{Duration: 60, Season: 1, Episode: 2}
 	p.results[filepath.Join(dir, "ccc.mkv")] = probeResult{Duration: 60, Season: 1, Episode: 1}
 
-	s, err := buildTestSchedule(p, dir, false, nil, time.Unix(1000, 0))
+	s, err := buildTestSchedule(p, dir, "sequential", nil, time.Unix(1000, 0))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -238,7 +238,7 @@ func TestBuildScheduleEpisodeFromFilename(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "Show S01E2.mkv"))
 	writeFile(t, filepath.Join(dir, "Show S02E1.mkv"))
 
-	s, err := buildTestSchedule(newFakeProber(), dir, false, nil, time.Unix(1000, 0))
+	s, err := buildTestSchedule(newFakeProber(), dir, "sequential", nil, time.Unix(1000, 0))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -260,7 +260,7 @@ func TestBuildScheduleGroupsByDirectory(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "show-b", "E01.mkv"))
 	writeFile(t, filepath.Join(dir, "show-a", "E02.mkv"))
 
-	s, err := buildTestSchedule(newFakeProber(), dir, false, nil, time.Unix(1000, 0))
+	s, err := buildTestSchedule(newFakeProber(), dir, "sequential", nil, time.Unix(1000, 0))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -287,7 +287,7 @@ func TestBuildScheduleUsesContainerMetadata(t *testing.T) {
 	// ep02 has no tags -> filename title, episode parsed from filename ("ep02" -> 2),
 	// so it sorts before ep01's tagged episode 3.
 
-	s, err := buildTestSchedule(p, dir, false, nil, time.Unix(1000, 0))
+	s, err := buildTestSchedule(p, dir, "sequential", nil, time.Unix(1000, 0))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -333,11 +333,11 @@ func TestBuildScheduleReusesCacheNoReprobe(t *testing.T) {
 	p := newFakeProber()
 	now := time.Unix(1000, 0)
 
-	s1, err := buildTestSchedule(p, dir, false, nil, now)
+	s1, err := buildTestSchedule(p, dir, "sequential", nil, now)
 	if err != nil {
 		t.Fatal(err)
 	}
-	s2, err := buildTestSchedule(p, dir, false, s1, now.Add(time.Hour))
+	s2, err := buildTestSchedule(p, dir, "sequential", s1, now.Add(time.Hour))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -356,16 +356,66 @@ func TestBuildSchedulePreservesAnchorAndSeed(t *testing.T) {
 	p := newFakeProber()
 	now := time.Unix(1000, 0)
 
-	s1, _ := buildTestSchedule(p, dir, true, nil, now)
+	s1, _ := buildTestSchedule(p, dir, "shuffle", nil, now)
 
 	writeFile(t, filepath.Join(dir, "b.mkv"))
-	s2, _ := buildTestSchedule(p, dir, true, s1, now.Add(time.Hour))
+	s2, _ := buildTestSchedule(p, dir, "shuffle", s1, now.Add(time.Hour))
 
 	if s2.Anchor != s1.Anchor {
 		t.Errorf("anchor should be preserved: %d != %d", s2.Anchor, s1.Anchor)
 	}
 	if s2.Seed != s1.Seed {
 		t.Errorf("seed should be preserved: %d != %d", s2.Seed, s1.Seed)
+	}
+}
+
+func TestSeriesKey(t *testing.T) {
+	root := "/mnt/series"
+	cases := map[string]string{
+		"/mnt/series/Show/S01E01.mkv":        "Show",
+		"/mnt/series/Show/Season 1/ep01.mkv": "Show",
+		"/mnt/series/loose.mkv":              "loose.mkv",
+	}
+	for file, want := range cases {
+		if got := seriesKey(file, []string{root}); got != want {
+			t.Errorf("seriesKey(%q) = %q, want %q", file, got, want)
+		}
+	}
+}
+
+func TestInterleaveOrder(t *testing.T) {
+	dir := t.TempDir()
+	p := newFakeProber()
+	// Show A: 2 eps; Show B: 3 eps. Expect A1,B1,A2,B2,B3 (A drops out, B continues).
+	for _, f := range []string{
+		"A/S01E01.mkv", "A/S01E02.mkv",
+		"B/S01E01.mkv", "B/S01E02.mkv", "B/S01E03.mkv",
+	} {
+		path := filepath.Join(dir, f)
+		writeFile(t, path)
+		p.durations[path] = 100
+	}
+
+	s, err := buildTestSchedule(p, dir, "interleave", nil, time.Unix(1000, 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, it := range s.Items {
+		got = append(got, filepath.Base(filepath.Dir(it.File))+"/"+filepath.Base(it.File))
+	}
+	want := []string{
+		"A/S01E01.mkv", "B/S01E01.mkv",
+		"A/S01E02.mkv", "B/S01E02.mkv",
+		"B/S01E03.mkv",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("position %d: got %v, want %v", i, got, want)
+		}
 	}
 }
 
@@ -621,7 +671,7 @@ func TestProgrammesGrid(t *testing.T) {
 // resolves a channel by the app-side id while the generator loads its schedule by this one,
 // so the two must agree or schedule lookup breaks silently.
 func TestNewChannelIDContract(t *testing.T) {
-	c := NewChannel("local", "cartoons", nil, testExtensions, false, 0, 24*time.Hour, 4, 0, "state")
+	c := NewChannel("local", "cartoons", nil, testExtensions, "sequential", 0, 24*time.Hour, 4, 0, "state")
 	if c.id != hashid.New("local", "cartoons") {
 		t.Errorf("expected id to hash the playlist and channel names, got %s", c.id)
 	}
@@ -632,7 +682,7 @@ func TestBuildPersistsScheduleFlat(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "a.mkv"))
 	p := newFakeProber()
 	// Hostile characters in names never reach the filesystem: the id is a hashid.
-	c := NewChannel("local", "name with? hostile/chars ", []string{dir}, testExtensions, false, 0, 24*time.Hour, 4, 0, t.TempDir())
+	c := NewChannel("local", "name with? hostile/chars ", []string{dir}, testExtensions, "sequential", 0, 24*time.Hour, 4, 0, t.TempDir())
 	c.prober = p
 	stateDir := c.stateDir
 

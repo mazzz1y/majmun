@@ -11,6 +11,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+var validPlayoutOrders = map[string]bool{"sequential": true, "shuffle": true, "interleave": true}
+
 type Playout struct {
 	Command      common.StringOrArr `yaml:"command,omitempty"`
 	TemplateVars []common.NameValue `yaml:"template_variables,omitempty"`
@@ -21,7 +23,7 @@ type Playout struct {
 	StateDir        string             `yaml:"state_dir,omitempty"`
 	Logo            string             `yaml:"logo,omitempty"`
 	Extensions      common.StringOrArr `yaml:"extensions,omitempty"`
-	RandomOrder     *bool              `yaml:"random_order,omitempty"`
+	Order           string             `yaml:"order,omitempty"`
 	RefreshInterval *common.Duration   `yaml:"refresh_interval,omitempty"`
 	EPGDuration     common.Duration    `yaml:"epg_duration,omitempty"`
 	ScheduleSwapAt  string             `yaml:"schedule_swap_at,omitempty"`
@@ -58,6 +60,9 @@ func (p *Playout) Validate() error {
 	if p.InitSegments < 0 {
 		return fmt.Errorf("init_segments cannot be negative")
 	}
+	if p.Order != "" && !validPlayoutOrders[p.Order] {
+		return fmt.Errorf("order must be one of sequential, shuffle, interleave")
+	}
 	if p.ScheduleSwapAt != "" {
 		if _, _, err := ParsePlayoutSwapAt(p.ScheduleSwapAt); err != nil {
 			return fmt.Errorf("schedule_swap_at: %w", err)
@@ -71,10 +76,6 @@ func (p *Playout) ResolvedRefreshInterval() time.Duration {
 		return 0
 	}
 	return time.Duration(*p.RefreshInterval)
-}
-
-func (p *Playout) ResolvedRandomOrder() bool {
-	return p.RandomOrder != nil && *p.RandomOrder
 }
 
 func (p *Playout) ResolvedScheduleSwapAt() (hour, minute int) {

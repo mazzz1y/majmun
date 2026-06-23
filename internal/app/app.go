@@ -217,7 +217,7 @@ func (m *Manager) channelGenerator(parentPlaylist string, channelConf config.Cha
 		channelConf.Name,
 		channelConf.Sources,
 		po.Extensions,
-		po.ResolvedRandomOrder(),
+		po.Order,
 		po.ResolvedRefreshInterval(),
 		time.Duration(po.EPGDuration),
 		swapHour,

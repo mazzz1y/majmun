@@ -75,11 +75,9 @@ func scanSources(sources []string, extensions []string) ([]scannedFile, error) {
 	return files, nil
 }
 
-func fingerprint(files []scannedFile, randomOrder bool) string {
+func fingerprint(files []scannedFile, order string) string {
 	h := sha256.New()
-	if randomOrder {
-		_, _ = h.Write([]byte("random\x00"))
-	}
+	_, _ = h.Write([]byte("order:" + order + "\x00"))
 	for _, f := range files {
 		_, _ = h.Write([]byte(f.path))
 		_, _ = h.Write([]byte{0})
