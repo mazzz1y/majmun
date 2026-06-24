@@ -52,8 +52,9 @@ them without templating.
 | `{{ .Playout.Input }}`       | `MAJMUN_PLAYOUT_INPUT`        | playout                 | Path of the file to play now                          |
 | `{{ .Playout.Offset }}`      | `MAJMUN_PLAYOUT_OFFSET`       | playout                 | Seek position (seconds) into the file; empty at start |
 | `{{ .Playout.VideoCodec }}`  | `MAJMUN_PLAYOUT_VIDEO_CODEC`  | playout                 | The file's video codec (e.g. `h264`, `hevc`)          |
-| `{{ .Playout.Width }}`       | `MAJMUN_PLAYOUT_WIDTH`        | playout                 | Video width in pixels                                 |
+| `{{ .Playout.Width }}`       | `MAJMUN_PLAYOUT_WIDTH`        | playout                 | Coded video width in pixels (as stored)               |
 | `{{ .Playout.Height }}`      | `MAJMUN_PLAYOUT_HEIGHT`       | playout                 | Video height in pixels                                |
+| `{{ .Playout.AspectWidth }}` | `MAJMUN_PLAYOUT_ASPECT_WIDTH` | playout                 | `Width` corrected for the sample aspect ratio (square-pixel, even-rounded); use as the `scale_vaapi` width |
 | `{{ .Playout.PixelFormat }}` | `MAJMUN_PLAYOUT_PIXEL_FORMAT` | playout                 | Video pixel format (e.g. `yuv420p`)                   |
 | `{{ .Playout.FrameRate }}`   | `MAJMUN_PLAYOUT_FRAME_RATE`   | playout                 | Video frame rate as a fraction (e.g. `30000/1001`)    |
 | `{{ .Playout.FieldOrder }}`  | `MAJMUN_PLAYOUT_FIELD_ORDER`  | playout                 | Field order (`progressive`, `tt`, `bb`, …); for deinterlace decisions |

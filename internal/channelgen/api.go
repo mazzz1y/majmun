@@ -21,6 +21,7 @@ type PlayItem struct {
 	VideoCodec     string
 	Width          int
 	Height         int
+	AspectWidth    int
 	PixelFormat    string
 	FrameRate      string
 	FieldOrder     string
@@ -64,6 +65,7 @@ func (c *Channel) ResolveCurrent(now time.Time) (PlayItem, bool) {
 			VideoCodec:     it.VideoCodec,
 			Width:          it.Width,
 			Height:         it.Height,
+			AspectWidth:    it.AspectWidth,
 			PixelFormat:    it.PixelFormat,
 			FrameRate:      it.FrameRate,
 			FieldOrder:     it.FieldOrder,

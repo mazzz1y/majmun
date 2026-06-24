@@ -62,6 +62,7 @@ func buildSchedule(ctx context.Context, p prober, id string, sources, extensions
 			VideoCodec:     res.VideoCodec,
 			Width:          res.Width,
 			Height:         res.Height,
+			AspectWidth:    res.AspectWidth,
 			PixelFormat:    res.PixelFormat,
 			FrameRate:      res.FrameRate,
 			FieldOrder:     res.FieldOrder,

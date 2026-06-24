@@ -50,6 +50,7 @@ type PlayItem struct {
 	VideoCodec     string
 	Width          int
 	Height         int
+	AspectWidth    int
 	PixelFormat    string
 	FrameRate      string
 	FieldOrder     string

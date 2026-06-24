@@ -38,6 +38,7 @@ func (s *segmenter) runPlayout(ctx context.Context) error {
 				"VideoCodec":     item.VideoCodec,
 				"Width":          formatInt(item.Width),
 				"Height":         formatInt(item.Height),
+				"AspectWidth":    formatInt(item.AspectWidth),
 				"PixelFormat":    item.PixelFormat,
 				"FrameRate":      item.FrameRate,
 				"FieldOrder":     item.FieldOrder,

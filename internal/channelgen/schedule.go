@@ -14,6 +14,7 @@ type Item struct {
 	VideoCodec     string   `json:"video_codec,omitempty"`
 	Width          int      `json:"width,omitempty"`
 	Height         int      `json:"height,omitempty"`
+	AspectWidth    int      `json:"aspect_width,omitempty"`
 	PixelFormat    string   `json:"pixel_format,omitempty"`
 	FrameRate      string   `json:"frame_rate,omitempty"`
 	FieldOrder     string   `json:"field_order,omitempty"`
@@ -58,6 +59,7 @@ func (s *Schedule) probeCache() map[probeKey]probeResult {
 			VideoCodec:     it.VideoCodec,
 			Width:          it.Width,
 			Height:         it.Height,
+			AspectWidth:    it.AspectWidth,
 			PixelFormat:    it.PixelFormat,
 			FrameRate:      it.FrameRate,
 			FieldOrder:     it.FieldOrder,

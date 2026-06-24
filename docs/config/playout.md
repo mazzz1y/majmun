@@ -158,7 +158,8 @@ The playout command receives these runtime variables (also as `MAJMUN_*` environ
 | `{{ .Playout.Input }}` | `MAJMUN_PLAYOUT_INPUT` | Path of the file to play now. |
 | `{{ .Playout.Offset }}` | `MAJMUN_PLAYOUT_OFFSET` | Seek position (seconds) into the file for the live point. Empty at the file's start. |
 | `{{ .Playout.VideoCodec }}` | `MAJMUN_PLAYOUT_VIDEO_CODEC` | The file's video codec (e.g. `h264`, `hevc`), for selecting a decoder. Empty if unknown. |
-| `{{ .Playout.Width }}` / `{{ .Playout.Height }}` | `MAJMUN_PLAYOUT_WIDTH` / `MAJMUN_PLAYOUT_HEIGHT` | Video dimensions in pixels. |
+| `{{ .Playout.Width }}` / `{{ .Playout.Height }}` | `MAJMUN_PLAYOUT_WIDTH` / `MAJMUN_PLAYOUT_HEIGHT` | Coded video dimensions in pixels, as stored in the file. |
+| `{{ .Playout.AspectWidth }}` | `MAJMUN_PLAYOUT_ASPECT_WIDTH` | `Width` corrected for the sample aspect ratio: the square-pixel display width (even-rounded). Equals `Width` for square-pixel sources; larger/smaller for anamorphic ones. Use as the `scale_vaapi` width to bake the aspect into the pixels without a software `setsar`/`setdar`. |
 | `{{ .Playout.PixelFormat }}` | `MAJMUN_PLAYOUT_PIXEL_FORMAT` | Video pixel format (e.g. `yuv420p`). |
 | `{{ .Playout.FrameRate }}` | `MAJMUN_PLAYOUT_FRAME_RATE` | Video frame rate as a fraction (e.g. `30000/1001`). |
 | `{{ .Playout.FieldOrder }}` | `MAJMUN_PLAYOUT_FIELD_ORDER` | Field order (`progressive`, `tt`, `bb`, …), for deinterlace decisions. |

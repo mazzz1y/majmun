@@ -2,6 +2,7 @@ package channelgen
 
 import (
 	"reflect"
+	"strconv"
 	"testing"
 
 	"golang.org/x/text/encoding/charmap"
@@ -55,13 +56,54 @@ func TestParseProbeOutputMediaParams(t *testing.T) {
 	}
 
 	want := probeResult{
-		Duration: 60.0, VideoCodec: "h264", Width: 1920, Height: 1080,
+		Duration: 60.0, VideoCodec: "h264", Width: 1920, Height: 1080, AspectWidth: 1920,
 		PixelFormat: "yuv420p", FrameRate: "30000/1001", FieldOrder: "tt",
 		AudioCodec: "aac", AudioChannels: 6, SampleRate: 48000,
 		AudioLanguages: []string{"eng"},
 	}
 	if !reflect.DeepEqual(res, want) {
 		t.Errorf("media params:\n got %+v\nwant %+v", res, want)
+	}
+}
+
+func TestParseProbeOutputAspectWidth(t *testing.T) {
+	cases := []struct {
+		name          string
+		width, height int
+		sar, dar      string
+		want          int
+	}{
+		// SAR present: width*SAR. The real anamorphic PAL DVD case is 352x576 24:11 -> 768.
+		{"anamorphic sar 24:11", 352, 576, "24:11", "4:3", 768},
+		{"anamorphic sar 16:11", 720, 576, "16:11", "", 1048}, // 720*16/11 = 1047.3 -> 1048
+		// SAR missing/unknown but DAR present: derive from height*DAR.
+		{"dar fallback 4:3", 352, 576, "", "4:3", 768},  // 576*4/3 = 768
+		{"dar fallback 16:9", 720, 576, "N/A", "16:9", 1024}, // 576*16/9 = 1024
+		// Neither usable: width unchanged (evened).
+		{"square sar 1:1", 1920, 1080, "1:1", "", 1920},
+		{"zero sar 0:1", 720, 576, "0:1", "", 720},
+		{"both absent", 721, 576, "", "", 722}, // odd width evened up
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fields := ""
+			if tc.sar != "" {
+				fields += `,"sample_aspect_ratio":"` + tc.sar + `"`
+			}
+			if tc.dar != "" {
+				fields += `,"display_aspect_ratio":"` + tc.dar + `"`
+			}
+			out := []byte(`{"streams":[{"codec_type":"video","codec_name":"mpeg2video",` +
+				`"width":` + strconv.Itoa(tc.width) + `,"height":` + strconv.Itoa(tc.height) +
+				fields + `}],"format":{"duration":"60"}}`)
+			res, err := parseProbeOutput(out)
+			if err != nil {
+				t.Fatalf("parseProbeOutput: %v", err)
+			}
+			if res.AspectWidth != tc.want {
+				t.Errorf("AspectWidth = %d, want %d", res.AspectWidth, tc.want)
+			}
+		})
 	}
 }
 

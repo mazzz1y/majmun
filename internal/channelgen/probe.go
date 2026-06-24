@@ -51,10 +51,13 @@ type probeResult struct {
 
 	// Media parameters of the first video/audio stream, for scripts to branch their
 	// transcode on. All are empty/zero when the corresponding stream or field is absent.
-	VideoCodec     string
-	Width          int
-	Height         int
-	PixelFormat    string
+	VideoCodec string
+	Width      int
+	Height     int
+	// AspectWidth is the square-pixel display width (even), for a zero-copy scale_vaapi
+	// to bake the aspect in. Equals Width when no correction applies; zero iff Width is.
+	AspectWidth int
+	PixelFormat string
 	FrameRate      string // "30000/1001" form, as reported by ffprobe
 	FieldOrder     string // progressive, tt, bb, tb, bt; empty if unknown
 	AudioCodec     string
@@ -76,7 +79,8 @@ func (ffprobeProber) Probe(ctx context.Context, file string) (probeResult, error
 		"-v", "error",
 		"-show_entries",
 		"format=duration:format_tags:stream_tags=language:"+
-			"stream=codec_type,codec_name,width,height,pix_fmt,r_frame_rate,field_order,channels,sample_rate",
+			"stream=codec_type,codec_name,width,height,sample_aspect_ratio,display_aspect_ratio,"+
+			"pix_fmt,r_frame_rate,field_order,channels,sample_rate",
 		"-of", "json=string_validation=ignore",
 		file,
 	)
@@ -102,6 +106,8 @@ func parseProbeOutput(out []byte) (probeResult, error) {
 			CodecName  string            `json:"codec_name"`
 			Width      int               `json:"width"`
 			Height     int               `json:"height"`
+			SAR        string            `json:"sample_aspect_ratio"`
+			DAR        string            `json:"display_aspect_ratio"`
 			PixFmt     string            `json:"pix_fmt"`
 			RFrameRate string            `json:"r_frame_rate"`
 			FieldOrder string            `json:"field_order"`
@@ -130,6 +136,7 @@ func parseProbeOutput(out []byte) (probeResult, error) {
 			res.VideoCodec = st.CodecName
 			res.Width = st.Width
 			res.Height = st.Height
+			res.AspectWidth = aspectWidth(st.Width, st.Height, st.SAR, st.DAR)
 			res.PixelFormat = st.PixFmt
 			res.FrameRate = st.RFrameRate
 			res.FieldOrder = st.FieldOrder
@@ -179,6 +186,41 @@ func decodeWindows1251(b []byte) []byte {
 		sb.WriteRune(charmap.Windows1251.DecodeByte(c))
 	}
 	return []byte(sb.String())
+}
+
+// aspectWidth returns the square-pixel display width, rounded even (encoders reject odd
+// dimensions). It prefers the SAR (width*SAR), falls back to the DAR (height*DAR) for
+// containers that report only it, and returns the width unchanged when neither is usable.
+func aspectWidth(width, height int, sar, dar string) int {
+	if width <= 0 {
+		return 0
+	}
+	if num, den, ok := parseRatio(sar); ok {
+		return roundEven((width*num + den/2) / den)
+	}
+	if num, den, ok := parseRatio(dar); ok && height > 0 {
+		return roundEven((height*num + den/2) / den)
+	}
+	return roundEven(width)
+}
+
+// parseRatio parses an ffprobe "N:M" ratio, with ok=false for absent, malformed, or
+// degenerate ("0:1", "1:1") values where no correction applies.
+func parseRatio(s string) (num, den int, ok bool) {
+	n, d, found := strings.Cut(s, ":")
+	if !found {
+		return 0, 0, false
+	}
+	pn, errN := strconv.Atoi(strings.TrimSpace(n))
+	pd, errD := strconv.Atoi(strings.TrimSpace(d))
+	if errN != nil || errD != nil || pn <= 0 || pd <= 0 || pn == pd {
+		return 0, 0, false
+	}
+	return pn, pd, true
+}
+
+func roundEven(n int) int {
+	return (n + 1) / 2 * 2
 }
 
 func firstTag(tags map[string]string, keys ...string) string {

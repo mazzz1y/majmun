@@ -169,6 +169,7 @@ func (s *Server) handleChannelStream(
 				VideoCodec:     it.VideoCodec,
 				Width:          it.Width,
 				Height:         it.Height,
+				AspectWidth:    it.AspectWidth,
 				PixelFormat:    it.PixelFormat,
 				FrameRate:      it.FrameRate,
 				FieldOrder:     it.FieldOrder,
