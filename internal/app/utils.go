@@ -152,6 +152,15 @@ func mergePlayouts(playouts ...config.Playout) config.Playout {
 		if p.ScheduleSwapAt != "" {
 			result.ScheduleSwapAt = p.ScheduleSwapAt
 		}
+		if p.Metadata.Title != nil {
+			result.Metadata.Title = p.Metadata.Title
+		}
+		if p.Metadata.Description != nil {
+			result.Metadata.Description = p.Metadata.Description
+		}
+		if p.Metadata.Category != nil {
+			result.Metadata.Category = p.Metadata.Category
+		}
 	}
 	return result
 }

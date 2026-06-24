@@ -88,6 +88,9 @@ Each file becomes one EPG programme. Programme fields are taken from the file's 
 Tag names are matched case-insensitively, so both MP4 (`title`, `genre`, ...) and Matroska (`TITLE`, `GENRE`, ...)
 conventions work. Tags that are absent or in an unrecognized format are simply omitted from the guide.
 
+The **title**, **description**, and **category** fields are Go templates you can override per channel — see
+[Playout → Metadata Templates](./playout.md#metadata-templates) for how to customize them.
+
 ## FFmpeg Transcode
 
 A channel is transcoded by [`playout`](./playout.md), which loops its sources into one continuous live stream. You

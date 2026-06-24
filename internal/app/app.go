@@ -5,15 +5,24 @@ import (
 	"fmt"
 	"majmun/internal/channelgen"
 	"majmun/internal/config"
+	"majmun/internal/config/common"
 	"majmun/internal/hashid"
 	"majmun/internal/httpclient"
 	"majmun/internal/logging"
 	"majmun/internal/metrics"
 	"majmun/internal/urlgen"
+	"text/template"
 	"time"
 
 	"golang.org/x/sync/semaphore"
 )
+
+func templateOrNil(t *common.Template) *template.Template {
+	if t == nil {
+		return nil
+	}
+	return t.ToTemplate()
+}
 
 type Manager struct {
 	config         *config.Config
@@ -212,18 +221,21 @@ func (m *Manager) channelGenerator(parentPlaylist string, channelConf config.Cha
 		return gen
 	}
 	swapHour, swapMin := po.ResolvedScheduleSwapAt()
-	gen := channelgen.NewChannel(
-		parentPlaylist,
-		channelConf.Name,
-		channelConf.Sources,
-		po.Extensions,
-		po.Order,
-		po.ResolvedRefreshInterval(),
-		time.Duration(po.EPGDuration),
-		swapHour,
-		swapMin,
-		po.StateDir,
-	)
+	gen := channelgen.NewChannel(channelgen.Config{
+		Playlist:            parentPlaylist,
+		Name:                channelConf.Name,
+		Sources:             channelConf.Sources,
+		Extensions:          po.Extensions,
+		Order:               po.Order,
+		Refresh:             po.ResolvedRefreshInterval(),
+		EPGDuration:         time.Duration(po.EPGDuration),
+		SwapHour:            swapHour,
+		SwapMin:             swapMin,
+		StateDir:            po.StateDir,
+		TitleTemplate:       templateOrNil(po.Metadata.Title),
+		DescriptionTemplate: templateOrNil(po.Metadata.Description),
+		CategoryTemplate:    templateOrNil(po.Metadata.Category),
+	})
 	m.channelGens[key] = gen
 	return gen
 }

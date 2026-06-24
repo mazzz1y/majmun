@@ -43,10 +43,6 @@ func buildSchedule(ctx context.Context, p prober, id string, sources, extensions
 		if res.Duration <= 0 {
 			continue
 		}
-		title := res.Title
-		if title == "" {
-			title = titleFromPath(f.path)
-		}
 		season, episode := res.Season, res.Episode
 		if episode == 0 {
 			// Tags carry no episode info; fall back to filename patterns (S01E05, 1x05, ep5, ...).
@@ -54,7 +50,7 @@ func buildSchedule(ctx context.Context, p prober, id string, sources, extensions
 		}
 		items = append(items, Item{
 			File:           f.path,
-			Title:          title,
+			Title:          res.Title,
 			Description:    res.Description,
 			Category:       res.Category,
 			Date:           res.Date,
@@ -128,17 +124,24 @@ func itemLess(a, b Item) bool {
 // seriesKey is the first path segment below the matched source root, i.e. the show folder.
 // A file sitting directly in a source falls back to its filename (a series of one).
 func seriesKey(file string, sources []string) string {
+	rel, _ := relToSource(file, sources)
+	if i := strings.IndexRune(rel, filepath.Separator); i >= 0 {
+		return rel[:i]
+	}
+	return rel
+}
+
+// relToSource returns the file's path relative to the source root that contains it, plus that
+// root. A file under no source falls back to its bare filename and an empty root.
+func relToSource(file string, sources []string) (rel, source string) {
 	for _, src := range sources {
-		rel, err := filepath.Rel(src, file)
-		if err != nil || strings.HasPrefix(rel, "..") {
+		r, err := filepath.Rel(src, file)
+		if err != nil || strings.HasPrefix(r, "..") {
 			continue
 		}
-		if i := strings.IndexRune(rel, filepath.Separator); i >= 0 {
-			return rel[:i]
-		}
-		return rel // file directly under the source
+		return r, src
 	}
-	return filepath.Base(file)
+	return filepath.Base(file), ""
 }
 
 // interleave round-robins episodes across shows: each show is sorted by episode order, then

@@ -70,6 +70,10 @@ playout:
   refresh_interval: 30m
   epg_duration: 1w
   schedule_swap_at: "04:00"
+  metadata:
+    title: '{{ .Probe.Title | default .File.Name }}'
+    description: '{{ .Probe.Description }}'
+    category: '{{ .Probe.Category }}'
 
 playlists:
   - name: local
@@ -99,10 +103,50 @@ playlists:
 | `state_dir`        | `string`                           | No       | Directory where channel schedules are persisted. Default `state`.                                                                                                                          |
 | `logo`             | `string`                           | No       | Channel logo: an http(s) URL or a local file path. Available in commands as `{{ .Channel.Logo }}`.                                                                                         |
 | `extensions`       | `[]string`                         | No       | Video file extensions to include. Default: `mkv, mp4, avi, mov, m4v, ts, webm, mpg, mpeg, flv, wmv`.                                                                                       |
-| `order`            | `string`                           | No       | Playback order: `sequential` (episode order), `shuffle` (stable random), or `interleave` (rotate episodes across shows). Default `sequential`. See [Playback Order](./channels.md#playback-order). |
+| `order`            | `string`                           | No       | Playback order: `sequential` (episode order), `shuffle` (stable random), or `interleave` (rotate episodes across shows). Default `sequential`. See [Multiple Sources and Shuffle](./channels.md#multiple-sources-and-shuffle). |
 | `refresh_interval` | [`duration`](./shared/duration.md) | No       | How often `sources` is re-scanned for added/removed files (see [adopting changes](./channels.md#picking-up-file-changes)). Default `30m`; `0` disables re-scanning.                          |
 | `epg_duration`     | [`duration`](./shared/duration.md) | No       | How far into the future the EPG is generated. Default `1w`.                                                                                                                               |
 | `schedule_swap_at` | `string` (`HH:MM`)                 | No       | Local time of day after which a changed file set is adopted by the live stream — deferred further to the end of the programme then playing, so a show is never cut off mid-way. Default `04:00`. |
+| `metadata`         | [`Metadata`](#metadata-templates)  | No       | Go templates building the EPG `title`, `description`, and `category` per file. Defaults reproduce the [container-tag behavior](./channels.md#epg-metadata).                                       |
+
+### Metadata Templates
+
+`metadata` holds Go templates (with [sprig](https://masterminds.github.io/sprig/) functions) that build each file's EPG
+fields. They are evaluated when the guide is generated, so editing them takes effect on the next EPG request without a
+rebuild. Each subkey is optional; omitted keys use the defaults below, which match the
+[container-tag behavior](./channels.md#epg-metadata).
+
+| Field         | Default                                    | Description                                  |
+| ------------- | ------------------------------------------ | -------------------------------------------- |
+| `title`       | `{{ .Probe.Title \| default .File.Name }}` | EPG programme title.                         |
+| `description` | `{{ .Probe.Description }}`                  | EPG programme description (`<desc>`).         |
+| `category`    | `{{ .Probe.Category }}`                     | EPG programme category (`<category>`).        |
+
+`date` and `episode` are derived in fixed ways and are **not** templatable. If a template fails to render for a file,
+the raw tag value is used instead and the error is logged.
+
+Templates receive:
+
+| Variable | Description |
+| --- | --- |
+| `{{ .Probe.Title }}` | Raw `title` tag (may be empty). |
+| `{{ .Probe.Description }}` | Raw `description`/`synopsis`/`summary`/`comment` tag. |
+| `{{ .Probe.Category }}` | Raw `genre` tag. |
+| `{{ .Probe.Date }}` | Normalized date (`YYYYMMDD`) when known. |
+| `{{ .Probe.Season }}` / `{{ .Probe.Episode }}` | Parsed season/episode numbers (`0` when unknown). |
+| `{{ .Probe.VideoCodec }}`, `{{ .Probe.Width }}`, `{{ .Probe.Height }}`, … | The file's probed media parameters (same set as the `Playout.*` command variables). |
+| `{{ .File.Path }}` | Absolute file path. |
+| `{{ .File.Rel }}` | Path relative to the source root that contains the file, e.g. `Show/S01E05.mkv`. |
+| `{{ .File.Name }}` | File name without its extension. |
+| `{{ .File.Source }}` | The configured source root that contains the file. |
+
+For a channel that merges several shows, prefix the show folder so episodes are distinguishable:
+
+```yaml
+playout:
+  metadata:
+    title: '{{ .File.Rel | splitList "/" | first }} — {{ .Probe.Title | default .File.Name }}'
+```
 
 ### Reserved Template Variables
 

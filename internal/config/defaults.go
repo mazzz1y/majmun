@@ -121,6 +121,11 @@ func DefaultConfig() *Config {
 			RefreshInterval: durationPtr(30 * time.Minute),
 			EPGDuration:     common.Duration(7 * 24 * time.Hour),
 			ScheduleSwapAt:  "04:00",
+			Metadata: PlayoutMetadata{
+				Title:       common.MustTemplate("{{ .Probe.Title | default .File.Name }}"),
+				Description: common.MustTemplate("{{ .Probe.Description }}"),
+				Category:    common.MustTemplate("{{ .Probe.Category }}"),
+			},
 		},
 	}
 }

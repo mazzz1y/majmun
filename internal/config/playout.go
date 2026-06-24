@@ -27,6 +27,13 @@ type Playout struct {
 	RefreshInterval *common.Duration   `yaml:"refresh_interval,omitempty"`
 	EPGDuration     common.Duration    `yaml:"epg_duration,omitempty"`
 	ScheduleSwapAt  string             `yaml:"schedule_swap_at,omitempty"`
+	Metadata        PlayoutMetadata    `yaml:"metadata,omitempty"`
+}
+
+type PlayoutMetadata struct {
+	Title       *common.Template `yaml:"title,omitempty"`
+	Description *common.Template `yaml:"description,omitempty"`
+	Category    *common.Template `yaml:"category,omitempty"`
 }
 
 func (p *Playout) UnmarshalYAML(value *yaml.Node) error {

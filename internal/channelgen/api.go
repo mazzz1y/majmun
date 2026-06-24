@@ -105,7 +105,8 @@ type Programme struct {
 	Stop        time.Time
 }
 
-func (c *Channel) Programmes(_ context.Context, now time.Time) ([]Programme, error) {
+func (c *Channel) Programmes(ctx context.Context, now time.Time) ([]Programme, error) {
+	ctx = c.logCtx(ctx)
 	s := c.current(now)
 	if s == nil || s.isEmpty() {
 		return nil, nil
@@ -132,10 +133,11 @@ func (c *Channel) Programmes(_ context.Context, now time.Time) ([]Programme, err
 			if slotStop.Before(start) {
 				continue
 			}
+			vars := c.metadataVars(it)
 			programmes = append(programmes, Programme{
-				Title:       it.Title,
-				Description: it.Description,
-				Category:    it.Category,
+				Title:       renderField(ctx, c.titleTmpl, vars, it.Title, "title"),
+				Description: renderField(ctx, c.descriptionTmpl, vars, it.Description, "description"),
+				Category:    renderField(ctx, c.categoryTmpl, vars, it.Category, "category"),
 				Date:        it.Date,
 				Season:      it.Season,
 				Episode:     it.Episode,

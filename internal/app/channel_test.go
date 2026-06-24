@@ -39,17 +39,18 @@ func newChannelProvider(t *testing.T, parentPlaylist string, conf config.Channel
 	}
 	mergedProxy := testChannelProxy()
 	swapHour, swapMin := po.ResolvedScheduleSwapAt()
-	gen := channelgen.NewChannel(
-		parentPlaylist,
-		conf.Name,
-		conf.Sources,
-		po.Extensions,
-		po.Order,
-		po.ResolvedRefreshInterval(),
-		time.Duration(po.EPGDuration),
-		swapHour, swapMin,
-		"state",
-	)
+	gen := channelgen.NewChannel(channelgen.Config{
+		Playlist:    parentPlaylist,
+		Name:        conf.Name,
+		Sources:     conf.Sources,
+		Extensions:  po.Extensions,
+		Order:       po.Order,
+		Refresh:     po.ResolvedRefreshInterval(),
+		EPGDuration: time.Duration(po.EPGDuration),
+		SwapHour:    swapHour,
+		SwapMin:     swapMin,
+		StateDir:    "state",
+	})
 	pl, err := NewPlaylistProvider(parentPlaylist, urlGen, nil, mergedProxy, nil, nil, httpclient.NewDirectClient(nil), false)
 	if err != nil {
 		t.Fatal(err)

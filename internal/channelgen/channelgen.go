@@ -8,8 +8,26 @@ import (
 	"majmun/internal/logging"
 	"sync"
 	"sync/atomic"
+	"text/template"
 	"time"
 )
+
+type Config struct {
+	Playlist    string
+	Name        string
+	Sources     []string
+	Extensions  []string
+	Order       string
+	Refresh     time.Duration
+	EPGDuration time.Duration
+	SwapHour    int
+	SwapMin     int
+	StateDir    string
+
+	TitleTemplate       *template.Template
+	DescriptionTemplate *template.Template
+	CategoryTemplate    *template.Template
+}
 
 type Channel struct {
 	// id is the channel's hashid, shared with app.Channel.ID(): schedule file name,
@@ -27,6 +45,10 @@ type Channel struct {
 	stateDir    string
 	prober      prober
 
+	titleTmpl       *template.Template
+	descriptionTmpl *template.Template
+	categoryTmpl    *template.Template
+
 	mu        sync.Mutex
 	schedule  *Schedule
 	loaded    bool
@@ -38,20 +60,23 @@ type Channel struct {
 	promoteAt time.Time
 }
 
-func NewChannel(playlist, name string, sources, extensions []string, order string, refresh, epgDuration time.Duration, swapHour, swapMin int, stateDir string) *Channel {
+func NewChannel(cfg Config) *Channel {
 	return &Channel{
-		id:          hashid.New(playlist, name),
-		playlist:    playlist,
-		name:        name,
-		sources:     sources,
-		extensions:  extensions,
-		order:       order,
-		refresh:     refresh,
-		epgDuration: epgDuration,
-		swapHour:    swapHour,
-		swapMin:     swapMin,
-		stateDir:    stateDir,
-		prober:      ffprobeProber{},
+		id:              hashid.New(cfg.Playlist, cfg.Name),
+		playlist:        cfg.Playlist,
+		name:            cfg.Name,
+		sources:         cfg.Sources,
+		extensions:      cfg.Extensions,
+		order:           cfg.Order,
+		refresh:         cfg.Refresh,
+		epgDuration:     cfg.EPGDuration,
+		swapHour:        cfg.SwapHour,
+		swapMin:         cfg.SwapMin,
+		stateDir:        cfg.StateDir,
+		prober:          ffprobeProber{},
+		titleTmpl:       cfg.TitleTemplate,
+		descriptionTmpl: cfg.DescriptionTemplate,
+		categoryTmpl:    cfg.CategoryTemplate,
 	}
 }
 

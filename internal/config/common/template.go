@@ -9,6 +9,15 @@ import (
 
 type Template template.Template
 
+func MustTemplate(tmplStr string) *Template {
+	tmpl, err := template.New("template").Funcs(sprig.FuncMap()).Parse(tmplStr)
+	if err != nil {
+		panic(err)
+	}
+	t := Template(*tmpl)
+	return &t
+}
+
 func (t *Template) UnmarshalYAML(value *yaml.Node) error {
 	var tmplStr string
 	if err := value.Decode(&tmplStr); err != nil {

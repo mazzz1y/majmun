@@ -7,7 +7,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"text/template"
 	"time"
+
+	"github.com/Masterminds/sprig/v3"
 )
 
 var testExtensions = []string{"mkv", "mp4", "avi"}
@@ -59,15 +62,22 @@ func writeFile(t *testing.T, path string) {
 	}
 }
 
+var defaultTitleTmpl = template.Must(template.New("t").Funcs(sprig.FuncMap()).Parse("{{ .Probe.Title | default .File.Name }}"))
+
 func newTestChannel(t *testing.T, id string, sources []string, p prober) (*Channel, string) {
 	t.Helper()
 	stateDir := t.TempDir()
-	c := &Channel{id: id, sources: sources, extensions: testExtensions, epgDuration: 24 * time.Hour, stateDir: stateDir, prober: p}
+	c := &Channel{id: id, sources: sources, extensions: testExtensions, epgDuration: 24 * time.Hour, stateDir: stateDir, prober: p, titleTmpl: defaultTitleTmpl}
 	return c, stateDir
 }
 
 func buildTestSchedule(p prober, dir string, order string, old *Schedule, now time.Time) (*Schedule, error) {
 	return buildSchedule(context.Background(), p, "c", []string{dir}, testExtensions, order, old, now)
+}
+
+func itemName(it Item) string {
+	base := filepath.Base(it.File)
+	return strings.TrimSuffix(base, filepath.Ext(base))
 }
 
 // warmUp triggers a build and blocks until it has completed, so synchronous assertions
@@ -150,8 +160,8 @@ func TestBuildScheduleSequential(t *testing.T) {
 	if len(s.Items) != 2 {
 		t.Fatalf("expected 2 items, got %d", len(s.Items))
 	}
-	if s.Items[0].Title != "ep01" || s.Items[1].Title != "ep02" {
-		t.Errorf("expected sorted titles, got %s,%s", s.Items[0].Title, s.Items[1].Title)
+	if itemName(s.Items[0]) != "ep01" || itemName(s.Items[1]) != "ep02" {
+		t.Errorf("expected sorted order, got %s,%s", itemName(s.Items[0]), itemName(s.Items[1]))
 	}
 	if s.Anchor != now.Unix() {
 		t.Errorf("expected anchor %d, got %d", now.Unix(), s.Anchor)
@@ -170,7 +180,7 @@ func TestBuildScheduleNaturalOrder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := []string{s.Items[0].Title, s.Items[1].Title, s.Items[2].Title}
+	got := []string{itemName(s.Items[0]), itemName(s.Items[1]), itemName(s.Items[2])}
 	want := []string{"part1", "part2", "part10"}
 	for i := range want {
 		if got[i] != want[i] {
@@ -195,7 +205,7 @@ func TestBuildScheduleMixedTaggedUntagged(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := []string{s.Items[0].Title, s.Items[1].Title, s.Items[2].Title}
+	got := []string{itemName(s.Items[0]), itemName(s.Items[1]), itemName(s.Items[2])}
 	want := []string{"intro", "apilot", "zfinale"}
 	for i := range want {
 		if got[i] != want[i] {
@@ -221,7 +231,7 @@ func TestBuildScheduleEpisodeOrder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := []string{s.Items[0].Title, s.Items[1].Title, s.Items[2].Title}
+	got := []string{itemName(s.Items[0]), itemName(s.Items[1]), itemName(s.Items[2])}
 	want := []string{"ccc", "bbb", "aaa"}
 	for i := range want {
 		if got[i] != want[i] {
@@ -242,7 +252,7 @@ func TestBuildScheduleEpisodeFromFilename(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := []string{s.Items[0].Title, s.Items[1].Title, s.Items[2].Title}
+	got := []string{itemName(s.Items[0]), itemName(s.Items[1]), itemName(s.Items[2])}
 	want := []string{"Show S01E2", "Show S01E10", "Show S02E1"}
 	for i := range want {
 		if got[i] != want[i] {
@@ -264,8 +274,8 @@ func TestBuildScheduleGroupsByDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s.Items[0].Title != "E02" || s.Items[1].Title != "E01" {
-		t.Errorf("expected directory grouping (show-a first), got %s,%s", s.Items[0].Title, s.Items[1].Title)
+	if itemName(s.Items[0]) != "E02" || itemName(s.Items[1]) != "E01" {
+		t.Errorf("expected directory grouping (show-a first), got %s,%s", itemName(s.Items[0]), itemName(s.Items[1]))
 	}
 }
 
@@ -284,7 +294,7 @@ func TestBuildScheduleUsesContainerMetadata(t *testing.T) {
 		Season:      1,
 		Episode:     3,
 	}
-	// ep02 has no tags -> filename title, episode parsed from filename ("ep02" -> 2),
+	// ep02 has no tags -> raw title stays empty, episode parsed from filename ("ep02" -> 2),
 	// so it sorts before ep01's tagged episode 3.
 
 	s, err := buildTestSchedule(p, dir, "sequential", nil, time.Unix(1000, 0))
@@ -298,8 +308,8 @@ func TestBuildScheduleUsesContainerMetadata(t *testing.T) {
 	if it.Date != "20210608" || it.Season != 1 || it.Episode != 3 {
 		t.Errorf("unexpected date/season/episode: %+v", it)
 	}
-	if s.Items[0].Title != "ep02" {
-		t.Errorf("expected filename fallback, got %q", s.Items[0].Title)
+	if s.Items[0].Title != "" {
+		t.Errorf("expected raw empty title for untagged file, got %q", s.Items[0].Title)
 	}
 	if s.Items[0].Description != "" || s.Items[0].Category != "" || s.Items[0].Date != "" {
 		t.Errorf("expected empty metadata for untagged file, got %+v", s.Items[0])
@@ -667,11 +677,62 @@ func TestProgrammesGrid(t *testing.T) {
 	}
 }
 
+func TestProgrammesTitleTemplatePrefixesShow(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "Дальнобойщики", "S01E05.mkv"))
+
+	p := newFakeProber()
+	p.results[filepath.Join(dir, "Дальнобойщики", "S01E05.mkv")] = probeResult{Duration: 3600, Title: "В рейс"}
+
+	c, _ := newTestChannel(t, "c", []string{dir}, p)
+	c.titleTmpl = template.Must(template.New("t").Funcs(sprig.FuncMap()).
+		Parse(`{{ .File.Rel | splitList "/" | first }} — {{ .Probe.Title | default .File.Name }}`))
+
+	now := time.Unix(10000, 0)
+	warmUp(t, c, now)
+
+	progs, err := c.Programmes(context.Background(), now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(progs) == 0 {
+		t.Fatal("expected programmes")
+	}
+	if progs[0].Title != "Дальнобойщики — В рейс" {
+		t.Errorf("unexpected title %q", progs[0].Title)
+	}
+}
+
+func TestProgrammesTitleTemplateErrorFallsBackToRaw(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "a.mkv"))
+
+	p := newFakeProber()
+	p.results[filepath.Join(dir, "a.mkv")] = probeResult{Duration: 3600, Title: "Raw Title"}
+
+	c, _ := newTestChannel(t, "c", []string{dir}, p)
+	c.titleTmpl = template.Must(template.New("t").Funcs(sprig.FuncMap()).Parse(`{{ .Probe.Missing }}`))
+
+	now := time.Unix(10000, 0)
+	warmUp(t, c, now)
+
+	progs, err := c.Programmes(context.Background(), now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(progs) == 0 {
+		t.Fatal("expected programmes")
+	}
+	if progs[0].Title != "Raw Title" {
+		t.Errorf("expected raw fallback, got %q", progs[0].Title)
+	}
+}
+
 // TestNewChannelIDContract pins the id derivation shared with app.Channel.ID(): the server
 // resolves a channel by the app-side id while the generator loads its schedule by this one,
 // so the two must agree or schedule lookup breaks silently.
 func TestNewChannelIDContract(t *testing.T) {
-	c := NewChannel("local", "cartoons", nil, testExtensions, "sequential", 0, 24*time.Hour, 4, 0, "state")
+	c := NewChannel(Config{Playlist: "local", Name: "cartoons", Extensions: testExtensions, Order: "sequential", EPGDuration: 24 * time.Hour, SwapHour: 4, StateDir: "state"})
 	if c.id != hashid.New("local", "cartoons") {
 		t.Errorf("expected id to hash the playlist and channel names, got %s", c.id)
 	}
@@ -682,7 +743,7 @@ func TestBuildPersistsScheduleFlat(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "a.mkv"))
 	p := newFakeProber()
 	// Hostile characters in names never reach the filesystem: the id is a hashid.
-	c := NewChannel("local", "name with? hostile/chars ", []string{dir}, testExtensions, "sequential", 0, 24*time.Hour, 4, 0, t.TempDir())
+	c := NewChannel(Config{Playlist: "local", Name: "name with? hostile/chars ", Sources: []string{dir}, Extensions: testExtensions, Order: "sequential", EPGDuration: 24 * time.Hour, SwapHour: 4, StateDir: t.TempDir()})
 	c.prober = p
 	stateDir := c.stateDir
 
