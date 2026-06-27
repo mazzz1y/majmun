@@ -138,14 +138,16 @@ func TestMergePlayoutsCascade(t *testing.T) {
 		TemplateVars:    []common.NameValue{{Name: "ffmpeg_log_level", Value: "fatal"}},
 		ScheduleSwapAt:  "04:00",
 		RefreshInterval: durPtr(5 * time.Minute),
+		SeasonPatterns:  common.MustRegexpArr(`^global$`),
 	}
 	playlist := config.Playout{
 		TemplateVars:   []common.NameValue{{Name: "segment_duration", Value: "4"}},
 		ScheduleSwapAt: "03:00",
 	}
 	channel := config.Playout{
-		Command:      common.StringOrArr{"ffmpeg", "channel"},
-		TemplateVars: []common.NameValue{{Name: "video_bitrate_kbps", Value: "6000"}},
+		Command:        common.StringOrArr{"ffmpeg", "channel"},
+		TemplateVars:   []common.NameValue{{Name: "video_bitrate_kbps", Value: "6000"}},
+		SeasonPatterns: common.MustRegexpArr(`^channel$`),
 	}
 
 	result := mergePlayouts(global, playlist, channel)
@@ -164,6 +166,14 @@ func TestMergePlayoutsCascade(t *testing.T) {
 	}
 	if result.RefreshInterval == nil || time.Duration(*result.RefreshInterval) != 5*time.Minute {
 		t.Errorf("expected global refresh_interval to be inherited, got %v", result.RefreshInterval)
+	}
+	if len(result.SeasonPatterns) != 1 || result.SeasonPatterns[0].String() != `^channel$` {
+		t.Errorf("expected channel season_patterns to override, got %v", result.SeasonPatterns)
+	}
+
+	inherited := mergePlayouts(global, playlist)
+	if len(inherited.SeasonPatterns) != 1 || inherited.SeasonPatterns[0].String() != `^global$` {
+		t.Errorf("expected global season_patterns to be inherited, got %v", inherited.SeasonPatterns)
 	}
 }
 

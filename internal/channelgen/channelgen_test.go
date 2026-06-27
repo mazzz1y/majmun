@@ -864,6 +864,31 @@ func TestProgrammesTitleTemplatePrefixesShow(t *testing.T) {
 	}
 }
 
+func TestProgrammesTitleTemplateRelNoExt(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "Show", "Season 1", "05. Episode.mkv"))
+
+	p := newFakeProber()
+	p.results[filepath.Join(dir, "Show", "Season 1", "05. Episode.mkv")] = probeResult{Duration: 3600}
+
+	c, _ := newTestChannel(t, "c", []string{dir}, p)
+	c.titleTmpl = template.Must(template.New("t").Funcs(sprig.FuncMap()).Parse(`{{ .File.RelNoExt }}`))
+
+	now := time.Unix(10000, 0)
+	warmUp(t, c, now)
+
+	progs, err := c.Programmes(context.Background(), now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(progs) == 0 {
+		t.Fatal("expected programmes")
+	}
+	if progs[0].Title != "Show/Season 1/05. Episode" {
+		t.Errorf("unexpected title %q", progs[0].Title)
+	}
+}
+
 func TestProgrammesTitleTemplateErrorFallsBackToRaw(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, filepath.Join(dir, "a.mkv"))

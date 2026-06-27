@@ -138,6 +138,7 @@ Templates receive:
 | `{{ .Probe.VideoCodec }}`, `{{ .Probe.Width }}`, `{{ .Probe.Height }}`, … | The file's probed media parameters (same set as the `Playout.*` command variables). |
 | `{{ .File.Path }}` | Absolute file path. |
 | `{{ .File.Rel }}` | Path relative to the source root that contains the file, e.g. `Show/S01E05.mkv`. |
+| `{{ .File.RelNoExt }}` | Path relative to the source root, without the file extension, e.g. `Show/Season 1/20. Title`. |
 | `{{ .File.Name }}` | File name without its extension. |
 | `{{ .File.Source }}` | The configured source root that contains the file. |
 

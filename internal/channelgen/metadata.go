@@ -31,10 +31,11 @@ type probeVars struct {
 }
 
 type fileVars struct {
-	Path   string
-	Rel    string
-	Name   string
-	Source string
+	Path     string
+	Rel      string
+	RelNoExt string
+	Name     string
+	Source   string
 }
 
 type metadataVars struct {
@@ -67,10 +68,11 @@ func (c *Channel) metadataVars(it Item) metadataVars {
 			AudioLanguages: it.AudioLanguages,
 		},
 		File: fileVars{
-			Path:   it.File,
-			Rel:    rel,
-			Name:   strings.TrimSuffix(base, filepath.Ext(base)),
-			Source: source,
+			Path:     it.File,
+			Rel:      rel,
+			RelNoExt: strings.TrimSuffix(rel, filepath.Ext(rel)),
+			Name:     strings.TrimSuffix(base, filepath.Ext(base)),
+			Source:   source,
 		},
 	}
 }
