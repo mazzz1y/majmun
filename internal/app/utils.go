@@ -143,6 +143,9 @@ func mergePlayouts(playouts ...config.Playout) config.Playout {
 		if p.Order != "" {
 			result.Order = p.Order
 		}
+		if len(p.SeasonPatterns) > 0 {
+			result.SeasonPatterns = p.SeasonPatterns
+		}
 		if p.RefreshInterval != nil {
 			result.RefreshInterval = p.RefreshInterval
 		}
