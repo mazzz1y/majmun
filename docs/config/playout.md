@@ -141,6 +141,7 @@ Templates receive:
 | `{{ .File.RelNoExt }}` | Path relative to the source root, without the file extension, e.g. `Show/Season 1/20. Title`. |
 | `{{ .File.Name }}` | File name without its extension. |
 | `{{ .File.Source }}` | The configured source root that contains the file. |
+| `{{ .File.SourceBase }}` | Base name of the source root, e.g. `My Show` for source `/media/series/My Show`. Useful as the series name when each source is a single show. |
 
 For a channel that merges several shows, prefix the show folder so episodes are distinguishable:
 

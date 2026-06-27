@@ -126,23 +126,45 @@ func itemLess(a, b Item) bool {
 	return natsort.Less(filepath.Base(a.File), filepath.Base(b.File))
 }
 
-// seriesKey identifies the show a file belongs to: the path (relative to its source) down to
-// but excluding the first season segment ("Season 1", "Сезон 2", "S01", ...). This groups by
-// show whether the source is a library of shows ("/series" -> "Show/Сезон 2/ep") or itself a
-// show ("/series/Show" -> "Сезон 2/ep"). Without a season segment the first segment below the
-// source is used; a file directly in a source falls back to its filename.
+// seriesKey identifies the show a file belongs to: the path above the season segment, relative
+// to its source ("season" matched by seasonPatterns). When that prefix is empty, the show name
+// itself looks like a season, so the cut falls to the deepest season segment instead. Examples
+// (source "/s"):
+//
+//	/s/Show/Season 1/ep      -> Show
+//	/s/Show/ep               -> Show
+//	/s/Season 25/Season 1/ep -> Season 25   (leading name kept)
+//	/s/ep                    -> s           (source name; not a series of one)
 func seriesKey(file string, sources []string, seasonPatterns []*regexp.Regexp) string {
 	rel, source := relToSource(file, sources)
 	segs := strings.Split(rel, string(filepath.Separator))
-	for i, seg := range segs {
+	dirs := segs[:len(segs)-1]
+
+	firstSeason, lastSeason := -1, -1
+	for i, seg := range dirs {
 		if isSeasonDir(seg, seasonPatterns) {
-			if i == 0 {
-				return filepath.Base(source)
+			if firstSeason == -1 {
+				firstSeason = i
 			}
-			return strings.Join(segs[:i], string(filepath.Separator))
+			lastSeason = i
 		}
 	}
-	return segs[0]
+
+	if firstSeason == -1 {
+		if len(dirs) == 0 && source != "" {
+			return filepath.Base(source)
+		}
+		return segs[0]
+	}
+
+	cut := firstSeason
+	if cut == 0 {
+		cut = lastSeason
+	}
+	if cut == 0 {
+		return filepath.Base(source)
+	}
+	return strings.Join(dirs[:cut], string(filepath.Separator))
 }
 
 func isSeasonDir(name string, seasonPatterns []*regexp.Regexp) bool {

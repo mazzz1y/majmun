@@ -387,13 +387,14 @@ func TestBuildSchedulePreservesAnchorAndSeed(t *testing.T) {
 }
 
 func TestSeriesKey(t *testing.T) {
-	// Library-style source: the source is a parent of show folders.
+	// Library-style source: the source is a parent of show folders. A file dropped directly
+	// into the source groups under the source's own name (not as a series of one).
 	libCases := map[string]string{
 		"/mnt/series/Show/S01E01.mkv":         "Show",
 		"/mnt/series/Show/Season 1/ep01.mkv":  "Show",
 		"/mnt/series/Show/Сезон - 2/ep01.mkv": "Show",
 		"/mnt/series/Show/01/ep01.mkv":        "Show",
-		"/mnt/series/loose.mkv":               "loose.mkv",
+		"/mnt/series/loose.mkv":               "series",
 	}
 	for file, want := range libCases {
 		if got := seriesKey(file, []string{"/mnt/series"}, testSeasonPatterns); got != want {
@@ -401,15 +402,34 @@ func TestSeriesKey(t *testing.T) {
 		}
 	}
 
-	// Show-style source: the source is itself a show, seasons sit directly beneath it.
+	// Show-style source: the source is itself a show. Seasons beneath it, or episodes placed
+	// directly inside it, both group under the show's name.
 	showCases := map[string]string{
 		"/mnt/series/Show/Сезон 2/ep01.mkv":  "Show",
 		"/mnt/series/Show/Season 1/ep01.mkv": "Show",
 		"/mnt/series/Show/S03/ep01.mkv":      "Show",
+		"/mnt/series/Show/ep01.mkv":          "Show",
 	}
 	for file, want := range showCases {
 		if got := seriesKey(file, []string{"/mnt/series/Show"}, testSeasonPatterns); got != want {
 			t.Errorf("seriesKey(%q, show) = %q, want %q", file, got, want)
+		}
+	}
+
+	// A file under no configured source falls back to its filename.
+	if got := seriesKey("/elsewhere/x.mkv", []string{"/mnt/series"}, testSeasonPatterns); got != "x.mkv" {
+		t.Errorf("seriesKey(no source) = %q, want %q", got, "x.mkv")
+	}
+
+	// A show folder may itself be named like a season; the leading name stays the show.
+	seasonNamedCases := map[string]string{
+		"/mnt/series/Season 25/Season 01/ep.mkv":     "Season 25",
+		"/mnt/series/2020/Season 01/ep.mkv":          "2020",
+		"/mnt/series/xxx/Season 01/Season 02/ep.mkv": "xxx",
+	}
+	for file, want := range seasonNamedCases {
+		if got := seriesKey(file, []string{"/mnt/series"}, testSeasonPatterns); got != want {
+			t.Errorf("seriesKey(%q, season-named) = %q, want %q", file, got, want)
 		}
 	}
 }
@@ -885,6 +905,33 @@ func TestProgrammesTitleTemplateRelNoExt(t *testing.T) {
 		t.Fatal("expected programmes")
 	}
 	if progs[0].Title != "Show/Season 1/05. Episode" {
+		t.Errorf("unexpected title %q", progs[0].Title)
+	}
+}
+
+func TestProgrammesTitleTemplateSourceBase(t *testing.T) {
+	dir := t.TempDir()
+	show := filepath.Join(dir, "My Show")
+	writeFile(t, filepath.Join(show, "Season 1", "20. Episode.mkv"))
+
+	p := newFakeProber()
+	p.results[filepath.Join(show, "Season 1", "20. Episode.mkv")] = probeResult{Duration: 3600}
+
+	c, _ := newTestChannel(t, "c", []string{show}, p)
+	c.titleTmpl = template.Must(template.New("t").Funcs(sprig.FuncMap()).
+		Parse(`{{ .File.SourceBase }}/{{ .File.RelNoExt }}`))
+
+	now := time.Unix(10000, 0)
+	warmUp(t, c, now)
+
+	progs, err := c.Programmes(context.Background(), now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(progs) == 0 {
+		t.Fatal("expected programmes")
+	}
+	if progs[0].Title != "My Show/Season 1/20. Episode" {
 		t.Errorf("unexpected title %q", progs[0].Title)
 	}
 }

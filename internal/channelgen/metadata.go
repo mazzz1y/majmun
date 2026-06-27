@@ -31,11 +31,12 @@ type probeVars struct {
 }
 
 type fileVars struct {
-	Path     string
-	Rel      string
-	RelNoExt string
-	Name     string
-	Source   string
+	Path       string
+	Rel        string
+	RelNoExt   string
+	Name       string
+	Source     string
+	SourceBase string
 }
 
 type metadataVars struct {
@@ -46,6 +47,10 @@ type metadataVars struct {
 func (c *Channel) metadataVars(it Item) metadataVars {
 	rel, source := relToSource(it.File, c.sources)
 	base := filepath.Base(it.File)
+	sourceBase := ""
+	if source != "" {
+		sourceBase = filepath.Base(source)
+	}
 	return metadataVars{
 		Probe: probeVars{
 			Title:          it.Title,
@@ -68,11 +73,12 @@ func (c *Channel) metadataVars(it Item) metadataVars {
 			AudioLanguages: it.AudioLanguages,
 		},
 		File: fileVars{
-			Path:     it.File,
-			Rel:      rel,
-			RelNoExt: strings.TrimSuffix(rel, filepath.Ext(rel)),
-			Name:     strings.TrimSuffix(base, filepath.Ext(base)),
-			Source:   source,
+			Path:       it.File,
+			Rel:        rel,
+			RelNoExt:   strings.TrimSuffix(rel, filepath.Ext(rel)),
+			Name:       strings.TrimSuffix(base, filepath.Ext(base)),
+			Source:     source,
+			SourceBase: sourceBase,
 		},
 	}
 }
