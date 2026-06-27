@@ -145,20 +145,3 @@ playlists:
         sources: [/media/football]
 ```
 
-### Multiple Sources and Shuffle
-
-Directories are scanned recursively; individual files can be mixed in. `order: shuffle` shuffles playback with a stable,
-persisted seed. Both `order` and `extensions` are [`playout`](./playout.md) fields, set here at the channel level:
-
-```yaml
-playlists:
-  - name: local
-    channels:
-      - name: "Movie Marathon"
-        sources:
-          - /media/movies
-          - /media/extra/feature.mkv
-        playout:
-          order: shuffle
-          extensions: [mkv, mp4]
-```

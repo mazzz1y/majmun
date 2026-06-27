@@ -34,3 +34,11 @@ func (r *RegexpArr) UnmarshalYAML(value *yaml.Node) error {
 func (r *RegexpArr) ToArray() []*regexp.Regexp {
 	return *r
 }
+
+func MustRegexpArr(patterns ...string) RegexpArr {
+	arr := make(RegexpArr, len(patterns))
+	for i, p := range patterns {
+		arr[i] = regexp.MustCompile(p)
+	}
+	return arr
+}

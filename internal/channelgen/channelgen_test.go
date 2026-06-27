@@ -5,6 +5,7 @@ import (
 	"majmun/internal/hashid"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"text/template"
@@ -14,6 +15,12 @@ import (
 )
 
 var testExtensions = []string{"mkv", "mp4", "avi"}
+
+// testSeasonPatterns mirror the production default for interleave tests.
+var testSeasonPatterns = []*regexp.Regexp{
+	regexp.MustCompile(`(?i)^(?:season|сезон|s)[ ._-]*\d{1,4}$`),
+	regexp.MustCompile(`^\d{1,4}$`),
+}
 
 type fakeProber struct {
 	durations    map[string]float64
@@ -72,7 +79,7 @@ func newTestChannel(t *testing.T, id string, sources []string, p prober) (*Chann
 }
 
 func buildTestSchedule(p prober, dir string, order string, old *Schedule, now time.Time) (*Schedule, error) {
-	return buildSchedule(context.Background(), p, "c", []string{dir}, testExtensions, order, old, now)
+	return buildSchedule(context.Background(), p, "c", []string{dir}, testExtensions, order, testSeasonPatterns, old, now)
 }
 
 func itemName(it Item) string {
@@ -380,15 +387,64 @@ func TestBuildSchedulePreservesAnchorAndSeed(t *testing.T) {
 }
 
 func TestSeriesKey(t *testing.T) {
-	root := "/mnt/series"
-	cases := map[string]string{
-		"/mnt/series/Show/S01E01.mkv":        "Show",
-		"/mnt/series/Show/Season 1/ep01.mkv": "Show",
-		"/mnt/series/loose.mkv":              "loose.mkv",
+	// Library-style source: the source is a parent of show folders.
+	libCases := map[string]string{
+		"/mnt/series/Show/S01E01.mkv":         "Show",
+		"/mnt/series/Show/Season 1/ep01.mkv":  "Show",
+		"/mnt/series/Show/Сезон - 2/ep01.mkv": "Show",
+		"/mnt/series/Show/01/ep01.mkv":        "Show",
+		"/mnt/series/loose.mkv":               "loose.mkv",
 	}
-	for file, want := range cases {
-		if got := seriesKey(file, []string{root}); got != want {
-			t.Errorf("seriesKey(%q) = %q, want %q", file, got, want)
+	for file, want := range libCases {
+		if got := seriesKey(file, []string{"/mnt/series"}, testSeasonPatterns); got != want {
+			t.Errorf("seriesKey(%q, lib) = %q, want %q", file, got, want)
+		}
+	}
+
+	// Show-style source: the source is itself a show, seasons sit directly beneath it.
+	showCases := map[string]string{
+		"/mnt/series/Show/Сезон 2/ep01.mkv":  "Show",
+		"/mnt/series/Show/Season 1/ep01.mkv": "Show",
+		"/mnt/series/Show/S03/ep01.mkv":      "Show",
+	}
+	for file, want := range showCases {
+		if got := seriesKey(file, []string{"/mnt/series/Show"}, testSeasonPatterns); got != want {
+			t.Errorf("seriesKey(%q, show) = %q, want %q", file, got, want)
+		}
+	}
+}
+
+func TestSpreadOrder(t *testing.T) {
+	dir := t.TempDir()
+	p := newFakeProber()
+	// Show A: 2 eps (pos .25 .75); Show B: 4 eps (pos .125 .375 .625 .875).
+	for _, f := range []string{
+		"A/S01E01.mkv", "A/S01E02.mkv",
+		"B/S01E01.mkv", "B/S01E02.mkv", "B/S01E03.mkv", "B/S01E04.mkv",
+	} {
+		path := filepath.Join(dir, f)
+		writeFile(t, path)
+		p.durations[path] = 100
+	}
+
+	s, err := buildTestSchedule(p, dir, "spread", nil, time.Unix(1000, 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, it := range s.Items {
+		got = append(got, filepath.Base(filepath.Dir(it.File))+"/"+filepath.Base(it.File))
+	}
+	want := []string{
+		"B/S01E01.mkv", "A/S01E01.mkv", "B/S01E02.mkv",
+		"B/S01E03.mkv", "A/S01E02.mkv", "B/S01E04.mkv",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("position %d: got %v, want %v", i, got, want)
 		}
 	}
 }
@@ -419,6 +475,111 @@ func TestInterleaveOrder(t *testing.T) {
 		"A/S01E02.mkv", "B/S01E02.mkv",
 		"B/S01E03.mkv",
 	}
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("position %d: got %v, want %v", i, got, want)
+		}
+	}
+}
+
+// Each show is its own source with season subfolders. Interleave must rotate across shows,
+// not across season folders (the regression: "Сезон 2/3/..." treated as separate shows).
+func TestInterleaveGroupsByShowAcrossSeasonSources(t *testing.T) {
+	root := t.TempDir()
+	p := newFakeProber()
+	files := []string{
+		"Show A/Сезон 1/01.mkv", "Show A/Сезон 2/01.mkv",
+		"Show B/Сезон 1/01.mkv", "Show B/Сезон 1/02.mkv",
+	}
+	for _, f := range files {
+		path := filepath.Join(root, f)
+		writeFile(t, path)
+		p.durations[path] = 100
+	}
+	sources := []string{filepath.Join(root, "Show A"), filepath.Join(root, "Show B")}
+
+	s, err := buildSchedule(context.Background(), p, "c", sources, testExtensions, "interleave", testSeasonPatterns, nil, time.Unix(1000, 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, it := range s.Items {
+		got = append(got, filepath.Base(filepath.Dir(filepath.Dir(it.File)))+"/"+filepath.Base(filepath.Dir(it.File))+"/"+filepath.Base(it.File))
+	}
+	want := []string{
+		"Show A/Сезон 1/01.mkv", "Show B/Сезон 1/01.mkv",
+		"Show A/Сезон 2/01.mkv", "Show B/Сезон 1/02.mkv",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("position %d: got %v, want %v", i, got, want)
+		}
+	}
+}
+
+func TestInterleaveGroupsByShowTag(t *testing.T) {
+	root := t.TempDir()
+	p := newFakeProber()
+	files := map[string]string{
+		"dirX/a1.mkv": "Show A",
+		"dirY/a2.mkv": "Show A",
+		"dirZ/b1.mkv": "Show B",
+	}
+	for f, show := range files {
+		path := filepath.Join(root, f)
+		writeFile(t, path)
+		p.results[path] = probeResult{Duration: 100, Show: show}
+	}
+
+	s, err := buildSchedule(context.Background(), p, "c", []string{root}, testExtensions, "interleave", testSeasonPatterns, nil, time.Unix(1000, 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, it := range s.Items {
+		got = append(got, it.Show+"/"+filepath.Base(it.File))
+	}
+	want := []string{"Show A/a1.mkv", "Show B/b1.mkv", "Show A/a2.mkv"}
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("position %d: got %v, want %v", i, got, want)
+		}
+	}
+}
+
+func TestInterleaveSeasonPatternOverride(t *testing.T) {
+	root := t.TempDir()
+	p := newFakeProber()
+	files := []string{
+		"Show A/Vol 1/01.mkv", "Show A/Vol 2/01.mkv",
+		"Show B/Vol 1/01.mkv",
+	}
+	for _, f := range files {
+		path := filepath.Join(root, f)
+		writeFile(t, path)
+		p.durations[path] = 100
+	}
+	sources := []string{filepath.Join(root, "Show A"), filepath.Join(root, "Show B")}
+	seasonPatterns := []*regexp.Regexp{regexp.MustCompile(`(?i)^vol[ ._-]*\d+$`)}
+
+	s, err := buildSchedule(context.Background(), p, "c", sources, testExtensions, "interleave", seasonPatterns, nil, time.Unix(1000, 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, it := range s.Items {
+		got = append(got, filepath.Base(filepath.Dir(filepath.Dir(it.File)))+"/"+filepath.Base(it.File))
+	}
+	want := []string{"Show A/01.mkv", "Show B/01.mkv", "Show A/01.mkv"}
 	if len(got) != len(want) {
 		t.Fatalf("got %v, want %v", got, want)
 	}

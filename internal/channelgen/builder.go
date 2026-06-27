@@ -6,12 +6,13 @@ import (
 	"majmun/internal/natsort"
 	"math/rand"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
 )
 
-func buildSchedule(ctx context.Context, p prober, id string, sources, extensions []string, order string, old *Schedule, now time.Time) (*Schedule, error) {
+func buildSchedule(ctx context.Context, p prober, id string, sources, extensions []string, order string, seasonPatterns []*regexp.Regexp, old *Schedule, now time.Time) (*Schedule, error) {
 	files, err := scanSources(sources, extensions)
 	if err != nil {
 		return nil, err
@@ -51,6 +52,7 @@ func buildSchedule(ctx context.Context, p prober, id string, sources, extensions
 		items = append(items, Item{
 			File:           f.path,
 			Title:          res.Title,
+			Show:           res.Show,
 			Description:    res.Description,
 			Category:       res.Category,
 			Date:           res.Date,
@@ -84,7 +86,9 @@ func buildSchedule(ctx context.Context, p prober, id string, sources, extensions
 		}
 		shuffle(items, seed)
 	case "interleave":
-		items = interleave(items, sources)
+		items = interleave(items, sources, seasonPatterns)
+	case "spread":
+		items = spread(items, sources, seasonPatterns)
 	default:
 		sort.Slice(items, func(i, j int) bool {
 			return itemLess(items[i], items[j])
@@ -122,14 +126,33 @@ func itemLess(a, b Item) bool {
 	return natsort.Less(filepath.Base(a.File), filepath.Base(b.File))
 }
 
-// seriesKey is the first path segment below the matched source root, i.e. the show folder.
-// A file sitting directly in a source falls back to its filename (a series of one).
-func seriesKey(file string, sources []string) string {
-	rel, _ := relToSource(file, sources)
-	if i := strings.IndexRune(rel, filepath.Separator); i >= 0 {
-		return rel[:i]
+// seriesKey identifies the show a file belongs to: the path (relative to its source) down to
+// but excluding the first season segment ("Season 1", "Сезон 2", "S01", ...). This groups by
+// show whether the source is a library of shows ("/series" -> "Show/Сезон 2/ep") or itself a
+// show ("/series/Show" -> "Сезон 2/ep"). Without a season segment the first segment below the
+// source is used; a file directly in a source falls back to its filename.
+func seriesKey(file string, sources []string, seasonPatterns []*regexp.Regexp) string {
+	rel, source := relToSource(file, sources)
+	segs := strings.Split(rel, string(filepath.Separator))
+	for i, seg := range segs {
+		if isSeasonDir(seg, seasonPatterns) {
+			if i == 0 {
+				return filepath.Base(source)
+			}
+			return strings.Join(segs[:i], string(filepath.Separator))
+		}
 	}
-	return rel
+	return segs[0]
+}
+
+func isSeasonDir(name string, seasonPatterns []*regexp.Regexp) bool {
+	name = strings.TrimSpace(name)
+	for _, re := range seasonPatterns {
+		if re.MatchString(name) {
+			return true
+		}
+	}
+	return false
 }
 
 // relToSource returns the file's path relative to the source root that contains it, plus that
@@ -145,29 +168,76 @@ func relToSource(file string, sources []string) (rel, source string) {
 	return filepath.Base(file), ""
 }
 
-// interleave round-robins episodes across shows: each show is sorted by episode order, then
-// position k from every show is taken in turn. Shorter shows drop out as they run out.
-func interleave(items []Item, sources []string) []Item {
+// groupShows buckets items by show (container tag, else season-aware path), sorting each
+// show's episodes by episode order and returning the shows ordered by name (natsort).
+func groupShows(items []Item, sources []string, seasonPatterns []*regexp.Regexp) [][]Item {
 	groups := map[string][]Item{}
 	for _, it := range items {
-		k := seriesKey(it.File, sources)
+		k := it.Show
+		if k == "" {
+			k = seriesKey(it.File, sources, seasonPatterns)
+		}
 		groups[k] = append(groups[k], it)
 	}
 	keys := make([]string, 0, len(groups))
-	for k, g := range groups {
-		sort.Slice(g, func(i, j int) bool { return itemLess(g[i], g[j]) })
-		groups[k] = g
+	for k := range groups {
 		keys = append(keys, k)
 	}
 	sort.Slice(keys, func(i, j int) bool { return natsort.Less(keys[i], keys[j]) })
 
+	shows := make([][]Item, len(keys))
+	for i, k := range keys {
+		g := groups[k]
+		sort.Slice(g, func(a, b int) bool { return itemLess(g[a], g[b]) })
+		shows[i] = g
+	}
+	return shows
+}
+
+// interleave round-robins episodes across shows: each show is sorted by episode order, then
+// position k from every show is taken in turn. Shorter shows drop out as they run out.
+func interleave(items []Item, sources []string, seasonPatterns []*regexp.Regexp) []Item {
+	shows := groupShows(items, sources, seasonPatterns)
 	out := make([]Item, 0, len(items))
 	for round := 0; len(out) < len(items); round++ {
-		for _, k := range keys {
-			if g := groups[k]; round < len(g) {
+		for _, g := range shows {
+			if round < len(g) {
 				out = append(out, g[round])
 			}
 		}
+	}
+	return out
+}
+
+// spread distributes each show's episodes evenly across the whole timeline: episode j of a
+// show with n episodes is placed at position (j+0.5)/n in [0,1). Items are then ordered by
+// that position, so a long show and a short show both run start-to-finish, the long one simply
+// appearing more often. Ties keep show order (shows are pre-sorted by name).
+func spread(items []Item, sources []string, seasonPatterns []*regexp.Regexp) []Item {
+	shows := groupShows(items, sources, seasonPatterns)
+
+	type placed struct {
+		pos  float64
+		show int
+		it   Item
+	}
+	all := make([]placed, 0, len(items))
+	for s, g := range shows {
+		n := len(g)
+		for j, it := range g {
+			all = append(all, placed{pos: (float64(j) + 0.5) / float64(n), show: s, it: it})
+		}
+	}
+	sort.SliceStable(all, func(i, j int) bool {
+		if all[i].pos != all[j].pos {
+			return all[i].pos < all[j].pos
+		}
+		return all[i].show < all[j].show
+	})
+
+	out := make([]Item, len(all))
+	for i, p := range all {
+		out[i] = p.it
 	}
 	return out
 }

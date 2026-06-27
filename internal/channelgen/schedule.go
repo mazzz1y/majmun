@@ -3,6 +3,7 @@ package channelgen
 type Item struct {
 	File           string   `json:"file"`
 	Title          string   `json:"title"`
+	Show           string   `json:"show,omitempty"`
 	Description    string   `json:"description,omitempty"`
 	Category       string   `json:"category,omitempty"`
 	Date           string   `json:"date,omitempty"`
@@ -51,6 +52,7 @@ func (s *Schedule) probeCache() map[probeKey]probeResult {
 		cache[probeKey{file: it.File, size: it.Size, mtime: it.MTime}] = probeResult{
 			Duration:       it.Duration,
 			Title:          it.Title,
+			Show:           it.Show,
 			Description:    it.Description,
 			Category:       it.Category,
 			Date:           it.Date,

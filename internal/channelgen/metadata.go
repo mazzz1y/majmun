@@ -11,6 +11,7 @@ import (
 
 type probeVars struct {
 	Title          string
+	Show           string
 	Description    string
 	Category       string
 	Date           string
@@ -47,6 +48,7 @@ func (c *Channel) metadataVars(it Item) metadataVars {
 	return metadataVars{
 		Probe: probeVars{
 			Title:          it.Title,
+			Show:           it.Show,
 			Description:    it.Description,
 			Category:       it.Category,
 			Date:           it.Date,

@@ -113,11 +113,17 @@ func DefaultConfig() *Config {
 			// No default command or template variables: a transcode that keeps up
 			// depends on the host hardware, so the user must provide one (with its
 			// own variables). See docs/config/playout.md.
-			InitSegments:    4,
-			ReadyTimeout:    common.Duration(30 * time.Second),
-			StateDir:        "state",
-			Extensions:      common.StringOrArr{"mkv", "mp4", "avi", "mov", "m4v", "ts", "webm", "mpg", "mpeg", "flv", "wmv"},
-			Order:           "sequential",
+			InitSegments: 4,
+			ReadyTimeout: common.Duration(30 * time.Second),
+			StateDir:     "state",
+			Extensions:   common.StringOrArr{"mkv", "mp4", "avi", "mov", "m4v", "ts", "webm", "mpg", "mpeg", "flv", "wmv"},
+			Order:        "sequential",
+			SeasonPatterns: common.MustRegexpArr([]string{
+				`(?i)^(?:season|saison|staffel|stagione|temporada|seizoen|sezon|sezóna|sezona)[ ._-]*\d{1,4}$`,
+				`(?i)^(?:сезон|сезона|сезонъ)[ ._-]*\d{1,4}$`,
+				`(?i)^[st][ ._-]*\d{1,4}$`,
+				`^\d{1,4}$`,
+			}...),
 			RefreshInterval: durationPtr(30 * time.Minute),
 			EPGDuration:     common.Duration(7 * 24 * time.Hour),
 			ScheduleSwapAt:  "04:00",

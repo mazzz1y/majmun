@@ -43,6 +43,7 @@ var dateLayouts = []string{
 type probeResult struct {
 	Duration    float64
 	Title       string
+	Show        string
 	Description string
 	Category    string
 	Date        string // normalized YYYYMMDD, empty if absent/unparseable
@@ -56,8 +57,8 @@ type probeResult struct {
 	Height     int
 	// AspectWidth is the square-pixel display width (even), for a zero-copy scale_vaapi
 	// to bake the aspect in. Equals Width when no correction applies; zero iff Width is.
-	AspectWidth int
-	PixelFormat string
+	AspectWidth    int
+	PixelFormat    string
 	FrameRate      string // "30000/1001" form, as reported by ffprobe
 	FieldOrder     string // progressive, tt, bb, tb, bt; empty if unknown
 	AudioCodec     string
@@ -170,6 +171,7 @@ func parseProbeOutput(out []byte) (probeResult, error) {
 
 	res.Duration = dur
 	res.Title = firstTag(tags, "title")
+	res.Show = firstTag(tags, "show", "series")
 	res.Description = firstTag(tags, "description", "synopsis", "summary", "comment")
 	res.Category = firstTag(tags, "genre")
 	res.Date = parseDate(firstTag(tags, "date", "year", "date_released"))

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"majmun/internal/config/common"
 	"majmun/internal/shell"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -11,7 +12,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-var validPlayoutOrders = map[string]bool{"sequential": true, "shuffle": true, "interleave": true}
+var validPlayoutOrders = []string{"sequential", "shuffle", "interleave", "spread"}
 
 type Playout struct {
 	Command      common.StringOrArr `yaml:"command,omitempty"`
@@ -24,6 +25,7 @@ type Playout struct {
 	Logo            string             `yaml:"logo,omitempty"`
 	Extensions      common.StringOrArr `yaml:"extensions,omitempty"`
 	Order           string             `yaml:"order,omitempty"`
+	SeasonPatterns  common.RegexpArr   `yaml:"season_patterns,omitempty"`
 	RefreshInterval *common.Duration   `yaml:"refresh_interval,omitempty"`
 	EPGDuration     common.Duration    `yaml:"epg_duration,omitempty"`
 	ScheduleSwapAt  string             `yaml:"schedule_swap_at,omitempty"`
@@ -67,8 +69,8 @@ func (p *Playout) Validate() error {
 	if p.InitSegments < 0 {
 		return fmt.Errorf("init_segments cannot be negative")
 	}
-	if p.Order != "" && !validPlayoutOrders[p.Order] {
-		return fmt.Errorf("order must be one of sequential, shuffle, interleave")
+	if p.Order != "" && !slices.Contains(validPlayoutOrders, p.Order) {
+		return fmt.Errorf("order must be one of %s", strings.Join(validPlayoutOrders, ", "))
 	}
 	if p.ScheduleSwapAt != "" {
 		if _, _, err := ParsePlayoutSwapAt(p.ScheduleSwapAt); err != nil {
