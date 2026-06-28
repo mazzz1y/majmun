@@ -1312,6 +1312,8 @@ func TestScheduleChangeDeferredUntilSwapTime(t *testing.T) {
 		t.Errorf("promoteAt = %v, want next 04:00 = %v", promoteAt, want)
 	}
 
+	c.refresh = 0
+
 	c.ResolveCurrent(t0.Add(2 * time.Hour))
 	if activeFingerprint(c) != first.Fingerprint {
 		t.Error("schedule must not change before the swap time")
