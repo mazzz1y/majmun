@@ -104,11 +104,22 @@ playlists:
 | `logo`             | `string`                           | No       | Channel logo: an http(s) URL or a local file path. Available in commands as `{{ .Channel.Logo }}`.                                                                                         |
 | `extensions`       | `[]string`                         | No       | Video file extensions to include. Default: `mkv, mp4, avi, mov, m4v, ts, webm, mpg, mpeg, flv, wmv`.                                                                                       |
 | `order`            | `string`                           | No       | Playback order: `sequential` (episode order), `shuffle` (stable random), `interleave` (round-robin episodes across shows; shorter shows finish first), or `spread` (distribute each show's episodes evenly across the whole timeline so all shows run start-to-finish). Default `sequential`. |
-| `season_patterns`  | `[]string` (regex)                 | No       | Used by `interleave` and `spread` to identify the show a file belongs to. A directory whose whole name matches any pattern is treated as a season folder and excluded from the show key, so episodes group by show rather than by season. Defaults match `Season N` / `Сезон N` / `S01` (across several languages) and bare-number folders. Provide your own list to match other naming. |
+| `season_patterns`  | `[]regex`                          | No       | Patterns matching season folder names, used to group shows (for `interleave`/`spread`) and to fill `{{ .Probe.Season }}`. Defaults cover `Season N` / `Сезон N` / `S01` and bare numbers. |
+| `episode_patterns` | `[]regex`                          | No       | Patterns to extract season/episode numbers from the tag and filename, used for sorting and metadata (`{{ .Probe.Season }}` / `{{ .Probe.Episode }}`). Two capture groups yield `(season, episode)`, one yields the episode. Defaults cover `S01E05`, `1x05`, `ep05`, a leading number, and similar. |
 | `refresh_interval` | [`duration`](./shared/duration.md) | No       | How often `sources` is re-scanned for added/removed files (see [adopting changes](./channels.md#picking-up-file-changes)). Default `30m`; `0` disables re-scanning.                          |
 | `epg_duration`     | [`duration`](./shared/duration.md) | No       | How far into the future the EPG is generated. Default `1w`.                                                                                                                               |
 | `schedule_swap_at` | `string` (`HH:MM`)                 | No       | Local time of day after which a changed file set is adopted by the live stream — deferred further to the end of the programme then playing, so a show is never cut off mid-way. Default `04:00`. |
 | `metadata`         | [`Metadata`](#metadata-templates)  | No       | Go templates building the EPG `title`, `description`, and `category` per file. Defaults reproduce the [container-tag behavior](./channels.md#epg-metadata).                                       |
+
+!!! info "Season/episode detection"
+
+    Season and episode numbers are resolved per file in this order, stopping at the first hit:
+
+    1. **Container tags** — `episode_id` / `episode_sort` / `episode`, parsed with `episode_patterns`.
+    2. **Filename** — parsed with `episode_patterns` (e.g. `S01E05`, `1x05`, `20. Title`).
+    3. **Season folder** — the season number from the `season_patterns` folder fills the season if still unset.
+
+    A file with no detectable numbers keeps season/episode `0`; ordering then falls back to natural filename sort within the directory.
 
 ### Metadata Templates
 

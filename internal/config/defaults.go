@@ -124,6 +124,14 @@ func DefaultConfig() *Config {
 				`(?i)^[st][ ._-]*\d{1,4}$`,
 				`^\d{1,4}$`,
 			}...),
+			EpisodePatterns: common.MustRegexpArr([]string{
+				`(?i)s(\d{1,4})[ ._-]?e(\d{1,4})`,                                   // S01E05
+				`(?i)\b(\d{1,2})x(\d{2,4})\b`,                                       // 1x05
+				`(?i)\bseason[ ._-]?(\d{1,4})\b.*?\bep(?:isode)?[ ._-]?(\d{1,4})\b`, // Season 1 Episode 5
+				`(?i)\bep(?:isode)?[ ._-]?(\d{1,4})\b`,                              // ep05
+				`(?i)\be[ ._-]?(\d{1,4})\b`,                                         // E05
+				`^\s*(\d{1,4})\b`,                                                   // 20. Title / 01 Title
+			}...),
 			RefreshInterval: durationPtr(30 * time.Minute),
 			EPGDuration:     common.Duration(7 * 24 * time.Hour),
 			ScheduleSwapAt:  "04:00",

@@ -16,10 +16,19 @@ import (
 
 var testExtensions = []string{"mkv", "mp4", "avi"}
 
-// testSeasonPatterns mirror the production default for interleave tests.
+// testSeasonPatterns / testEpisodePatterns mirror the production defaults for tests.
 var testSeasonPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)^(?:season|сезон|s)[ ._-]*\d{1,4}$`),
 	regexp.MustCompile(`^\d{1,4}$`),
+}
+
+var testEpisodePatterns = []*regexp.Regexp{
+	regexp.MustCompile(`(?i)s(\d{1,4})[ ._-]?e(\d{1,4})`),
+	regexp.MustCompile(`(?i)\b(\d{1,2})x(\d{2,4})\b`),
+	regexp.MustCompile(`(?i)\bseason[ ._-]?(\d{1,4})\b.*?\bep(?:isode)?[ ._-]?(\d{1,4})\b`),
+	regexp.MustCompile(`(?i)\bep(?:isode)?[ ._-]?(\d{1,4})\b`),
+	regexp.MustCompile(`(?i)\be[ ._-]?(\d{1,4})\b`),
+	regexp.MustCompile(`^\s*(\d{1,4})\b`),
 }
 
 type fakeProber struct {
@@ -79,7 +88,7 @@ func newTestChannel(t *testing.T, id string, sources []string, p prober) (*Chann
 }
 
 func buildTestSchedule(p prober, dir string, order string, old *Schedule, now time.Time) (*Schedule, error) {
-	return buildSchedule(context.Background(), p, "c", []string{dir}, testExtensions, order, testSeasonPatterns, old, now)
+	return buildSchedule(context.Background(), p, "c", []string{dir}, testExtensions, order, testSeasonPatterns, testEpisodePatterns, old, now)
 }
 
 func itemName(it Item) string {
@@ -268,6 +277,21 @@ func TestBuildScheduleEpisodeFromFilename(t *testing.T) {
 	}
 	if s.Items[0].Season != 1 || s.Items[0].Episode != 2 {
 		t.Errorf("expected S01E02 parsed from filename, got S%02dE%02d", s.Items[0].Season, s.Items[0].Episode)
+	}
+}
+
+func TestBuildScheduleSeasonFromFolder(t *testing.T) {
+	dir := t.TempDir()
+	// Filename carries the episode but no season; the season comes from the folder.
+	writeFile(t, filepath.Join(dir, "Show", "Season 3", "05. Episode.mkv"))
+
+	s, err := buildTestSchedule(newFakeProber(), dir, "sequential", nil, time.Unix(1000, 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Items[0].Season != 3 || s.Items[0].Episode != 5 {
+		t.Errorf("expected S03E05 (season from folder, episode from filename), got S%02dE%02d",
+			s.Items[0].Season, s.Items[0].Episode)
 	}
 }
 
@@ -521,7 +545,7 @@ func TestInterleaveGroupsByShowAcrossSeasonSources(t *testing.T) {
 	}
 	sources := []string{filepath.Join(root, "Show A"), filepath.Join(root, "Show B")}
 
-	s, err := buildSchedule(context.Background(), p, "c", sources, testExtensions, "interleave", testSeasonPatterns, nil, time.Unix(1000, 0))
+	s, err := buildSchedule(context.Background(), p, "c", sources, testExtensions, "interleave", testSeasonPatterns, testEpisodePatterns, nil, time.Unix(1000, 0))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -557,7 +581,7 @@ func TestInterleaveGroupsByShowTag(t *testing.T) {
 		p.results[path] = probeResult{Duration: 100, Show: show}
 	}
 
-	s, err := buildSchedule(context.Background(), p, "c", []string{root}, testExtensions, "interleave", testSeasonPatterns, nil, time.Unix(1000, 0))
+	s, err := buildSchedule(context.Background(), p, "c", []string{root}, testExtensions, "interleave", testSeasonPatterns, testEpisodePatterns, nil, time.Unix(1000, 0))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -591,7 +615,7 @@ func TestInterleaveSeasonPatternOverride(t *testing.T) {
 	sources := []string{filepath.Join(root, "Show A"), filepath.Join(root, "Show B")}
 	seasonPatterns := []*regexp.Regexp{regexp.MustCompile(`(?i)^vol[ ._-]*\d+$`)}
 
-	s, err := buildSchedule(context.Background(), p, "c", sources, testExtensions, "interleave", seasonPatterns, nil, time.Unix(1000, 0))
+	s, err := buildSchedule(context.Background(), p, "c", sources, testExtensions, "interleave", seasonPatterns, testEpisodePatterns, nil, time.Unix(1000, 0))
 	if err != nil {
 		t.Fatal(err)
 	}

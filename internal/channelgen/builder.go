@@ -8,11 +8,12 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
 
-func buildSchedule(ctx context.Context, p prober, id string, sources, extensions []string, order string, seasonPatterns []*regexp.Regexp, old *Schedule, now time.Time) (*Schedule, error) {
+func buildSchedule(ctx context.Context, p prober, id string, sources, extensions []string, order string, seasonPatterns, episodePatterns []*regexp.Regexp, old *Schedule, now time.Time) (*Schedule, error) {
 	files, err := scanSources(sources, extensions)
 	if err != nil {
 		return nil, err
@@ -46,8 +47,15 @@ func buildSchedule(ctx context.Context, p prober, id string, sources, extensions
 		}
 		season, episode := res.Season, res.Episode
 		if episode == 0 {
-			// Tags carry no episode info; fall back to filename patterns (S01E05, 1x05, ep5, ...).
-			season, episode = parseEpisode(titleFromPath(f.path))
+			season, episode = parseEpisode(res.EpisodeTag, episodePatterns)
+		}
+		if episode == 0 {
+			// Tag carries no episode; fall back to the filename.
+			season, episode = parseEpisode(titleFromPath(f.path), episodePatterns)
+		}
+		if season == 0 {
+			// Neither tag nor filename carry a season; fall back to the season folder.
+			season = seasonFromPath(f.path, sources, seasonPatterns)
 		}
 		items = append(items, Item{
 			File:           f.path,
@@ -165,6 +173,26 @@ func seriesKey(file string, sources []string, seasonPatterns []*regexp.Regexp) s
 		return filepath.Base(source)
 	}
 	return strings.Join(dirs[:cut], string(filepath.Separator))
+}
+
+var seasonNumRegexp = regexp.MustCompile(`\d+`)
+
+// seasonFromPath extracts the season number from the deepest season folder on a file's path
+// relative to its source ("Сезон 2"/"Season 02"/"S3" -> 2/2/3), or 0 if none is present. Used
+// to fill Season when tags and the filename carry no season.
+func seasonFromPath(file string, sources []string, seasonPatterns []*regexp.Regexp) int {
+	rel, _ := relToSource(file, sources)
+	dirs := strings.Split(rel, string(filepath.Separator))
+	dirs = dirs[:len(dirs)-1]
+	for i := len(dirs) - 1; i >= 0; i-- {
+		if isSeasonDir(dirs[i], seasonPatterns) {
+			if m := seasonNumRegexp.FindString(dirs[i]); m != "" {
+				n, _ := strconv.Atoi(m)
+				return n
+			}
+		}
+	}
+	return 0
 }
 
 func isSeasonDir(name string, seasonPatterns []*regexp.Regexp) bool {

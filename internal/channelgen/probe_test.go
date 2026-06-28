@@ -77,7 +77,7 @@ func TestParseProbeOutputAspectWidth(t *testing.T) {
 		{"anamorphic sar 24:11", 352, 576, "24:11", "4:3", 768},
 		{"anamorphic sar 16:11", 720, 576, "16:11", "", 1048}, // 720*16/11 = 1047.3 -> 1048
 		// SAR missing/unknown but DAR present: derive from height*DAR.
-		{"dar fallback 4:3", 352, 576, "", "4:3", 768},  // 576*4/3 = 768
+		{"dar fallback 4:3", 352, 576, "", "4:3", 768},       // 576*4/3 = 768
 		{"dar fallback 16:9", 720, 576, "N/A", "16:9", 1024}, // 576*16/9 = 1024
 		// Neither usable: width unchanged (evened).
 		{"square sar 1:1", 1920, 1080, "1:1", "", 1920},
@@ -158,15 +158,15 @@ func TestParseProbeOutputErrors(t *testing.T) {
 	}
 }
 
-func TestParseProbeOutputEpisode(t *testing.T) {
+func TestParseProbeOutputEpisodeTag(t *testing.T) {
 	cases := []struct {
-		name            string
-		tags            string
-		season, episode int
+		name string
+		tags string
+		want string
 	}{
-		{"sXXeYY", `"episode_id":"S02E05"`, 2, 5},
-		{"bare number", `"episode_sort":"7"`, 0, 7},
-		{"no episode tags", `"title":"x"`, 0, 0},
+		{"episode_id", `"episode_id":"S02E05"`, "S02E05"},
+		{"episode_sort", `"episode_sort":"7"`, "7"},
+		{"no episode tags", `"title":"x"`, ""},
 	}
 	for _, tc := range cases {
 		out := []byte(`{"format":{"duration":"60.0","tags":{` + tc.tags + `}}}`)
@@ -174,9 +174,8 @@ func TestParseProbeOutputEpisode(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: parseProbeOutput: %v", tc.name, err)
 		}
-		if res.Season != tc.season || res.Episode != tc.episode {
-			t.Errorf("%s: season/episode = %d/%d, want %d/%d",
-				tc.name, res.Season, res.Episode, tc.season, tc.episode)
+		if res.EpisodeTag != tc.want {
+			t.Errorf("%s: EpisodeTag = %q, want %q", tc.name, res.EpisodeTag, tc.want)
 		}
 	}
 }
@@ -195,15 +194,14 @@ func TestParseEpisodePatterns(t *testing.T) {
 		{"Show Episode 5", 0, 5},
 		{"Show E12", 0, 12},
 		{"Show e.3", 0, 3},
-		{"7", 0, 7},
-		{"  7  ", 0, 7},
-		{"0", 0, 0},
+		{"20. Title", 0, 20},
+		{"01 Title", 0, 1},
 		{"", 0, 0},
-		{"Show 1280x720 x264", 0, 0}, // resolution/codec must not match
 		{"Plain Movie Title", 0, 0},
+		{"Show 1280x720 x264", 0, 0}, // resolution/codec must not match
 	}
 	for _, tc := range cases {
-		season, episode := parseEpisode(tc.in)
+		season, episode := parseEpisode(tc.in, testEpisodePatterns)
 		if season != tc.season || episode != tc.episode {
 			t.Errorf("parseEpisode(%q) = %d/%d, want %d/%d", tc.in, season, episode, tc.season, tc.episode)
 		}

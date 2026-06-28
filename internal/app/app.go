@@ -228,6 +228,7 @@ func (m *Manager) channelGenerator(parentPlaylist string, channelConf config.Cha
 		Extensions:          po.Extensions,
 		Order:               po.Order,
 		SeasonPatterns:      po.SeasonPatterns.ToArray(),
+		EpisodePatterns:     po.EpisodePatterns.ToArray(),
 		Refresh:             po.ResolvedRefreshInterval(),
 		EPGDuration:         time.Duration(po.EPGDuration),
 		SwapHour:            swapHour,

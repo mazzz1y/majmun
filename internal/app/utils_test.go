@@ -139,6 +139,7 @@ func TestMergePlayoutsCascade(t *testing.T) {
 		ScheduleSwapAt:  "04:00",
 		RefreshInterval: durPtr(5 * time.Minute),
 		SeasonPatterns:  common.MustRegexpArr(`^global$`),
+		EpisodePatterns: common.MustRegexpArr(`^globalep$`),
 	}
 	playlist := config.Playout{
 		TemplateVars:   []common.NameValue{{Name: "segment_duration", Value: "4"}},
@@ -169,6 +170,10 @@ func TestMergePlayoutsCascade(t *testing.T) {
 	}
 	if len(result.SeasonPatterns) != 1 || result.SeasonPatterns[0].String() != `^channel$` {
 		t.Errorf("expected channel season_patterns to override, got %v", result.SeasonPatterns)
+	}
+
+	if len(result.EpisodePatterns) != 1 || result.EpisodePatterns[0].String() != `^globalep$` {
+		t.Errorf("expected global episode_patterns to be inherited, got %v", result.EpisodePatterns)
 	}
 
 	inherited := mergePlayouts(global, playlist)

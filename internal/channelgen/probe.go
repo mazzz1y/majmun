@@ -13,25 +13,6 @@ import (
 	"golang.org/x/text/encoding/charmap"
 )
 
-// Season/episode patterns commonly found in tags and file names. Word boundaries keep
-// resolutions (1280x720) and codec tokens (x264) from matching.
-var (
-	seasonEpisodeRegexps = []*regexp.Regexp{
-		// S01E05, s01.e05
-		regexp.MustCompile(`(?i)s(\d{1,4})[ ._-]?e(\d{1,4})`),
-		// 1x05, 01x05
-		regexp.MustCompile(`(?i)\b(\d{1,2})x(\d{2,4})\b`),
-		// Season 1 Episode 5
-		regexp.MustCompile(`(?i)\bseason[ ._-]?(\d{1,4})\b.*?\bep(?:isode)?[ ._-]?(\d{1,4})\b`),
-	}
-	episodeOnlyRegexps = []*regexp.Regexp{
-		// ep05, ep.05, Episode 5
-		regexp.MustCompile(`(?i)\bep(?:isode)?[ ._-]?(\d{1,4})\b`),
-		// E05, e5
-		regexp.MustCompile(`(?i)\be[ ._-]?(\d{1,4})\b`),
-	}
-)
-
 var dateLayouts = []string{
 	time.RFC3339,
 	"2006-01-02 15:04:05",
@@ -49,6 +30,7 @@ type probeResult struct {
 	Date        string // normalized YYYYMMDD, empty if absent/unparseable
 	Season      int
 	Episode     int
+	EpisodeTag  string // raw episode_id/episode_sort/episode tag, parsed into Season/Episode by the builder
 
 	// Media parameters of the first video/audio stream, for scripts to branch their
 	// transcode on. All are empty/zero when the corresponding stream or field is absent.
@@ -167,16 +149,13 @@ func parseProbeOutput(out []byte) (probeResult, error) {
 		tags[strings.ToLower(k)] = strings.TrimSpace(v)
 	}
 
-	season, episode := parseEpisode(firstTag(tags, "episode_id", "episode_sort", "episode"))
-
 	res.Duration = dur
 	res.Title = firstTag(tags, "title")
 	res.Show = firstTag(tags, "show", "series")
 	res.Description = firstTag(tags, "description", "synopsis", "summary", "comment")
 	res.Category = firstTag(tags, "genre")
 	res.Date = parseDate(firstTag(tags, "date", "year", "date_released"))
-	res.Season = season
-	res.Episode = episode
+	res.EpisodeTag = firstTag(tags, "episode_id", "episode_sort", "episode")
 
 	return res, nil
 }
@@ -246,23 +225,24 @@ func parseDate(v string) string {
 	return ""
 }
 
-func parseEpisode(v string) (season, episode int) {
-	for _, re := range seasonEpisodeRegexps {
-		if m := re.FindStringSubmatch(v); m != nil {
+// parseEpisode extracts season and episode from v using episodePatterns. A pattern with two
+// capture groups yields (season, episode); one group yields (0, episode). The first matching
+// pattern wins, so order them most-specific first.
+func parseEpisode(v string, episodePatterns []*regexp.Regexp) (season, episode int) {
+	for _, re := range episodePatterns {
+		m := re.FindStringSubmatch(v)
+		if m == nil {
+			continue
+		}
+		if len(m) >= 3 && m[1] != "" && m[2] != "" {
 			season, _ = strconv.Atoi(m[1])
 			episode, _ = strconv.Atoi(m[2])
 			return season, episode
 		}
-	}
-	for _, re := range episodeOnlyRegexps {
-		if m := re.FindStringSubmatch(v); m != nil {
+		if len(m) >= 2 && m[1] != "" {
 			episode, _ = strconv.Atoi(m[1])
 			return 0, episode
 		}
-	}
-	// Bare episode number (e.g. Matroska episode_sort) with unknown season.
-	if n, err := strconv.Atoi(strings.TrimSpace(v)); err == nil && n > 0 {
-		return 0, n
 	}
 	return 0, 0
 }

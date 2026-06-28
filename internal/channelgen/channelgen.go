@@ -14,17 +14,18 @@ import (
 )
 
 type Config struct {
-	Playlist       string
-	Name           string
-	Sources        []string
-	Extensions     []string
-	Order          string
-	SeasonPatterns []*regexp.Regexp
-	Refresh        time.Duration
-	EPGDuration    time.Duration
-	SwapHour       int
-	SwapMin        int
-	StateDir       string
+	Playlist        string
+	Name            string
+	Sources         []string
+	Extensions      []string
+	Order           string
+	SeasonPatterns  []*regexp.Regexp
+	EpisodePatterns []*regexp.Regexp
+	Refresh         time.Duration
+	EPGDuration     time.Duration
+	SwapHour        int
+	SwapMin         int
+	StateDir        string
 
 	TitleTemplate       *template.Template
 	DescriptionTemplate *template.Template
@@ -34,19 +35,20 @@ type Config struct {
 type Channel struct {
 	// id is the channel's hashid, shared with app.Channel.ID(): schedule file name,
 	// the schedule JSON's "channel" field, and the tvg-id all carry this same token.
-	id             string
-	playlist       string
-	name           string
-	sources        []string
-	extensions     []string
-	order          string
-	seasonPatterns []*regexp.Regexp
-	refresh        time.Duration
-	epgDuration    time.Duration
-	swapHour       int
-	swapMin        int
-	stateDir       string
-	prober         prober
+	id              string
+	playlist        string
+	name            string
+	sources         []string
+	extensions      []string
+	order           string
+	seasonPatterns  []*regexp.Regexp
+	episodePatterns []*regexp.Regexp
+	refresh         time.Duration
+	epgDuration     time.Duration
+	swapHour        int
+	swapMin         int
+	stateDir        string
+	prober          prober
 
 	titleTmpl       *template.Template
 	descriptionTmpl *template.Template
@@ -72,6 +74,7 @@ func NewChannel(cfg Config) *Channel {
 		extensions:      cfg.Extensions,
 		order:           cfg.Order,
 		seasonPatterns:  cfg.SeasonPatterns,
+		episodePatterns: cfg.EpisodePatterns,
 		refresh:         cfg.Refresh,
 		epgDuration:     cfg.EPGDuration,
 		swapHour:        cfg.SwapHour,
@@ -202,7 +205,7 @@ func (c *Channel) build(ctx context.Context, now time.Time) {
 	logging.Info(ctx, "building channel schedule", "sources", c.sources)
 	started := time.Now()
 
-	s, err := buildSchedule(ctx, c.prober, c.id, c.sources, c.extensions, c.order, c.seasonPatterns, old, now)
+	s, err := buildSchedule(ctx, c.prober, c.id, c.sources, c.extensions, c.order, c.seasonPatterns, c.episodePatterns, old, now)
 	if err != nil {
 		logging.Error(ctx, err, "failed to build channel schedule")
 		c.mu.Lock()

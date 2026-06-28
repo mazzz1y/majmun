@@ -26,6 +26,7 @@ type Playout struct {
 	Extensions      common.StringOrArr `yaml:"extensions,omitempty"`
 	Order           string             `yaml:"order,omitempty"`
 	SeasonPatterns  common.RegexpArr   `yaml:"season_patterns,omitempty"`
+	EpisodePatterns common.RegexpArr   `yaml:"episode_patterns,omitempty"`
 	RefreshInterval *common.Duration   `yaml:"refresh_interval,omitempty"`
 	EPGDuration     common.Duration    `yaml:"epg_duration,omitempty"`
 	ScheduleSwapAt  string             `yaml:"schedule_swap_at,omitempty"`
