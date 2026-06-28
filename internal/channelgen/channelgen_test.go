@@ -184,6 +184,81 @@ func TestBuildScheduleSequential(t *testing.T) {
 	}
 }
 
+func TestRederiveOnPatternChange(t *testing.T) {
+	dir := t.TempDir()
+	a := filepath.Join(dir, "a.mkv")
+	b := filepath.Join(dir, "b.mkv")
+	writeFile(t, a)
+	writeFile(t, b)
+
+	p := newFakeProber()
+	// Episode lives only in the container tag, so re-deriving must reach it via EpisodeTag.
+	p.results[a] = probeResult{Duration: 60, EpisodeTag: "Volume 2"}
+	p.results[b] = probeResult{Duration: 60, EpisodeTag: "Volume 1"}
+
+	now := time.Unix(1000, 0)
+	build := func(eps []*regexp.Regexp, old *Schedule) *Schedule {
+		s, err := buildSchedule(context.Background(), p, "c", []string{dir}, testExtensions, "sequential", testSeasonPatterns, eps, old, now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return s
+	}
+
+	none := []*regexp.Regexp{regexp.MustCompile(`^$`)}
+	first := build(none, nil)
+	if first.Items[0].Episode != 0 || first.Items[1].Episode != 0 {
+		t.Fatalf("expected episode 0 before pattern match, got %d,%d", first.Items[0].Episode, first.Items[1].Episode)
+	}
+	if itemName(first.Items[0]) != "a" || itemName(first.Items[1]) != "b" {
+		t.Fatalf("expected filename order a,b, got %s,%s", itemName(first.Items[0]), itemName(first.Items[1]))
+	}
+
+	volume := []*regexp.Regexp{regexp.MustCompile(`(?i)volume[ ._-]?(\d+)`)}
+	second := build(volume, first)
+	if itemName(second.Items[0]) != "b" || itemName(second.Items[1]) != "a" {
+		t.Fatalf("expected re-derived order b,a, got %s,%s", itemName(second.Items[0]), itemName(second.Items[1]))
+	}
+	if second.Items[0].Episode != 1 || second.Items[1].Episode != 2 {
+		t.Fatalf("expected episodes 1,2 after re-derive, got %d,%d", second.Items[0].Episode, second.Items[1].Episode)
+	}
+	if second.Anchor != first.Anchor || second.Seed != first.Seed {
+		t.Errorf("re-derive must preserve anchor/seed: anchor %d->%d, seed %d->%d", first.Anchor, second.Anchor, first.Seed, second.Seed)
+	}
+	if p.calls[a] != 1 || p.calls[b] != 1 {
+		t.Errorf("expected no re-probe, got calls a=%d b=%d", p.calls[a], p.calls[b])
+	}
+}
+
+func TestRederivePreservesShuffleOrder(t *testing.T) {
+	dir := t.TempDir()
+	for _, f := range []string{"a.mkv", "b.mkv", "c.mkv", "d.mkv", "e.mkv"} {
+		writeFile(t, filepath.Join(dir, f))
+	}
+	p := newFakeProber()
+	now := time.Unix(1000, 0)
+
+	build := func(eps []*regexp.Regexp, old *Schedule) *Schedule {
+		s, err := buildSchedule(context.Background(), p, "c", []string{dir}, testExtensions, "shuffle", testSeasonPatterns, eps, old, now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return s
+	}
+
+	first := build(testEpisodePatterns, nil)
+	second := build([]*regexp.Regexp{regexp.MustCompile(`(?i)volume[ ._-]?(\d+)`)}, first)
+
+	if len(first.Items) != len(second.Items) {
+		t.Fatalf("item count changed: %d -> %d", len(first.Items), len(second.Items))
+	}
+	for i := range first.Items {
+		if first.Items[i].File != second.Items[i].File {
+			t.Fatalf("shuffle order changed at %d: %s -> %s", i, itemName(first.Items[i]), itemName(second.Items[i]))
+		}
+	}
+}
+
 func TestBuildScheduleNaturalOrder(t *testing.T) {
 	dir := t.TempDir()
 	// No episode info in tags or filenames; lexicographic order would be
@@ -382,8 +457,11 @@ func TestBuildScheduleReusesCacheNoReprobe(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s2 != s1 {
+	if s2.Fingerprint != s1.Fingerprint || s2.Anchor != s1.Anchor || s2.Seed != s1.Seed {
 		t.Error("expected unchanged schedule to be reused")
+	}
+	if len(s2.Items) != len(s1.Items) || s2.Items[0].File != s1.Items[0].File {
+		t.Error("expected items to be preserved")
 	}
 	if p.calls[filepath.Join(dir, "a.mkv")] != 1 {
 		t.Errorf("expected exactly 1 probe, got %d", p.calls[filepath.Join(dir, "a.mkv")])

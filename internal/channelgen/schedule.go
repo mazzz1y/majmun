@@ -9,6 +9,7 @@ type Item struct {
 	Date           string   `json:"date,omitempty"`
 	Season         int      `json:"season,omitempty"`
 	Episode        int      `json:"episode,omitempty"`
+	EpisodeTag     string   `json:"episode_tag,omitempty"`
 	Size           int64    `json:"size"`
 	MTime          int64    `json:"mtime"`
 	Duration       float64  `json:"duration"`
@@ -58,6 +59,7 @@ func (s *Schedule) probeCache() map[probeKey]probeResult {
 			Date:           it.Date,
 			Season:         it.Season,
 			Episode:        it.Episode,
+			EpisodeTag:     it.EpisodeTag,
 			VideoCodec:     it.VideoCodec,
 			Width:          it.Width,
 			Height:         it.Height,

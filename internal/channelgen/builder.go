@@ -21,7 +21,7 @@ func buildSchedule(ctx context.Context, p prober, id string, sources, extensions
 
 	fp := fingerprint(files, order)
 	if old != nil && old.Fingerprint == fp {
-		return old, nil
+		return rederive(old, sources, order, seasonPatterns, episodePatterns), nil
 	}
 
 	var cache map[probeKey]probeResult
@@ -45,18 +45,7 @@ func buildSchedule(ctx context.Context, p prober, id string, sources, extensions
 		if res.Duration <= 0 {
 			continue
 		}
-		season, episode := res.Season, res.Episode
-		if episode == 0 {
-			season, episode = parseEpisode(res.EpisodeTag, episodePatterns)
-		}
-		if episode == 0 {
-			// Tag carries no episode; fall back to the filename.
-			season, episode = parseEpisode(titleFromPath(f.path), episodePatterns)
-		}
-		if season == 0 {
-			// Neither tag nor filename carry a season; fall back to the season folder.
-			season = seasonFromPath(f.path, sources, seasonPatterns)
-		}
+		season, episode := deriveEpisode(f.path, res.EpisodeTag, res.Season, res.Episode, sources, seasonPatterns, episodePatterns)
 		items = append(items, Item{
 			File:           f.path,
 			Title:          res.Title,
@@ -66,6 +55,7 @@ func buildSchedule(ctx context.Context, p prober, id string, sources, extensions
 			Date:           res.Date,
 			Season:         season,
 			Episode:        episode,
+			EpisodeTag:     res.EpisodeTag,
 			Size:           f.size,
 			MTime:          f.mtime,
 			Duration:       res.Duration,
@@ -87,21 +77,10 @@ func buildSchedule(ctx context.Context, p prober, id string, sources, extensions
 	if old != nil {
 		seed = old.Seed
 	}
-	switch order {
-	case "shuffle":
-		if old == nil || old.Seed == 0 {
-			seed = now.UnixNano()
-		}
-		shuffle(items, seed)
-	case "interleave":
-		items = interleave(items, sources, seasonPatterns)
-	case "spread":
-		items = spread(items, sources, seasonPatterns)
-	default:
-		sort.Slice(items, func(i, j int) bool {
-			return itemLess(items[i], items[j])
-		})
+	if order == "shuffle" && seed == 0 {
+		seed = now.UnixNano()
 	}
+	items = orderItems(items, order, sources, seasonPatterns, seed)
 
 	anchor := now.Unix()
 	if old != nil && old.Anchor != 0 {
@@ -115,6 +94,58 @@ func buildSchedule(ctx context.Context, p prober, id string, sources, extensions
 		Anchor:      anchor,
 		Items:       items,
 	}, nil
+}
+
+// rederive recomputes season/episode against the current patterns and re-applies the ordering,
+// keeping anchor and seed intact. Taken when the file set and order are unchanged but the
+// patterns may have moved, so no re-probe or reseed is needed.
+func rederive(old *Schedule, sources []string, order string, seasonPatterns, episodePatterns []*regexp.Regexp) *Schedule {
+	items := make([]Item, len(old.Items))
+	copy(items, old.Items)
+	for i := range items {
+		items[i].Season, items[i].Episode = deriveEpisode(items[i].File, items[i].EpisodeTag, 0, 0, sources, seasonPatterns, episodePatterns)
+	}
+	// Items are already shuffled; re-shuffling with the same seed would permute them again.
+	if order != "shuffle" {
+		items = orderItems(items, order, sources, seasonPatterns, 0)
+	}
+	return &Schedule{
+		Channel:     old.Channel,
+		Seed:        old.Seed,
+		Fingerprint: old.Fingerprint,
+		Anchor:      old.Anchor,
+		Items:       items,
+	}
+}
+
+func deriveEpisode(file, episodeTag string, probeSeason, probeEpisode int, sources []string, seasonPatterns, episodePatterns []*regexp.Regexp) (season, episode int) {
+	season, episode = probeSeason, probeEpisode
+	if episode == 0 {
+		season, episode = parseEpisode(episodeTag, episodePatterns)
+	}
+	if episode == 0 {
+		season, episode = parseEpisode(titleFromPath(file), episodePatterns)
+	}
+	if season == 0 {
+		season = seasonFromPath(file, sources, seasonPatterns)
+	}
+	return season, episode
+}
+
+func orderItems(items []Item, order string, sources []string, seasonPatterns []*regexp.Regexp, seed int64) []Item {
+	switch order {
+	case "shuffle":
+		shuffle(items, seed)
+	case "interleave":
+		items = interleave(items, sources, seasonPatterns)
+	case "spread":
+		items = spread(items, sources, seasonPatterns)
+	default:
+		sort.Slice(items, func(i, j int) bool {
+			return itemLess(items[i], items[j])
+		})
+	}
+	return items
 }
 
 // itemLess orders the schedule by the composite key (directory, season, episode,
