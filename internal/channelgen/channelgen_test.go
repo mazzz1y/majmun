@@ -28,7 +28,7 @@ var testEpisodePatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)\bseason[ ._-]?(\d{1,4})\b.*?\bep(?:isode)?[ ._-]?(\d{1,4})\b`),
 	regexp.MustCompile(`(?i)\bep(?:isode)?[ ._-]?(\d{1,4})\b`),
 	regexp.MustCompile(`(?i)\be[ ._-]?(\d{1,4})\b`),
-	regexp.MustCompile(`^\s*(\d{1,4})\b`),
+	regexp.MustCompile(`^\s*(\d{1,4})\.`),
 }
 
 type fakeProber struct {

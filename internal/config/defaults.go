@@ -130,7 +130,7 @@ func DefaultConfig() *Config {
 				`(?i)\bseason[ ._-]?(\d{1,4})\b.*?\bep(?:isode)?[ ._-]?(\d{1,4})\b`, // Season 1 Episode 5
 				`(?i)\bep(?:isode)?[ ._-]?(\d{1,4})\b`,                              // ep05
 				`(?i)\be[ ._-]?(\d{1,4})\b`,                                         // E05
-				`^\s*(\d{1,4})\b`,                                                   // 20. Title / 01 Title
+				`^\s*(\d{1,4})\.`,                                                   // 20. Title (dot required)
 			}...),
 			RefreshInterval: durationPtr(30 * time.Minute),
 			EPGDuration:     common.Duration(7 * 24 * time.Hour),

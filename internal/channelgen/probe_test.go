@@ -195,7 +195,9 @@ func TestParseEpisodePatterns(t *testing.T) {
 		{"Show E12", 0, 12},
 		{"Show e.3", 0, 3},
 		{"20. Title", 0, 20},
-		{"01 Title", 0, 1},
+		{"1.Title", 0, 1},
+		{"01 Title", 0, 0},
+		{"100 Years", 0, 0},
 		{"", 0, 0},
 		{"Plain Movie Title", 0, 0},
 		{"Show 1280x720 x264", 0, 0}, // resolution/codec must not match
