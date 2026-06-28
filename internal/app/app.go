@@ -226,7 +226,7 @@ func (m *Manager) channelGenerator(parentPlaylist string, channelConf config.Cha
 		Name:                channelConf.Name,
 		Sources:             channelConf.Sources,
 		Extensions:          po.Extensions,
-		Order:               po.Order,
+		Order:               channelgen.Order(po.Order),
 		SeasonPatterns:      po.SeasonPatterns.ToArray(),
 		EpisodePatterns:     po.EpisodePatterns.ToArray(),
 		Refresh:             po.ResolvedRefreshInterval(),
@@ -237,6 +237,15 @@ func (m *Manager) channelGenerator(parentPlaylist string, channelConf config.Cha
 		TitleTemplate:       templateOrNil(po.Metadata.Title),
 		DescriptionTemplate: templateOrNil(po.Metadata.Description),
 		CategoryTemplate:    templateOrNil(po.Metadata.Category),
+		Filler: channelgen.FillerConfig{
+			Sources:          po.Filler.Sources,
+			EveryCount:       po.Filler.EveryCount,
+			Every:            time.Duration(po.Filler.Every),
+			MaxDuration:      time.Duration(po.Filler.MaxDuration),
+			Order:            channelgen.Order(po.Filler.Order),
+			TitleTemplate:    templateOrNil(po.Filler.Metadata.Title),
+			CategoryTemplate: templateOrNil(po.Filler.Metadata.Category),
+		},
 	})
 	m.channelGens[key] = gen
 	return gen

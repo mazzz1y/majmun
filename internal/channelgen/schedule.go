@@ -10,6 +10,7 @@ type Item struct {
 	Season         int      `json:"season,omitempty"`
 	Episode        int      `json:"episode,omitempty"`
 	EpisodeTag     string   `json:"episode_tag,omitempty"`
+	IsFiller       bool     `json:"is_filler,omitempty"`
 	Size           int64    `json:"size"`
 	MTime          int64    `json:"mtime"`
 	Duration       float64  `json:"duration"`
@@ -33,6 +34,13 @@ type Schedule struct {
 	Fingerprint string `json:"fingerprint"`
 	Anchor      int64  `json:"anchor"`
 	Items       []Item `json:"items"`
+	// FillerSeed shuffles the filler pool independently of content order, so filler.order: shuffle
+	// is randomized even when content is not shuffled. Sticky across rebuilds, like Seed, to keep
+	// the pool order (and thus the FillerStart cursor) stable.
+	FillerSeed int64 `json:"filler_seed,omitempty"`
+	// FillerStart is the filler-pool index the next rebuild begins from, so a pool larger than one
+	// loop's breaks rotates through all clips over successive rebuilds.
+	FillerStart int `json:"filler_start,omitempty"`
 }
 
 func (s *Schedule) total() float64 {

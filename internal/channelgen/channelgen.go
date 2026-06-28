@@ -13,12 +13,21 @@ import (
 	"time"
 )
 
+type Order string
+
+const (
+	OrderSequential Order = "sequential"
+	OrderShuffle    Order = "shuffle"
+	OrderInterleave Order = "interleave"
+	OrderSpread     Order = "spread"
+)
+
 type Config struct {
 	Playlist        string
 	Name            string
 	Sources         []string
 	Extensions      []string
-	Order           string
+	Order           Order
 	SeasonPatterns  []*regexp.Regexp
 	EpisodePatterns []*regexp.Regexp
 	Refresh         time.Duration
@@ -30,6 +39,18 @@ type Config struct {
 	TitleTemplate       *template.Template
 	DescriptionTemplate *template.Template
 	CategoryTemplate    *template.Template
+
+	Filler FillerConfig
+}
+
+type FillerConfig struct {
+	Sources          []string
+	EveryCount       int
+	Every            time.Duration
+	MaxDuration      time.Duration
+	Order            Order
+	TitleTemplate    *template.Template
+	CategoryTemplate *template.Template
 }
 
 type Channel struct {
@@ -40,7 +61,7 @@ type Channel struct {
 	name            string
 	sources         []string
 	extensions      []string
-	order           string
+	order           Order
 	seasonPatterns  []*regexp.Regexp
 	episodePatterns []*regexp.Regexp
 	refresh         time.Duration
@@ -48,6 +69,7 @@ type Channel struct {
 	swapHour        int
 	swapMin         int
 	stateDir        string
+	filler          FillerConfig
 	prober          prober
 
 	titleTmpl       *template.Template
@@ -80,6 +102,7 @@ func NewChannel(cfg Config) *Channel {
 		swapHour:        cfg.SwapHour,
 		swapMin:         cfg.SwapMin,
 		stateDir:        cfg.StateDir,
+		filler:          cfg.Filler,
 		prober:          ffprobeProber{},
 		titleTmpl:       cfg.TitleTemplate,
 		descriptionTmpl: cfg.DescriptionTemplate,
@@ -205,7 +228,7 @@ func (c *Channel) build(ctx context.Context, now time.Time) {
 	logging.Info(ctx, "building channel schedule", "sources", c.sources)
 	started := time.Now()
 
-	s, err := buildSchedule(ctx, c.prober, c.id, c.sources, c.extensions, c.order, c.seasonPatterns, c.episodePatterns, old, now)
+	s, err := buildSchedule(ctx, c.prober, c.id, c.sources, c.extensions, c.order, c.seasonPatterns, c.episodePatterns, c.filler, old, now)
 	if err != nil {
 		logging.Error(ctx, err, "failed to build channel schedule")
 		c.mu.Lock()

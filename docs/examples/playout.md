@@ -78,6 +78,34 @@ playlists:
               value: "6000" # only this channel encodes at a higher bitrate
 ```
 
+## Filler Between Episodes
+
+A break of up to 2 minutes of clips from `/media/ads` after every 3 episodes:
+
+```yaml
+playout:
+  filler:
+    sources: [/media/ads]
+    every_count: 3
+    max_duration: 2m
+
+playlists:
+  - name: local
+    channels:
+      - name: series
+        sources: [/media/series]
+```
+
+Or space breaks by airtime with `every` instead of `every_count`:
+
+```yaml
+playout:
+  filler:
+    sources: [/media/ads]
+    every: 45m
+    max_duration: 2m
+```
+
 ## Software Transcode
 
 A CPU (libx264) transcode with normalization, per-file seek, and a startup burst — a works-everywhere starting point.

@@ -128,8 +128,33 @@ func (c *Channel) Programmes(ctx context.Context, now time.Time) ([]Programme, e
 	var programmes []Programme
 	cursor := time.Unix(cycleStart, 0)
 	for cursor.Before(end) {
-		for _, it := range s.Items {
+		for i := 0; i < len(s.Items); i++ {
+			it := s.Items[i]
 			slotStart := cursor
+
+			// Collapse a run of consecutive filler items into a single break programme.
+			if it.IsFiller {
+				j := i
+				for j < len(s.Items) && s.Items[j].IsFiller {
+					cursor = cursor.Add(time.Duration(s.Items[j].Duration * float64(time.Second)))
+					j++
+				}
+				i = j - 1
+				if !cursor.Before(start) {
+					vars := c.metadataVars(it)
+					programmes = append(programmes, Programme{
+						Title:    renderField(ctx, c.filler.TitleTemplate, vars, it.Title, "filler title"),
+						Category: renderField(ctx, c.filler.CategoryTemplate, vars, it.Category, "filler category"),
+						Start:    slotStart,
+						Stop:     cursor,
+					})
+				}
+				if !cursor.Before(end) {
+					break
+				}
+				continue
+			}
+
 			slotStop := cursor.Add(time.Duration(it.Duration * float64(time.Second)))
 			cursor = slotStop
 			if slotStop.Before(start) {

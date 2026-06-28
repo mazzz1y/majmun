@@ -13,15 +13,19 @@ import (
 	"time"
 )
 
-func buildSchedule(ctx context.Context, p prober, id string, sources, extensions []string, order string, seasonPatterns, episodePatterns []*regexp.Regexp, old *Schedule, now time.Time) (*Schedule, error) {
+func buildSchedule(ctx context.Context, p prober, id string, sources, extensions []string, order Order, seasonPatterns, episodePatterns []*regexp.Regexp, filler FillerConfig, old *Schedule, now time.Time) (*Schedule, error) {
 	files, err := scanSources(sources, extensions)
 	if err != nil {
 		return nil, err
 	}
+	fillerFiles, err := scanSources(filler.Sources, extensions)
+	if err != nil {
+		return nil, err
+	}
 
-	fp := fingerprint(files, order)
+	fp := fingerprint(files, fillerFiles, order, seasonPatterns, episodePatterns, filler)
 	if old != nil && old.Fingerprint == fp {
-		return rederive(old, sources, order, seasonPatterns, episodePatterns), nil
+		return old, nil
 	}
 
 	var cache map[probeKey]probeResult
@@ -33,89 +37,165 @@ func buildSchedule(ctx context.Context, p prober, id string, sources, extensions
 
 	items := make([]Item, 0, len(files))
 	for _, f := range files {
-		cacheKey := probeKey{file: f.path, size: f.size, mtime: f.mtime}
-		res, ok := cache[cacheKey]
+		res, ok := probeFile(ctx, p, cache, f)
 		if !ok {
-			res, err = p.Probe(ctx, f.path)
-			if err != nil {
-				logging.Error(ctx, err, "failed to probe file duration, excluding", "file", f.path)
-				continue
-			}
-		}
-		if res.Duration <= 0 {
 			continue
 		}
 		season, episode := deriveEpisode(f.path, res.EpisodeTag, res.Season, res.Episode, sources, seasonPatterns, episodePatterns)
-		items = append(items, Item{
-			File:           f.path,
-			Title:          res.Title,
-			Show:           res.Show,
-			Description:    res.Description,
-			Category:       res.Category,
-			Date:           res.Date,
-			Season:         season,
-			Episode:        episode,
-			EpisodeTag:     res.EpisodeTag,
-			Size:           f.size,
-			MTime:          f.mtime,
-			Duration:       res.Duration,
-			VideoCodec:     res.VideoCodec,
-			Width:          res.Width,
-			Height:         res.Height,
-			AspectWidth:    res.AspectWidth,
-			PixelFormat:    res.PixelFormat,
-			FrameRate:      res.FrameRate,
-			FieldOrder:     res.FieldOrder,
-			AudioCodec:     res.AudioCodec,
-			AudioChannels:  res.AudioChannels,
-			SampleRate:     res.SampleRate,
-			AudioLanguages: res.AudioLanguages,
-		})
+		it := newItem(f, res)
+		it.Season, it.Episode = season, episode
+		items = append(items, it)
+	}
+
+	fillerPool := make([]Item, 0, len(fillerFiles))
+	for _, f := range fillerFiles {
+		res, ok := probeFile(ctx, p, cache, f)
+		if !ok {
+			continue
+		}
+		it := newItem(f, res)
+		it.IsFiller = true
+		fillerPool = append(fillerPool, it)
 	}
 
 	seed := int64(0)
 	if old != nil {
 		seed = old.Seed
 	}
-	if order == "shuffle" && seed == 0 {
+	if order == OrderShuffle && seed == 0 {
 		seed = now.UnixNano()
 	}
+
+	fillerSeed := int64(0)
+	if old != nil {
+		fillerSeed = old.FillerSeed
+	}
+	if filler.Order == OrderShuffle && fillerSeed == 0 {
+		fillerSeed = now.UnixNano() + 1
+	}
+
 	items = orderItems(items, order, sources, seasonPatterns, seed)
+	fillerPool = orderItems(fillerPool, filler.Order, filler.Sources, nil, fillerSeed)
 
 	anchor := now.Unix()
 	if old != nil && old.Anchor != 0 {
 		anchor = old.Anchor
 	}
 
+	fillerStart := 0
+	if old != nil && len(fillerPool) > 0 {
+		fillerStart = old.FillerStart % len(fillerPool)
+	}
+	withFiller, nextFillerStart := injectFiller(items, fillerPool, fillerStart, filler.EveryCount, filler.Every, filler.MaxDuration)
+
 	return &Schedule{
 		Channel:     id,
 		Seed:        seed,
 		Fingerprint: fp,
 		Anchor:      anchor,
-		Items:       items,
+		Items:       withFiller,
+		FillerSeed:  fillerSeed,
+		FillerStart: nextFillerStart,
 	}, nil
 }
 
-// rederive recomputes season/episode against the current patterns and re-applies the ordering,
-// keeping anchor and seed intact. Taken when the file set and order are unchanged but the
-// patterns may have moved, so no re-probe or reseed is needed.
-func rederive(old *Schedule, sources []string, order string, seasonPatterns, episodePatterns []*regexp.Regexp) *Schedule {
-	items := make([]Item, len(old.Items))
-	copy(items, old.Items)
-	for i := range items {
-		items[i].Season, items[i].Episode = deriveEpisode(items[i].File, items[i].EpisodeTag, 0, 0, sources, seasonPatterns, episodePatterns)
+// probeFile reads f from the cache or probes it, reporting ok=false (and logging) when it
+// can't be probed or has no duration, so the caller skips it.
+func probeFile(ctx context.Context, p prober, cache map[probeKey]probeResult, f scannedFile) (probeResult, bool) {
+	cacheKey := probeKey{file: f.path, size: f.size, mtime: f.mtime}
+	res, ok := cache[cacheKey]
+	if !ok {
+		var err error
+		res, err = p.Probe(ctx, f.path)
+		if err != nil {
+			logging.Error(ctx, err, "failed to probe file duration, excluding", "file", f.path)
+			return probeResult{}, false
+		}
 	}
-	// Items are already shuffled; re-shuffling with the same seed would permute them again.
-	if order != "shuffle" {
-		items = orderItems(items, order, sources, seasonPatterns, 0)
+	if res.Duration <= 0 {
+		return probeResult{}, false
 	}
-	return &Schedule{
-		Channel:     old.Channel,
-		Seed:        old.Seed,
-		Fingerprint: old.Fingerprint,
-		Anchor:      old.Anchor,
-		Items:       items,
+	return res, true
+}
+
+func newItem(f scannedFile, res probeResult) Item {
+	return Item{
+		File:           f.path,
+		Title:          res.Title,
+		Show:           res.Show,
+		Description:    res.Description,
+		Category:       res.Category,
+		Date:           res.Date,
+		EpisodeTag:     res.EpisodeTag,
+		Size:           f.size,
+		MTime:          f.mtime,
+		Duration:       res.Duration,
+		VideoCodec:     res.VideoCodec,
+		Width:          res.Width,
+		Height:         res.Height,
+		AspectWidth:    res.AspectWidth,
+		PixelFormat:    res.PixelFormat,
+		FrameRate:      res.FrameRate,
+		FieldOrder:     res.FieldOrder,
+		AudioCodec:     res.AudioCodec,
+		AudioChannels:  res.AudioChannels,
+		SampleRate:     res.SampleRate,
+		AudioLanguages: res.AudioLanguages,
 	}
+}
+
+// defaultFillerInterval spaces breaks when filler is enabled but no cadence is configured.
+const defaultFillerInterval = time.Hour
+
+// injectFiller inserts filler breaks between content, on a count (everyCount) or content-playtime
+// (every) cadence, defaulting to defaultFillerInterval when neither is set. No break follows the
+// final item. Clips are drawn from pool starting at start (cycling), and the pool index to
+// resume from next time is returned so successive rebuilds rotate through the whole pool.
+func injectFiller(content, pool []Item, start, everyCount int, every, maxDuration time.Duration) ([]Item, int) {
+	if len(pool) == 0 {
+		return content, start
+	}
+	if everyCount <= 0 && every <= 0 {
+		every = defaultFillerInterval
+	}
+
+	out := make([]Item, 0, len(content)+len(content)/max(everyCount, 1))
+	next := start
+	var sinceBreak time.Duration
+	for i, it := range content {
+		out = append(out, it)
+		sinceBreak += time.Duration(it.Duration * float64(time.Second))
+
+		var breakNow bool
+		if everyCount > 0 {
+			breakNow = (i+1)%everyCount == 0
+		} else {
+			breakNow = sinceBreak >= every
+		}
+		if i == len(content)-1 || !breakNow {
+			continue
+		}
+		out, next = fillBreak(out, pool, next, maxDuration)
+		sinceBreak = 0
+	}
+	return out, next % len(pool)
+}
+
+// fillBreak appends clips from pool (cycling from next) up to maxDuration; the first clip is
+// always placed, so a zero maxDuration yields one clip. It returns the advanced pool index.
+func fillBreak(out, pool []Item, next int, maxDuration time.Duration) ([]Item, int) {
+	maxSec := maxDuration.Seconds()
+	var breakSec float64
+	for {
+		clip := pool[next%len(pool)]
+		if breakSec > 0 && (maxSec <= 0 || breakSec+clip.Duration > maxSec) {
+			break
+		}
+		out = append(out, clip)
+		next++
+		breakSec += clip.Duration
+	}
+	return out, next
 }
 
 func deriveEpisode(file, episodeTag string, probeSeason, probeEpisode int, sources []string, seasonPatterns, episodePatterns []*regexp.Regexp) (season, episode int) {
@@ -132,13 +212,13 @@ func deriveEpisode(file, episodeTag string, probeSeason, probeEpisode int, sourc
 	return season, episode
 }
 
-func orderItems(items []Item, order string, sources []string, seasonPatterns []*regexp.Regexp, seed int64) []Item {
+func orderItems(items []Item, order Order, sources []string, seasonPatterns []*regexp.Regexp, seed int64) []Item {
 	switch order {
-	case "shuffle":
+	case OrderShuffle:
 		shuffle(items, seed)
-	case "interleave":
+	case OrderInterleave:
 		items = interleave(items, sources, seasonPatterns)
-	case "spread":
+	case OrderSpread:
 		items = spread(items, sources, seasonPatterns)
 	default:
 		sort.Slice(items, func(i, j int) bool {

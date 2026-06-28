@@ -140,6 +140,12 @@ func DefaultConfig() *Config {
 				Description: common.MustTemplate("{{ .Probe.Description }}"),
 				Category:    common.MustTemplate("{{ .Probe.Category }}"),
 			},
+			Filler: PlayoutFiller{
+				Order: "shuffle",
+				Metadata: PlayoutMetadata{
+					Title: common.MustTemplate("Advertising"),
+				},
+			},
 		},
 	}
 }

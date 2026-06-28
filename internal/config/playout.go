@@ -12,7 +12,16 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-var validPlayoutOrders = []string{"sequential", "shuffle", "interleave", "spread"}
+const (
+	orderSequential = "sequential"
+	orderShuffle    = "shuffle"
+	orderInterleave = "interleave"
+	orderSpread     = "spread"
+)
+
+var validPlayoutOrders = []string{orderSequential, orderShuffle, orderInterleave, orderSpread}
+
+var validFillerOrders = []string{orderSequential, orderShuffle}
 
 type Playout struct {
 	Command      common.StringOrArr `yaml:"command,omitempty"`
@@ -31,12 +40,22 @@ type Playout struct {
 	EPGDuration     common.Duration    `yaml:"epg_duration,omitempty"`
 	ScheduleSwapAt  string             `yaml:"schedule_swap_at,omitempty"`
 	Metadata        PlayoutMetadata    `yaml:"metadata,omitempty"`
+	Filler          PlayoutFiller      `yaml:"filler,omitempty"`
 }
 
 type PlayoutMetadata struct {
 	Title       *common.Template `yaml:"title,omitempty"`
 	Description *common.Template `yaml:"description,omitempty"`
 	Category    *common.Template `yaml:"category,omitempty"`
+}
+
+type PlayoutFiller struct {
+	Sources     common.StringOrArr `yaml:"sources,omitempty"`
+	EveryCount  int                `yaml:"every_count,omitempty"`
+	Every       common.Duration    `yaml:"every,omitempty"`
+	MaxDuration common.Duration    `yaml:"max_duration,omitempty"`
+	Order       string             `yaml:"order,omitempty"`
+	Metadata    PlayoutMetadata    `yaml:"metadata,omitempty"`
 }
 
 func (p *Playout) UnmarshalYAML(value *yaml.Node) error {
@@ -77,6 +96,28 @@ func (p *Playout) Validate() error {
 		if _, _, err := ParsePlayoutSwapAt(p.ScheduleSwapAt); err != nil {
 			return fmt.Errorf("schedule_swap_at: %w", err)
 		}
+	}
+	if err := p.Filler.Validate(); err != nil {
+		return fmt.Errorf("filler: %w", err)
+	}
+	return nil
+}
+
+func (a *PlayoutFiller) Validate() error {
+	if a.Order != "" && !slices.Contains(validFillerOrders, a.Order) {
+		return fmt.Errorf("order must be one of %s", strings.Join(validFillerOrders, ", "))
+	}
+	if len(a.Sources) == 0 {
+		if a.EveryCount != 0 || a.Every != 0 || a.MaxDuration != 0 {
+			return fmt.Errorf("sources is required when filler is configured")
+		}
+		return nil
+	}
+	if a.EveryCount != 0 && a.Every != 0 {
+		return fmt.Errorf("set only one of every_count or every")
+	}
+	if a.EveryCount < 0 {
+		return fmt.Errorf("every_count must be greater than 0")
 	}
 	return nil
 }

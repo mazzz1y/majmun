@@ -3,9 +3,12 @@ package channelgen
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
+	"hash"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -75,9 +78,24 @@ func scanSources(sources []string, extensions []string) ([]scannedFile, error) {
 	return files, nil
 }
 
-func fingerprint(files []scannedFile, order string) string {
+func fingerprint(files, fillerFiles []scannedFile, order Order, seasonPatterns, episodePatterns []*regexp.Regexp, filler FillerConfig) string {
 	h := sha256.New()
-	_, _ = h.Write([]byte("order:" + order + "\x00"))
+	_, _ = h.Write([]byte("order:" + string(order) + "\x00"))
+	writePatterns(h, "season", seasonPatterns)
+	writePatterns(h, "episode", episodePatterns)
+	writeFiles(h, files)
+	_, _ = fmt.Fprintf(h, "filler:%d:%d:%d:%s\x00", filler.EveryCount, filler.Every, filler.MaxDuration, filler.Order)
+	writeFiles(h, fillerFiles)
+	return "sha256:" + hex.EncodeToString(h.Sum(nil))
+}
+
+func writePatterns(h hash.Hash, label string, patterns []*regexp.Regexp) {
+	for _, re := range patterns {
+		_, _ = fmt.Fprintf(h, "%s:%s\x00", label, re.String())
+	}
+}
+
+func writeFiles(h hash.Hash, files []scannedFile) {
 	for _, f := range files {
 		_, _ = h.Write([]byte(f.path))
 		_, _ = h.Write([]byte{0})
@@ -86,7 +104,6 @@ func fingerprint(files []scannedFile, order string) string {
 		_, _ = h.Write([]byte(strconv.FormatInt(f.mtime, 10)))
 		_, _ = h.Write([]byte{0})
 	}
-	return "sha256:" + hex.EncodeToString(h.Sum(nil))
 }
 
 func normalizeExt(ext string) string {

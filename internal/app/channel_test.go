@@ -44,7 +44,7 @@ func newChannelProvider(t *testing.T, parentPlaylist string, conf config.Channel
 		Name:        conf.Name,
 		Sources:     conf.Sources,
 		Extensions:  po.Extensions,
-		Order:       po.Order,
+		Order:       channelgen.Order(po.Order),
 		Refresh:     po.ResolvedRefreshInterval(),
 		EPGDuration: time.Duration(po.EPGDuration),
 		SwapHour:    swapHour,

@@ -45,7 +45,11 @@ type metadataVars struct {
 }
 
 func (c *Channel) metadataVars(it Item) metadataVars {
-	rel, source := relToSource(it.File, c.sources)
+	sources := c.sources
+	if it.IsFiller {
+		sources = c.filler.Sources
+	}
+	rel, source := relToSource(it.File, sources)
 	base := filepath.Base(it.File)
 	sourceBase := ""
 	if source != "" {

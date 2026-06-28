@@ -40,6 +40,34 @@ func TestPlayoutValidateOrder(t *testing.T) {
 	}
 }
 
+func TestPlayoutValidateFiller(t *testing.T) {
+	valid := []PlayoutFiller{
+		{},
+		{Sources: common.StringOrArr{"/ads"}}, // sources alone -> default interval
+		{Sources: common.StringOrArr{"/ads"}, EveryCount: 3},                     // count mode
+		{Sources: common.StringOrArr{"/ads"}, Every: common.Duration(time.Hour)}, // time mode
+		{Sources: common.StringOrArr{"/ads"}, EveryCount: 3, Order: "sequential"},
+	}
+	for i, a := range valid {
+		if err := (&Playout{Filler: a}).Validate(); err != nil {
+			t.Errorf("filler[%d] should be valid: %v", i, err)
+		}
+	}
+
+	invalid := []PlayoutFiller{
+		{EveryCount: 3},                     // cadence without sources
+		{Every: common.Duration(time.Hour)}, // cadence without sources
+		{Sources: common.StringOrArr{"/ads"}, EveryCount: 3, Every: common.Duration(time.Hour)}, // both modes
+		{Sources: common.StringOrArr{"/ads"}, EveryCount: -1},                                   // negative count
+		{Sources: common.StringOrArr{"/ads"}, EveryCount: 3, Order: "interleave"},               // unsupported order
+	}
+	for i, a := range invalid {
+		if err := (&Playout{Filler: a}).Validate(); err == nil {
+			t.Errorf("filler[%d] should be invalid", i)
+		}
+	}
+}
+
 func TestParsePlayoutSwapAt(t *testing.T) {
 	valid := map[string][2]int{
 		"00:00": {0, 0},

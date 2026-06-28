@@ -140,6 +140,11 @@ func TestMergePlayoutsCascade(t *testing.T) {
 		RefreshInterval: durPtr(5 * time.Minute),
 		SeasonPatterns:  common.MustRegexpArr(`^global$`),
 		EpisodePatterns: common.MustRegexpArr(`^globalep$`),
+		Filler: config.PlayoutFiller{
+			Sources: common.StringOrArr{"/ads"},
+			Order:   "shuffle",
+			Every:   common.Duration(time.Hour),
+		},
 	}
 	playlist := config.Playout{
 		TemplateVars:   []common.NameValue{{Name: "segment_duration", Value: "4"}},
@@ -149,6 +154,7 @@ func TestMergePlayoutsCascade(t *testing.T) {
 		Command:        common.StringOrArr{"ffmpeg", "channel"},
 		TemplateVars:   []common.NameValue{{Name: "video_bitrate_kbps", Value: "6000"}},
 		SeasonPatterns: common.MustRegexpArr(`^channel$`),
+		Filler:         config.PlayoutFiller{EveryCount: 3},
 	}
 
 	result := mergePlayouts(global, playlist, channel)
@@ -174,6 +180,19 @@ func TestMergePlayoutsCascade(t *testing.T) {
 
 	if len(result.EpisodePatterns) != 1 || result.EpisodePatterns[0].String() != `^globalep$` {
 		t.Errorf("expected global episode_patterns to be inherited, got %v", result.EpisodePatterns)
+	}
+
+	if !reflect.DeepEqual([]string(result.Filler.Sources), []string{"/ads"}) {
+		t.Errorf("expected global filler sources to be inherited, got %v", result.Filler.Sources)
+	}
+	if result.Filler.Order != "shuffle" {
+		t.Errorf("expected global filler order to be inherited, got %q", result.Filler.Order)
+	}
+	if result.Filler.EveryCount != 3 {
+		t.Errorf("expected channel filler every_count to override, got %d", result.Filler.EveryCount)
+	}
+	if time.Duration(result.Filler.Every) != time.Hour {
+		t.Errorf("expected global filler every to be inherited, got %v", time.Duration(result.Filler.Every))
 	}
 
 	inherited := mergePlayouts(global, playlist)

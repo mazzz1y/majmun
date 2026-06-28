@@ -74,6 +74,13 @@ playout:
     title: '{{ .Probe.Title | default .File.Name }}'
     description: '{{ .Probe.Description }}'
     category: '{{ .Probe.Category }}'
+  filler:
+    sources: []
+    every: 1h
+    max_duration: 0s
+    order: shuffle
+    metadata:
+      title: Advertising
 
 playlists:
   - name: local
@@ -110,6 +117,7 @@ playlists:
 | `epg_duration`     | [`duration`](./shared/duration.md) | No       | How far into the future the EPG is generated. Default `1w`.                                                                                                                               |
 | `schedule_swap_at` | `string` (`HH:MM`)                 | No       | Local time of day after which a changed file set is adopted by the live stream — deferred further to the end of the programme then playing, so a show is never cut off mid-way. Default `04:00`. |
 | `metadata`         | [`Metadata`](#metadata-templates)  | No       | Go templates building the EPG `title`, `description`, and `category` per file. Defaults reproduce the [container-tag behavior](./channels.md#epg-metadata).                                       |
+| `filler`           | [`Filler`](#filler)                | No       | Inject filler clips between content. Off unless `sources` is set. See [Filler](#filler).                                                                                                         |
 
 !!! info "Season/episode detection"
 
@@ -161,6 +169,25 @@ playout:
   metadata:
     title: '{{ .File.Rel | splitList "/" | first }} — {{ .Probe.Title | default .File.Name }}'
 ```
+
+### Filler
+
+`filler` inserts breaks of clips from `sources` between content. Clips play through the same `command` as content. Set
+`sources` to enable filler; everything else is optional.
+
+| Field          | Type                               | Required | Description                                                                                                      |
+| -------------- | ---------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------- |
+| `sources`      | `[]string`                         | **Yes**  | Directories or files holding filler clips. Scanned with the same `extensions` as content.                       |
+| `every`        | [`duration`](./shared/duration.md) | No       | Break after roughly this much content playtime (rounded up to a whole item). Default `1h`; excludes `every_count`. |
+| `every_count`  | `int`                              | No       | Break after every this many content items. Excludes `every`.                                                    |
+| `max_duration` | [`duration`](./shared/duration.md) | No       | Cap on filler time per break. `0` (default) plays one clip per break.                                           |
+| `order`        | `string`                           | No       | Order clips are drawn in: `shuffle` (default) or `sequential`.                                                  |
+| `metadata`     | [`Metadata`](#metadata-templates)  | No       | EPG `title` (default `Advertising`) and `category` for breaks.                                                  |
+
+In the EPG, each break shows as a single programme (e.g. `Advertising 18:50–18:53`) with no season/episode/description.
+
+If `sources` holds more clips than the breaks in one loop can play, the pool rotates: each schedule rebuild (when files
+or config change) resumes from where the last one stopped, so every clip eventually airs.
 
 ### Reserved Template Variables
 

@@ -167,6 +167,27 @@ func mergePlayouts(playouts ...config.Playout) config.Playout {
 		if p.Metadata.Category != nil {
 			result.Metadata.Category = p.Metadata.Category
 		}
+		if len(p.Filler.Sources) > 0 {
+			result.Filler.Sources = p.Filler.Sources
+		}
+		if p.Filler.EveryCount != 0 {
+			result.Filler.EveryCount = p.Filler.EveryCount
+		}
+		if p.Filler.Every != 0 {
+			result.Filler.Every = p.Filler.Every
+		}
+		if p.Filler.MaxDuration != 0 {
+			result.Filler.MaxDuration = p.Filler.MaxDuration
+		}
+		if p.Filler.Order != "" {
+			result.Filler.Order = p.Filler.Order
+		}
+		if p.Filler.Metadata.Title != nil {
+			result.Filler.Metadata.Title = p.Filler.Metadata.Title
+		}
+		if p.Filler.Metadata.Category != nil {
+			result.Filler.Metadata.Category = p.Filler.Metadata.Category
+		}
 	}
 	return result
 }

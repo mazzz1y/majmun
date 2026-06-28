@@ -87,8 +87,8 @@ func newTestChannel(t *testing.T, id string, sources []string, p prober) (*Chann
 	return c, stateDir
 }
 
-func buildTestSchedule(p prober, dir string, order string, old *Schedule, now time.Time) (*Schedule, error) {
-	return buildSchedule(context.Background(), p, "c", []string{dir}, testExtensions, order, testSeasonPatterns, testEpisodePatterns, old, now)
+func buildTestSchedule(p prober, dir string, order Order, old *Schedule, now time.Time) (*Schedule, error) {
+	return buildSchedule(context.Background(), p, "c", []string{dir}, testExtensions, order, testSeasonPatterns, testEpisodePatterns, FillerConfig{}, old, now)
 }
 
 func itemName(it Item) string {
@@ -143,7 +143,7 @@ func TestFingerprintChangesWithFiles(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "b.mkv"))
 	f2, _ := scanSources([]string{dir}, testExtensions)
 
-	if fingerprint(f1, "sequential") == fingerprint(f2, "sequential") {
+	if fingerprint(f1, nil, "sequential", nil, nil, FillerConfig{}) == fingerprint(f2, nil, "sequential", nil, nil, FillerConfig{}) {
 		t.Error("fingerprint should change when files change")
 	}
 }
@@ -153,8 +153,23 @@ func TestFingerprintChangesWithOrder(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "a.mkv"))
 	files, _ := scanSources([]string{dir}, testExtensions)
 
-	if fingerprint(files, "sequential") == fingerprint(files, "shuffle") {
+	if fingerprint(files, nil, "sequential", nil, nil, FillerConfig{}) == fingerprint(files, nil, "shuffle", nil, nil, FillerConfig{}) {
 		t.Error("fingerprint should change when order changes")
+	}
+}
+
+func TestFingerprintChangesWithPatterns(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "a.mkv"))
+	files, _ := scanSources([]string{dir}, testExtensions)
+
+	p1 := []*regexp.Regexp{regexp.MustCompile(`^s(\d+)$`)}
+	p2 := []*regexp.Regexp{regexp.MustCompile(`^season (\d+)$`)}
+	if fingerprint(files, nil, "sequential", p1, nil, FillerConfig{}) == fingerprint(files, nil, "sequential", p2, nil, FillerConfig{}) {
+		t.Error("fingerprint should change when season_patterns change")
+	}
+	if fingerprint(files, nil, "sequential", nil, p1, FillerConfig{}) == fingerprint(files, nil, "sequential", nil, p2, FillerConfig{}) {
+		t.Error("fingerprint should change when episode_patterns change")
 	}
 }
 
@@ -184,7 +199,7 @@ func TestBuildScheduleSequential(t *testing.T) {
 	}
 }
 
-func TestRederiveOnPatternChange(t *testing.T) {
+func TestRebuildOnPatternChange(t *testing.T) {
 	dir := t.TempDir()
 	a := filepath.Join(dir, "a.mkv")
 	b := filepath.Join(dir, "b.mkv")
@@ -192,13 +207,14 @@ func TestRederiveOnPatternChange(t *testing.T) {
 	writeFile(t, b)
 
 	p := newFakeProber()
-	// Episode lives only in the container tag, so re-deriving must reach it via EpisodeTag.
+	// Episode lives only in the container tag; the rebuild re-derives it from the cached
+	// EpisodeTag without re-probing.
 	p.results[a] = probeResult{Duration: 60, EpisodeTag: "Volume 2"}
 	p.results[b] = probeResult{Duration: 60, EpisodeTag: "Volume 1"}
 
 	now := time.Unix(1000, 0)
 	build := func(eps []*regexp.Regexp, old *Schedule) *Schedule {
-		s, err := buildSchedule(context.Background(), p, "c", []string{dir}, testExtensions, "sequential", testSeasonPatterns, eps, old, now)
+		s, err := buildSchedule(context.Background(), p, "c", []string{dir}, testExtensions, "sequential", testSeasonPatterns, eps, FillerConfig{}, old, now)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -220,17 +236,17 @@ func TestRederiveOnPatternChange(t *testing.T) {
 		t.Fatalf("expected re-derived order b,a, got %s,%s", itemName(second.Items[0]), itemName(second.Items[1]))
 	}
 	if second.Items[0].Episode != 1 || second.Items[1].Episode != 2 {
-		t.Fatalf("expected episodes 1,2 after re-derive, got %d,%d", second.Items[0].Episode, second.Items[1].Episode)
+		t.Fatalf("expected episodes 1,2 after rebuild, got %d,%d", second.Items[0].Episode, second.Items[1].Episode)
 	}
 	if second.Anchor != first.Anchor || second.Seed != first.Seed {
-		t.Errorf("re-derive must preserve anchor/seed: anchor %d->%d, seed %d->%d", first.Anchor, second.Anchor, first.Seed, second.Seed)
+		t.Errorf("rebuild must preserve anchor/seed: anchor %d->%d, seed %d->%d", first.Anchor, second.Anchor, first.Seed, second.Seed)
 	}
 	if p.calls[a] != 1 || p.calls[b] != 1 {
 		t.Errorf("expected no re-probe, got calls a=%d b=%d", p.calls[a], p.calls[b])
 	}
 }
 
-func TestRederivePreservesShuffleOrder(t *testing.T) {
+func TestRebuildPreservesShuffleOrder(t *testing.T) {
 	dir := t.TempDir()
 	for _, f := range []string{"a.mkv", "b.mkv", "c.mkv", "d.mkv", "e.mkv"} {
 		writeFile(t, filepath.Join(dir, f))
@@ -239,7 +255,7 @@ func TestRederivePreservesShuffleOrder(t *testing.T) {
 	now := time.Unix(1000, 0)
 
 	build := func(eps []*regexp.Regexp, old *Schedule) *Schedule {
-		s, err := buildSchedule(context.Background(), p, "c", []string{dir}, testExtensions, "shuffle", testSeasonPatterns, eps, old, now)
+		s, err := buildSchedule(context.Background(), p, "c", []string{dir}, testExtensions, "shuffle", testSeasonPatterns, eps, FillerConfig{}, old, now)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -623,7 +639,7 @@ func TestInterleaveGroupsByShowAcrossSeasonSources(t *testing.T) {
 	}
 	sources := []string{filepath.Join(root, "Show A"), filepath.Join(root, "Show B")}
 
-	s, err := buildSchedule(context.Background(), p, "c", sources, testExtensions, "interleave", testSeasonPatterns, testEpisodePatterns, nil, time.Unix(1000, 0))
+	s, err := buildSchedule(context.Background(), p, "c", sources, testExtensions, "interleave", testSeasonPatterns, testEpisodePatterns, FillerConfig{}, nil, time.Unix(1000, 0))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -659,7 +675,7 @@ func TestInterleaveGroupsByShowTag(t *testing.T) {
 		p.results[path] = probeResult{Duration: 100, Show: show}
 	}
 
-	s, err := buildSchedule(context.Background(), p, "c", []string{root}, testExtensions, "interleave", testSeasonPatterns, testEpisodePatterns, nil, time.Unix(1000, 0))
+	s, err := buildSchedule(context.Background(), p, "c", []string{root}, testExtensions, "interleave", testSeasonPatterns, testEpisodePatterns, FillerConfig{}, nil, time.Unix(1000, 0))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -693,7 +709,7 @@ func TestInterleaveSeasonPatternOverride(t *testing.T) {
 	sources := []string{filepath.Join(root, "Show A"), filepath.Join(root, "Show B")}
 	seasonPatterns := []*regexp.Regexp{regexp.MustCompile(`(?i)^vol[ ._-]*\d+$`)}
 
-	s, err := buildSchedule(context.Background(), p, "c", sources, testExtensions, "interleave", seasonPatterns, testEpisodePatterns, nil, time.Unix(1000, 0))
+	s, err := buildSchedule(context.Background(), p, "c", sources, testExtensions, "interleave", seasonPatterns, testEpisodePatterns, FillerConfig{}, nil, time.Unix(1000, 0))
 	if err != nil {
 		t.Fatal(err)
 	}
