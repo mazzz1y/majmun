@@ -31,11 +31,8 @@ type PlayItem struct {
 	AudioLanguages []string
 }
 
-// ResolveCurrent returns the file to play at now without blocking on a scan or probe. It
-// returns ok=false while the schedule is still building (caller serves a placeholder) or
-// when the channel has no playable items. Missing files are skipped (offset resets to the
-// start of the next surviving file) and trigger a background rebuild while playback
-// continues.
+// ResolveCurrent returns the file to play at now without blocking on a scan or probe. ok=false
+// means the schedule is still building or has no playable items; missing files are skipped.
 func (c *Channel) ResolveCurrent(now time.Time) (PlayItem, bool) {
 	s := c.current(now)
 	if s == nil {
@@ -46,10 +43,17 @@ func (c *Channel) ResolveCurrent(now time.Time) (PlayItem, bool) {
 	if !ok {
 		return PlayItem{}, false
 	}
+	item, _, ok := c.resolveFrom(s, index, offset, boundary, now)
+	return item, ok
+}
 
+// resolveFrom builds the PlayItem at index, skipping missing files (offset resets to the start of
+// the next surviving file, marking the channel dirty). It returns the index it resolved at.
+func (c *Channel) resolveFrom(s *Schedule, index int, offset float64, boundary, now time.Time) (PlayItem, int, bool) {
 	n := len(s.Items)
 	for k := range n {
-		it := s.Items[(index+k)%n]
+		i := (index + k) % n
+		it := s.Items[i]
 		if k > 0 {
 			offset = 0
 			boundary = boundary.Add(time.Duration(it.Duration * float64(time.Second)))
@@ -73,10 +77,53 @@ func (c *Channel) ResolveCurrent(now time.Time) (PlayItem, bool) {
 			AudioChannels:  it.AudioChannels,
 			SampleRate:     it.SampleRate,
 			AudioLanguages: it.AudioLanguages,
-		}, true
+		}, i, true
+	}
+	return PlayItem{}, 0, false
+}
+
+// Playout locates the first item by wall clock (the live entry point), then advances the schedule
+// sequentially, re-clocking only to enter a rebuilt schedule where the old index no longer maps.
+type Playout struct {
+	ch      *Channel
+	sched   *Schedule
+	index   int
+	started bool
+}
+
+func (c *Channel) NewPlayout() *Playout {
+	return &Playout{ch: c}
+}
+
+// Next returns the file to play next, advancing the cursor. ok=false means no playable item yet.
+func (p *Playout) Next(now time.Time) (PlayItem, bool) {
+	s := p.ch.current(now)
+	if s == nil || s.isEmpty() {
+		p.started = false
+		return PlayItem{}, false
 	}
 
-	return PlayItem{}, false
+	if p.started && s == p.sched {
+		next := (p.index + 1) % len(s.Items)
+		boundary := now.Add(time.Duration(s.Items[next].Duration * float64(time.Second)))
+		if item, idx, ok := p.ch.resolveFrom(s, next, 0, boundary, now); ok {
+			p.index = idx
+			return item, true
+		}
+	}
+
+	index, _, offset, boundary, ok := locate(s, now)
+	if !ok {
+		p.started = false
+		return PlayItem{}, false
+	}
+	item, idx, ok := p.ch.resolveFrom(s, index, offset, boundary, now)
+	if !ok {
+		p.started = false
+		return PlayItem{}, false
+	}
+	p.sched, p.index, p.started = s, idx, true
+	return item, true
 }
 
 // ClampStart caps a catch-up start at now (future = live). Past times wrap on the loop.

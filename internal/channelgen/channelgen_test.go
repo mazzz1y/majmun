@@ -3,6 +3,7 @@ package channelgen
 import (
 	"context"
 	"majmun/internal/hashid"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -87,8 +88,21 @@ func newTestChannel(t *testing.T, id string, sources []string, p prober) (*Chann
 	return c, stateDir
 }
 
+// tBuild wraps the cheap scan + probe build phases for tests, mirroring the pre-split
+// buildSchedule signature so existing call sites keep working.
+func tBuild(ctx context.Context, p prober, id string, sources, extensions []string, order Order, seasonPatterns, episodePatterns []*regexp.Regexp, filler FillerConfig, old *Schedule, now time.Time) (*Schedule, error) {
+	scan, err := scanContent(sources, extensions, order, seasonPatterns, episodePatterns, filler)
+	if err != nil {
+		return nil, err
+	}
+	if old != nil && old.Fingerprint == scan.fingerprint {
+		return old, nil
+	}
+	return buildSchedule(ctx, p, id, scan, sources, order, seasonPatterns, episodePatterns, filler, old, now), nil
+}
+
 func buildTestSchedule(p prober, dir string, order Order, old *Schedule, now time.Time) (*Schedule, error) {
-	return buildSchedule(context.Background(), p, "c", []string{dir}, testExtensions, order, testSeasonPatterns, testEpisodePatterns, FillerConfig{}, old, now)
+	return tBuild(context.Background(), p, "c", []string{dir}, testExtensions, order, testSeasonPatterns, testEpisodePatterns, FillerConfig{}, old, now)
 }
 
 func itemName(it Item) string {
@@ -132,6 +146,20 @@ func TestScanSourcesFiltersAndSorts(t *testing.T) {
 	}
 	if files[0].path != filepath.Join(dir, "a.mp4") {
 		t.Errorf("expected sorted order, got %s first", files[0].path)
+	}
+}
+
+func TestScanSourcesSkipsMissingSource(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "a.mkv"))
+	gone := filepath.Join(t.TempDir(), "gone.mkv")
+
+	files, err := scanSources([]string{dir, gone}, testExtensions)
+	if err != nil {
+		t.Fatalf("a missing source must be skipped, not error: %v", err)
+	}
+	if len(files) != 1 {
+		t.Fatalf("expected 1 file from the surviving source, got %d", len(files))
 	}
 }
 
@@ -214,7 +242,7 @@ func TestRebuildOnPatternChange(t *testing.T) {
 
 	now := time.Unix(1000, 0)
 	build := func(eps []*regexp.Regexp, old *Schedule) *Schedule {
-		s, err := buildSchedule(context.Background(), p, "c", []string{dir}, testExtensions, "sequential", testSeasonPatterns, eps, FillerConfig{}, old, now)
+		s, err := tBuild(context.Background(), p, "c", []string{dir}, testExtensions, "sequential", testSeasonPatterns, eps, FillerConfig{}, old, now)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -255,7 +283,7 @@ func TestRebuildPreservesShuffleOrder(t *testing.T) {
 	now := time.Unix(1000, 0)
 
 	build := func(eps []*regexp.Regexp, old *Schedule) *Schedule {
-		s, err := buildSchedule(context.Background(), p, "c", []string{dir}, testExtensions, "shuffle", testSeasonPatterns, eps, FillerConfig{}, old, now)
+		s, err := tBuild(context.Background(), p, "c", []string{dir}, testExtensions, "shuffle", testSeasonPatterns, eps, FillerConfig{}, old, now)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -639,7 +667,7 @@ func TestInterleaveGroupsByShowAcrossSeasonSources(t *testing.T) {
 	}
 	sources := []string{filepath.Join(root, "Show A"), filepath.Join(root, "Show B")}
 
-	s, err := buildSchedule(context.Background(), p, "c", sources, testExtensions, "interleave", testSeasonPatterns, testEpisodePatterns, FillerConfig{}, nil, time.Unix(1000, 0))
+	s, err := tBuild(context.Background(), p, "c", sources, testExtensions, "interleave", testSeasonPatterns, testEpisodePatterns, FillerConfig{}, nil, time.Unix(1000, 0))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -675,7 +703,7 @@ func TestInterleaveGroupsByShowTag(t *testing.T) {
 		p.results[path] = probeResult{Duration: 100, Show: show}
 	}
 
-	s, err := buildSchedule(context.Background(), p, "c", []string{root}, testExtensions, "interleave", testSeasonPatterns, testEpisodePatterns, FillerConfig{}, nil, time.Unix(1000, 0))
+	s, err := tBuild(context.Background(), p, "c", []string{root}, testExtensions, "interleave", testSeasonPatterns, testEpisodePatterns, FillerConfig{}, nil, time.Unix(1000, 0))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -709,7 +737,7 @@ func TestInterleaveSeasonPatternOverride(t *testing.T) {
 	sources := []string{filepath.Join(root, "Show A"), filepath.Join(root, "Show B")}
 	seasonPatterns := []*regexp.Regexp{regexp.MustCompile(`(?i)^vol[ ._-]*\d+$`)}
 
-	s, err := buildSchedule(context.Background(), p, "c", sources, testExtensions, "interleave", seasonPatterns, testEpisodePatterns, FillerConfig{}, nil, time.Unix(1000, 0))
+	s, err := tBuild(context.Background(), p, "c", sources, testExtensions, "interleave", seasonPatterns, testEpisodePatterns, FillerConfig{}, nil, time.Unix(1000, 0))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -764,6 +792,103 @@ func TestLocateSecondItem(t *testing.T) {
 	index, item, offset, _, ok := locate(s, time.Unix(150, 0))
 	if !ok || index != 1 || item.File != "b" || offset != 50 {
 		t.Errorf("expected b/50 at index 1, got %d/%s/%f ok=%v", index, item.File, offset, ok)
+	}
+}
+
+func TestLocateSubSecondBoundary(t *testing.T) {
+	s := &Schedule{
+		Anchor: 0,
+		Items: []Item{
+			{File: "a", Duration: 10},
+			{File: "b", Duration: 10},
+		},
+	}
+	// 0.06s before the a->b boundary at 10.0s: stay in a with a future boundary.
+	now := time.Unix(9, int64(0.94*float64(time.Second)))
+	index, item, offset, boundary, ok := locate(s, now)
+	if !ok || index != 0 || item.File != "a" {
+		t.Fatalf("expected item a, got %d/%s ok=%v", index, item.File, ok)
+	}
+	if d := offset - 9.94; d < -1e-6 || d > 1e-6 {
+		t.Errorf("expected offset ~9.94, got %f", offset)
+	}
+	if !boundary.After(now) {
+		t.Errorf("boundary %v must be after now %v so the resolver can cross it", boundary, now)
+	}
+
+	// Just past the boundary: advance to b at offset ~0, not linger in a's tail.
+	now2 := time.Unix(10, int64(0.02*float64(time.Second)))
+	index2, item2, offset2, _, ok2 := locate(s, now2)
+	if !ok2 || index2 != 1 || item2.File != "b" {
+		t.Fatalf("expected item b after the boundary, got %d/%s ok=%v", index2, item2.File, ok2)
+	}
+	if offset2 < 0 || offset2 > 0.1 {
+		t.Errorf("expected b offset ~0.02, got %f", offset2)
+	}
+}
+
+// TestLocateInvariants fuzzes locate, asserting the offset lies inside the resolved slot and the
+// boundary is strictly in the future.
+func TestLocateInvariants(t *testing.T) {
+	r := rand.New(rand.NewSource(1))
+	for i := 0; i < 100000; i++ {
+		n := 1 + r.Intn(8)
+		items := make([]Item, n)
+		for j := range items {
+			items[j].File = string(rune('a' + j))
+			items[j].Duration = 0.05 + r.Float64()*600 // realistic clip seconds
+		}
+		s := &Schedule{Anchor: r.Int63n(2e9), Items: items}
+		now := time.Unix(1_600_000_000+r.Int63n(2e8), r.Int63n(int64(time.Second)))
+
+		index, item, offset, boundary, ok := locate(s, now)
+		if !ok {
+			t.Fatalf("ok=false for non-empty schedule (i=%d)", i)
+		}
+		if offset < 0 || offset >= item.Duration {
+			t.Fatalf("offset %v outside [0,%v) index=%d (i=%d)", offset, item.Duration, index, i)
+		}
+		if !boundary.After(now) {
+			t.Fatalf("boundary %v not after now %v index=%d (i=%d)", boundary, now, index, i)
+		}
+	}
+}
+
+// TestLocateBoundaryAtSeam drives now to each slot/cycle end, where the remaining-time delta is
+// sub-nanosecond and truncates to zero; the boundary must still be strictly after now.
+func TestLocateBoundaryAtSeam(t *testing.T) {
+	s := &Schedule{
+		Anchor: 1000,
+		Items: []Item{
+			{File: "a", Duration: 0.1},
+			{File: "b", Duration: 0.2},
+			{File: "c", Duration: 0.3},
+		},
+	}
+	total := s.total()
+	base := time.Unix(s.Anchor, 0)
+
+	var acc float64
+	for k := 0; k <= len(s.Items); k++ {
+		if k < len(s.Items) {
+			acc += s.Items[k].Duration
+		} else {
+			acc = total
+		}
+		// At the slot end and a few nanoseconds either side, the delta to the boundary is tiny.
+		for _, dn := range []int64{-2, -1, 0, 1, 2} {
+			now := base.Add(time.Duration(acc*float64(time.Second)) + time.Duration(dn))
+			_, item, offset, boundary, ok := locate(s, now)
+			if !ok {
+				t.Fatalf("k=%d dn=%d: ok=false", k, dn)
+			}
+			if offset < 0 || offset >= item.Duration {
+				t.Errorf("k=%d dn=%d: offset %v outside [0,%v)", k, dn, offset, item.Duration)
+			}
+			if !boundary.After(now) {
+				t.Errorf("k=%d dn=%d: boundary %v not after now %v", k, dn, boundary, now)
+			}
+		}
 	}
 }
 
@@ -1295,213 +1420,214 @@ func TestScheduleChangeDeferredUntilSwapTime(t *testing.T) {
 		t.Fatal("expected first schedule adopted immediately")
 	}
 
-	writeFile(t, filepath.Join(dir, "b.mkv"))
+	// A daytime addition is detected but neither probed nor adopted: the live schedule keeps
+	// playing until the swap window.
+	b := filepath.Join(dir, "b.mkv")
+	p.durations[b] = 60
+	writeFile(t, b)
 	warmUp(t, c, t0.Add(2*time.Hour))
 
-	c.mu.Lock()
-	pending, active, promoteAt := c.pending, c.schedule, c.promoteAt
-	c.mu.Unlock()
-	if pending == nil {
-		t.Fatal("expected changed schedule to be deferred in pending")
+	if activeFingerprint(c) != first.Fingerprint {
+		t.Error("live schedule must keep playing until the swap window")
 	}
-	if active != first {
-		t.Error("live schedule must keep playing until the swap time")
+	if p.calls[b] != 0 {
+		t.Errorf("daytime change must not probe the new file, got %d probes", p.calls[b])
 	}
+
+	// In the swap window the rebuild adopts the change (and only now probes the new file).
 	want := time.Date(2024, 1, 2, 4, 0, 0, 0, time.Local)
-	if !promoteAt.Equal(want) {
-		t.Errorf("promoteAt = %v, want next 04:00 = %v", promoteAt, want)
-	}
-
-	c.refresh = 0
-
-	c.ResolveCurrent(t0.Add(2 * time.Hour))
-	if activeFingerprint(c) != first.Fingerprint {
-		t.Error("schedule must not change before the swap time")
-	}
-
-	c.ResolveCurrent(want.Add(time.Second))
-	if activeFingerprint(c) != first.Fingerprint {
-		t.Error("swap must wait for the current item to finish, not cut mid-show")
-	}
-	c.mu.Lock()
-	heldPending := c.pending
-	c.mu.Unlock()
-	if heldPending == nil {
-		t.Error("pending must still be held until the item boundary")
-	}
-
-	if _, ok := c.ResolveCurrent(want.Add(60 * time.Second).Add(time.Second)); !ok {
-		t.Fatal("resolve failed after item boundary")
-	}
+	warmUp(t, c, want.Add(time.Minute))
 	if activeFingerprint(c) == first.Fingerprint {
-		t.Error("expected pending schedule to be promoted after the item boundary")
+		t.Error("expected the change to be adopted in the swap window")
 	}
-	c.mu.Lock()
-	stillPending := c.pending
-	c.mu.Unlock()
-	if stillPending != nil {
-		t.Error("pending should be cleared after promotion")
+	if p.calls[b] != 1 {
+		t.Errorf("expected the new file probed once on adoption, got %d", p.calls[b])
 	}
 }
 
-func TestDeferredSwapTimeNotPostponedByRebuilds(t *testing.T) {
+// TestDeferredChangeAdoptedAtSwapWindow guards that a change deferred shortly before the swap
+// window is still adopted when the window arrives, even though less than a refresh interval has
+// elapsed since it was last scanned. A purely refresh-gated rebuild would skip the window scan
+// and leave the change stuck until the next interval.
+func TestDeferredChangeAdoptedAtSwapWindow(t *testing.T) {
 	dir := t.TempDir()
 	a := filepath.Join(dir, "a.mkv")
 	writeFile(t, a)
 	p := newFakeProber()
 	p.durations[a] = 60
 	c, _ := newTestChannel(t, "c", []string{dir}, p)
-	c.refresh = 5 * time.Minute
-	c.swapHour, c.swapMin = 4, 0
-
-	t0 := time.Date(2024, 1, 1, 10, 0, 0, 0, time.Local)
-	warmUp(t, c, t0)
-
-	writeFile(t, filepath.Join(dir, "b.mkv"))
-	warmUp(t, c, t0.Add(10*time.Minute))
-
-	c.mu.Lock()
-	first := c.promoteAt
-	pendingFp := c.pending.Fingerprint
-	c.mu.Unlock()
-	want := time.Date(2024, 1, 2, 4, 0, 0, 0, time.Local)
-	if !first.Equal(want) {
-		t.Fatalf("promoteAt = %v, want %v", first, want)
-	}
-
-	// Subsequent refresh rebuilds of the same pending change must not push the swap time out.
-	for _, d := range []time.Duration{20 * time.Minute, 6 * time.Hour, 16 * time.Hour} {
-		warmUp(t, c, t0.Add(d))
-		c.mu.Lock()
-		got, fp := c.promoteAt, c.pending.Fingerprint
-		c.mu.Unlock()
-		if !got.Equal(want) {
-			t.Errorf("at +%v: promoteAt = %v, want unchanged %v", d, got, want)
-		}
-		if fp != pendingFp {
-			t.Errorf("at +%v: pending fingerprint changed unexpectedly", d)
-		}
-	}
-}
-
-func TestRemovedFileAiringBeforeSwapSwapsEarly(t *testing.T) {
-	dir := t.TempDir()
-	a := filepath.Join(dir, "a.mkv")
-	b := filepath.Join(dir, "b.mkv")
-	writeFile(t, a)
-	writeFile(t, b)
-	p := newFakeProber()
-	p.durations[a] = 60
-	p.durations[b] = 60
-	c, stateDir := newTestChannel(t, "c", []string{dir}, p)
 	c.refresh = time.Hour
 	c.swapHour, c.swapMin = 4, 0
 
 	t0 := time.Date(2024, 1, 1, 10, 0, 0, 0, time.Local)
 	warmUp(t, c, t0)
-	first := c.schedule
+	first := c.schedule.Fingerprint
 
-	// Total cycle is 120s, so any surviving file airs again within minutes — well before the
-	// next 04:00. Removing one must adopt the corrected schedule immediately.
-	if err := os.Remove(b); err != nil {
-		t.Fatal(err)
+	// New file detected at 03:30, half an hour before the 04:00 window: deferred.
+	b := filepath.Join(dir, "b.mkv")
+	p.durations[b] = 60
+	writeFile(t, b)
+	warmUp(t, c, time.Date(2024, 1, 2, 3, 30, 0, 0, time.Local))
+	if activeFingerprint(c) != first {
+		t.Fatal("precondition: change must be deferred before the window")
 	}
-	warmUp(t, c, t0.Add(2*time.Hour))
 
+	// At 04:01, only 31m after the deferred scan (< refresh), the channel must still rebuild and
+	// adopt at the window.
 	c.mu.Lock()
-	active, pending, promoteAt := c.schedule, c.pending, c.promoteAt
+	need := c.needsBuildLocked(time.Date(2024, 1, 2, 4, 1, 0, 0, time.Local))
 	c.mu.Unlock()
-	if active == first {
-		t.Error("removed file airing before swap must adopt the new schedule immediately")
-	}
-	if len(active.Items) != 1 {
-		t.Errorf("expected 1 surviving item, got %d", len(active.Items))
-	}
-	if pending != nil || !promoteAt.IsZero() {
-		t.Error("immediate adoption must clear any pending swap")
+	if !need {
+		t.Error("a deferred change must arm a rebuild at the swap window, not wait for the refresh interval")
 	}
 
-	// The early-adopted schedule must be persisted, so a restart keeps it.
-	saved, err := loadSchedule(stateDir, "c")
-	if err != nil || saved == nil {
-		t.Fatalf("expected persisted schedule, got %v err %v", saved, err)
-	}
-	if saved.Fingerprint != active.Fingerprint {
-		t.Error("persisted schedule must match the early-adopted one")
+	warmUp(t, c, time.Date(2024, 1, 2, 4, 1, 0, 0, time.Local))
+	if activeFingerprint(c) == first {
+		t.Error("deferred change must be adopted at the swap window")
 	}
 }
 
-func TestRemovedFileAiringAfterSwapDefers(t *testing.T) {
+// TestUrgentRemovalDoesNotCutHeldProgramme guards that after the swap time, while the programme
+// spanning the window is still airing (the swap is held), a removed file airing only after that
+// held programme finishes does not trigger an early adoption mid-programme.
+func TestUrgentRemovalDoesNotCutHeldProgramme(t *testing.T) {
 	dir := t.TempDir()
 	keep := filepath.Join(dir, "a_keep.mkv")
 	gone := filepath.Join(dir, "z_gone.mkv")
 	writeFile(t, keep)
 	writeFile(t, gone)
 	p := newFakeProber()
-	// Long items so the playlist does not loop before the swap: the first item alone covers
-	// far beyond the next 04:00, pushing z_gone's slot past the swap time.
-	p.durations[keep] = 40 * 3600
-	p.durations[gone] = 40 * 3600
+	// keep airs from the 10:00 anchor for 20h -> the programme spanning the next 04:00 window
+	// ends at 06:00. gone airs 06:00..07:00, i.e. only after that held boundary.
+	p.durations[keep] = 20 * 3600
+	p.durations[gone] = 1 * 3600
 	c, _ := newTestChannel(t, "c", []string{dir}, p)
 	c.refresh = time.Hour
 	c.swapHour, c.swapMin = 4, 0
 
 	t0 := time.Date(2024, 1, 1, 10, 0, 0, 0, time.Local)
 	warmUp(t, c, t0)
-	first := c.schedule
+	first := c.schedule.Fingerprint
 
-	// Sanity: a_keep airs from anchor, z_gone only after 40h — past tomorrow 04:00 (18h away).
 	if err := os.Remove(gone); err != nil {
 		t.Fatal(err)
 	}
-	warmUp(t, c, t0.Add(2*time.Hour))
 
-	c.mu.Lock()
-	active, pending := c.schedule, c.pending
-	c.mu.Unlock()
-	if active != first {
-		t.Error("removal airing after the swap must defer, not switch early")
-	}
-	if pending == nil {
-		t.Error("expected the corrected schedule to be deferred in pending")
+	// 04:10: past the swap time but inside the held programme (keep, ending 06:00). gone airs at
+	// 06:00, not before the held boundary, so it must NOT cut in early.
+	c.building.Store(true)
+	c.build(context.Background(), time.Date(2024, 1, 2, 4, 10, 0, 0, time.Local))
+	c.building.Store(false)
+
+	if activeFingerprint(c) != first {
+		t.Error("a removal airing only after the held programme boundary must not adopt mid-programme")
 	}
 }
 
-// TestRemovedFileAiringAtSwapBoundarySwapsEarly pins the boundary-vs-swapAt fix: a removal
-// airing exactly at the swap time would be reached live before adoption, so it must swap early.
-func TestRemovedFileAiringAtSwapBoundarySwapsEarly(t *testing.T) {
+// TestDeferredChangeReArmsAtProgrammeBoundary guards that when the swap window opens but the
+// airing programme runs past it, the deferred change re-arms a rebuild at that programme's
+// boundary, not at the next day's window. A long refresh interval would otherwise mask the bug.
+func TestDeferredChangeReArmsAtProgrammeBoundary(t *testing.T) {
 	dir := t.TempDir()
-	keep := filepath.Join(dir, "a_keep.mkv")
-	gone := filepath.Join(dir, "b_gone.mkv")
-	writeFile(t, keep)
-	writeFile(t, gone)
+	a := filepath.Join(dir, "a.mkv")
+	writeFile(t, a)
 	p := newFakeProber()
-	// Anchor is t0 = 10:00; the next 04:00 swap is 18h away. keep airs 0..18h, so gone's slot
-	// starts exactly at 18h == the swap instant, making gone the programme straddling the
-	// boundary (ends at 19h). gone's next occurrence therefore lands exactly on swapAt.
-	p.durations[keep] = 18 * 3600
-	p.durations[gone] = 3600
+	// a airs from the 10:00 anchor for 20h, so the programme spanning the next 04:00 window ends
+	// at 06:00.
+	p.durations[a] = 20 * 3600
 	c, _ := newTestChannel(t, "c", []string{dir}, p)
-	c.refresh = time.Hour
+	c.refresh = 12 * time.Hour // long, so it cannot mask the re-arm timing
 	c.swapHour, c.swapMin = 4, 0
 
 	t0 := time.Date(2024, 1, 1, 10, 0, 0, 0, time.Local)
 	warmUp(t, c, t0)
-	first := c.schedule
+	first := c.schedule.Fingerprint
 
-	if err := os.Remove(gone); err != nil {
-		t.Fatal(err)
+	b := filepath.Join(dir, "b.mkv")
+	p.durations[b] = 60
+	writeFile(t, b)
+
+	// 04:10: window open but held by the programme ending at 06:00 -> deferred.
+	c.building.Store(true)
+	c.build(context.Background(), time.Date(2024, 1, 2, 4, 10, 0, 0, time.Local))
+	c.building.Store(false)
+	if activeFingerprint(c) != first {
+		t.Fatal("precondition: held at 04:10")
 	}
-	warmUp(t, c, t0.Add(2*time.Hour))
 
+	// 06:01: the held programme has finished -> a rebuild must be armed and adopt now.
 	c.mu.Lock()
-	active, pending, promoteAt := c.schedule, c.pending, c.promoteAt
+	need := c.needsBuildLocked(time.Date(2024, 1, 2, 6, 1, 0, 0, time.Local))
 	c.mu.Unlock()
-	if active == first {
-		t.Error("removal airing at the swap boundary must adopt the new schedule immediately")
+	if !need {
+		t.Error("a held change must re-arm at the programme boundary, not the next day's window")
 	}
-	if pending != nil || !promoteAt.IsZero() {
-		t.Error("immediate adoption must clear any pending swap")
+	warmUp(t, c, time.Date(2024, 1, 2, 6, 1, 0, 0, time.Local))
+	if activeFingerprint(c) == first {
+		t.Error("held change must be adopted once the programme finishes")
+	}
+}
+
+// TestRemovedFileSwapTiming pins the urgent-removal decision: a removed file is adopted early
+// only when its next airing falls at or before the swap boundary (the running transcode would
+// otherwise reopen it). keepDur/goneDur place gone's slot relative to the next 04:00 (18h after
+// the 10:00 anchor): before it, exactly on it, or after it.
+func TestRemovedFileSwapTiming(t *testing.T) {
+	t0 := time.Date(2024, 1, 1, 10, 0, 0, 0, time.Local)
+	cases := []struct {
+		name             string
+		keepDur, goneDur float64
+		wantEarly        bool
+	}{
+		// 60s items loop every 2min, so gone airs again minutes after removal, before the swap.
+		{"before swap", 60, 60, true},
+		// keep airs 0..18h, so gone's slot starts exactly at 18h == the swap instant.
+		{"at swap boundary", 18 * 3600, 3600, true},
+		// 40h items: gone's slot starts at 40h, past tomorrow's 04:00 (18h away).
+		{"after swap", 40 * 3600, 40 * 3600, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			keep := filepath.Join(dir, "a_keep.mkv")
+			gone := filepath.Join(dir, "z_gone.mkv")
+			writeFile(t, keep)
+			writeFile(t, gone)
+			p := newFakeProber()
+			p.durations[keep] = tc.keepDur
+			p.durations[gone] = tc.goneDur
+			c, stateDir := newTestChannel(t, "c", []string{dir}, p)
+			c.refresh = time.Hour
+			c.swapHour, c.swapMin = 4, 0
+
+			warmUp(t, c, t0)
+			first := c.schedule
+
+			if err := os.Remove(gone); err != nil {
+				t.Fatal(err)
+			}
+			warmUp(t, c, t0.Add(2*time.Hour))
+
+			c.mu.Lock()
+			active := c.schedule
+			c.mu.Unlock()
+
+			if tc.wantEarly {
+				if active == first {
+					t.Error("removal airing at or before the swap must adopt the new schedule immediately")
+				}
+				// The early-adopted schedule must be persisted, so a restart keeps it.
+				saved, err := loadSchedule(stateDir, "c")
+				if err != nil || saved == nil {
+					t.Fatalf("expected persisted schedule, got %v err %v", saved, err)
+				}
+				if saved.Fingerprint != active.Fingerprint {
+					t.Error("persisted schedule must match the early-adopted one")
+				}
+			} else if active != first {
+				t.Error("removal airing after the swap must defer, not switch early")
+			}
+		})
 	}
 }
 
@@ -1521,26 +1647,22 @@ func TestRemovalSupersedesPendingAddition(t *testing.T) {
 	t0 := time.Date(2024, 1, 1, 10, 0, 0, 0, time.Local)
 	warmUp(t, c, t0)
 
-	// An addition is deferred.
+	first := c.schedule
+
+	// A daytime addition is held: the live schedule keeps playing.
 	writeFile(t, filepath.Join(dir, "c.mkv"))
 	warmUp(t, c, t0.Add(2*time.Hour))
-	c.mu.Lock()
-	deferred := c.pending != nil
-	c.mu.Unlock()
-	if !deferred {
-		t.Fatal("addition should have been deferred")
+	if activeFingerprint(c) != first.Fingerprint {
+		t.Fatal("daytime addition should be held, not adopted")
 	}
 
-	// A removal that airs before the swap must supersede the pending addition and adopt now.
+	// A removal that airs before the swap supersedes the held addition and adopts immediately.
 	if err := os.Remove(b); err != nil {
 		t.Fatal(err)
 	}
 	warmUp(t, c, t0.Add(3*time.Hour))
-	c.mu.Lock()
-	pending, promoteAt := c.pending, c.promoteAt
-	c.mu.Unlock()
-	if pending != nil || !promoteAt.IsZero() {
-		t.Error("removal airing before swap must supersede the pending addition and adopt now")
+	if activeFingerprint(c) == first.Fingerprint {
+		t.Error("removal airing before swap must adopt the corrected schedule immediately")
 	}
 }
 
@@ -1562,12 +1684,263 @@ func TestEmptyRebuildKeepsPlayingSchedule(t *testing.T) {
 	warmUp(t, c, t0.Add(2*time.Hour))
 
 	c.mu.Lock()
-	active, pending := c.schedule, c.pending
+	active := c.schedule
 	c.mu.Unlock()
 	if active != first {
 		t.Error("emptied sources must not displace the playing schedule")
 	}
-	if pending != nil {
-		t.Error("an empty rebuild must not be queued as pending")
+}
+
+// TestUnchangedEmptyScheduleSkipsProbe guards the cheap-scan short-circuit for empty schedules:
+// when every file probes to no duration, the schedule is empty but the scan fingerprint is
+// stable, so an unchanged refresh must not re-run the probe pass.
+func TestUnchangedEmptyScheduleSkipsProbe(t *testing.T) {
+	dir := t.TempDir()
+	a := filepath.Join(dir, "a.mkv")
+	writeFile(t, a)
+	p := newFakeProber()
+	p.durations[a] = 0 // probes to zero duration: scan succeeds, schedule is empty
+	c, _ := newTestChannel(t, "c", []string{dir}, p)
+	c.refresh = time.Hour
+
+	warmUp(t, c, time.Date(2024, 1, 1, 10, 0, 0, 0, time.Local))
+	probed := p.calls[a]
+
+	c.building.Store(true)
+	c.build(context.Background(), time.Date(2024, 1, 1, 12, 0, 0, 0, time.Local))
+	c.building.Store(false)
+
+	if p.calls[a] != probed {
+		t.Errorf("unchanged empty schedule must not re-probe, calls grew %d -> %d", probed, p.calls[a])
+	}
+}
+
+// TestEmptyRebuildAfterDeferredChangeClearsArm guards against a rebuild spin: when a change is
+// deferred (arming a swap) and then all content is removed before the boundary, the empty rebuild
+// that keeps the old schedule must also clear the armed swap, or needsBuildLocked would stay true
+// and rebuild on every access.
+func TestEmptyRebuildAfterDeferredChangeClearsArm(t *testing.T) {
+	dir := t.TempDir()
+	a := filepath.Join(dir, "a.mkv")
+	b := filepath.Join(dir, "b.mkv")
+	writeFile(t, a)
+	writeFile(t, b)
+	p := newFakeProber()
+	p.durations[a] = 60
+	p.durations[b] = 60
+	c, _ := newTestChannel(t, "c", []string{dir}, p)
+	c.refresh = time.Hour
+	c.swapHour, c.swapMin = 4, 0
+
+	t0 := time.Date(2024, 1, 1, 10, 0, 0, 0, time.Local)
+	warmUp(t, c, t0)
+
+	// Defer a change at 03:30, arming a swap.
+	cc := filepath.Join(dir, "c.mkv")
+	p.durations[cc] = 60
+	writeFile(t, cc)
+	warmUp(t, c, time.Date(2024, 1, 2, 3, 30, 0, 0, time.Local))
+	c.mu.Lock()
+	armed := !c.pendingSwapAt.IsZero()
+	c.mu.Unlock()
+	if !armed {
+		t.Fatal("precondition: a swap must be armed after deferral")
+	}
+
+	// All content removed before the boundary; the build at the boundary yields an empty schedule
+	// that must keep the old one and clear the arm.
+	os.Remove(a)
+	os.Remove(b)
+	os.Remove(cc)
+	c.building.Store(true)
+	c.build(context.Background(), time.Date(2024, 1, 2, 4, 1, 0, 0, time.Local))
+	c.building.Store(false)
+
+	c.mu.Lock()
+	stillArmed := !c.pendingSwapAt.IsZero()
+	need := c.needsBuildLocked(time.Date(2024, 1, 2, 4, 2, 0, 0, time.Local))
+	c.mu.Unlock()
+	if stillArmed {
+		t.Error("empty rebuild must clear the armed swap")
+	}
+	if need {
+		t.Error("empty rebuild must not leave needsBuildLocked stuck true (rebuild spin)")
+	}
+}
+
+// TestRestartBeforeSwapWindowHoldsChange covers a restart while a daytime change is held: the
+// reloaded channel must keep playing the active schedule and not adopt the change until the
+// swap window, even though it rebuilds at startup.
+func TestRestartBeforeSwapWindowHoldsChange(t *testing.T) {
+	dir := t.TempDir()
+	a := filepath.Join(dir, "a.mkv")
+	writeFile(t, a)
+	p := newFakeProber()
+	p.durations[a] = 60
+	c, stateDir := newTestChannel(t, "c", []string{dir}, p)
+	c.refresh = time.Hour
+	c.swapHour, c.swapMin = 4, 0
+
+	t0 := time.Date(2024, 1, 1, 10, 0, 0, 0, time.Local)
+	warmUp(t, c, t0)
+	firstFp := c.schedule.Fingerprint
+
+	// A daytime change appears, then the process "restarts" (fresh channel, same state dir).
+	b := filepath.Join(dir, "b.mkv")
+	p.durations[b] = 60
+	writeFile(t, b)
+
+	c2 := &Channel{id: "c", sources: []string{dir}, extensions: testExtensions, stateDir: stateDir, prober: p}
+	c2.refresh = time.Hour
+	c2.swapHour, c2.swapMin = 4, 0
+	warmUp(t, c2, t0.Add(3*time.Hour)) // still 2024-01-01, before the next 04:00
+
+	if activeFingerprint(c2) != firstFp {
+		t.Error("restart before the swap window must keep the active schedule, not adopt the change")
+	}
+	if p.calls[b] != 0 {
+		t.Errorf("restart before the swap window must not probe the held change, got %d", p.calls[b])
+	}
+}
+
+// TestDeferredSwapSurvivesRestart covers persistence of the armed swap boundary: a change
+// detected and deferred before a restart keeps its original swap time, so a restart before the
+// boundary still adopts at that boundary instead of re-deferring to the next day.
+func TestDeferredSwapSurvivesRestart(t *testing.T) {
+	dir := t.TempDir()
+	a := filepath.Join(dir, "a.mkv")
+	writeFile(t, a)
+	p := newFakeProber()
+	p.durations[a] = 60
+	c, stateDir := newTestChannel(t, "c", []string{dir}, p)
+	c.refresh = time.Hour
+	c.swapHour, c.swapMin = 4, 0
+
+	t0 := time.Date(2024, 1, 1, 10, 0, 0, 0, time.Local)
+	warmUp(t, c, t0)
+	firstFp := c.schedule.Fingerprint
+
+	// A change is detected and deferred at 03:30, arming (and persisting) a swap at ~04:00.
+	b := filepath.Join(dir, "b.mkv")
+	p.durations[b] = 60
+	writeFile(t, b)
+	warmUp(t, c, time.Date(2024, 1, 2, 3, 30, 0, 0, time.Local))
+	if activeFingerprint(c) != firstFp {
+		t.Fatal("precondition: change deferred at 03:30")
+	}
+
+	// Restart: a fresh channel must restore the armed boundary from disk, then adopt at it.
+	c2 := &Channel{id: "c", sources: []string{dir}, extensions: testExtensions, stateDir: stateDir, prober: p}
+	c2.refresh = time.Hour
+	c2.swapHour, c2.swapMin = 4, 0
+
+	c2.mu.Lock()
+	c2.ensureLoadedLocked()
+	restoredArm := !c2.pendingSwapAt.IsZero()
+	c2.mu.Unlock()
+	if !restoredArm {
+		t.Error("restart must restore the persisted pending swap boundary")
+	}
+
+	warmUp(t, c2, time.Date(2024, 1, 2, 4, 1, 0, 0, time.Local))
+	if activeFingerprint(c2) == firstFp {
+		t.Error("restart before the swap boundary must still adopt the deferred change at it")
+	}
+	if p.calls[b] != 1 {
+		t.Errorf("expected the change probed once on adoption, got %d", p.calls[b])
+	}
+}
+
+// TestChangeFirstSeenAfterWindowDefers covers the core lazy guarantee: a non-urgent change first
+// detected after the swap window's programme has already finished is held to the next window, not
+// adopted immediately just because the active schedule was built earlier.
+func TestChangeFirstSeenAfterWindowDefers(t *testing.T) {
+	dir := t.TempDir()
+	a := filepath.Join(dir, "a.mkv")
+	writeFile(t, a)
+	p := newFakeProber()
+	p.durations[a] = 60 // short programmes, so the 04:00 window's programme ends right away
+	c, _ := newTestChannel(t, "c", []string{dir}, p)
+	c.refresh = time.Hour
+	c.swapHour, c.swapMin = 4, 0
+
+	t0 := time.Date(2024, 1, 1, 10, 0, 0, 0, time.Local)
+	warmUp(t, c, t0)
+	first := c.schedule.Fingerprint
+
+	// Jan 2 04:00 passes untouched; a new file appears and is first scanned at Jan 2 12:00, well
+	// after that window. It must defer (not probe, not adopt), waiting for the next window.
+	b := filepath.Join(dir, "b.mkv")
+	p.durations[b] = 60
+	writeFile(t, b)
+	c.building.Store(true)
+	c.build(context.Background(), time.Date(2024, 1, 2, 12, 0, 0, 0, time.Local))
+	c.building.Store(false)
+
+	if activeFingerprint(c) != first {
+		t.Error("a change first seen after the window must defer, not adopt immediately")
+	}
+	if p.calls[b] != 0 {
+		t.Errorf("a deferred change must not be probed, got %d", p.calls[b])
+	}
+}
+
+// TestFillerChannelDefersDaytimeChange guards against filler clips being mistaken for removed
+// files: their paths come from the filler sources, not the content scan, so the lazy swap's
+// removed-file check must still see them as present and defer a daytime content change rather
+// than forcing an urgent adoption (and reprobe) on every refresh.
+func TestFillerChannelDefersDaytimeChange(t *testing.T) {
+	dir := t.TempDir()
+	fillerDir := t.TempDir()
+	a := filepath.Join(dir, "a.mkv")
+	b := filepath.Join(dir, "b.mkv")
+	spot := filepath.Join(fillerDir, "spot.mkv")
+	writeFile(t, a)
+	writeFile(t, b)
+	writeFile(t, spot)
+	p := newFakeProber()
+	p.durations[a] = 3600
+	p.durations[b] = 3600
+	p.durations[spot] = 30
+	c, _ := newTestChannel(t, "c", []string{dir}, p)
+	c.refresh = time.Hour
+	c.swapHour, c.swapMin = 4, 0
+	c.filler = FillerConfig{
+		Sources:       []string{fillerDir},
+		EveryCount:    1,
+		MaxDuration:   30 * time.Second,
+		Order:         OrderSequential,
+		TitleTemplate: template.Must(template.New("t").Parse("Advertising")),
+	}
+
+	t0 := time.Date(2024, 1, 1, 10, 0, 0, 0, time.Local)
+	warmUp(t, c, t0)
+	first := c.schedule
+	if first == nil {
+		t.Fatal("expected first schedule")
+	}
+	// Sanity: filler must actually be interleaved, or the test wouldn't exercise the bug.
+	hasFiller := false
+	for _, it := range first.Items {
+		if it.IsFiller {
+			hasFiller = true
+		}
+	}
+	if !hasFiller {
+		t.Fatal("expected filler interleaved in the schedule")
+	}
+
+	// A daytime content addition must be deferred, not adopted, even though the schedule is
+	// interleaved with filler clips whose paths are absent from the content scan.
+	cc := filepath.Join(dir, "c.mkv")
+	p.durations[cc] = 3600
+	writeFile(t, cc)
+	warmUp(t, c, t0.Add(2*time.Hour))
+
+	if activeFingerprint(c) != first.Fingerprint {
+		t.Error("filler clips must not be mistaken for removed files forcing an urgent swap")
+	}
+	if p.calls[cc] != 0 {
+		t.Errorf("deferred daytime change must not be probed, got %d", p.calls[cc])
 	}
 }

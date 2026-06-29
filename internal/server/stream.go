@@ -153,12 +153,13 @@ func (s *Server) handleChannelStream(
 		streamKey = channel.ID() + ":utc=" + strconv.FormatInt(now.Add(-shift).Unix(), 10)
 	}
 
+	playout := gen.NewPlayout()
 	streamReq := streampool.Request{
 		StreamKey:      streamKey,
 		ClientStreamer: channel.ClientStreamer,
 		Runner:         channel.Playout(),
 		NextItem: func(now time.Time) (streampool.PlayItem, bool) {
-			it, ok := gen.ResolveCurrent(now.Add(-shift))
+			it, ok := playout.Next(now.Add(-shift))
 			if !ok {
 				return streampool.PlayItem{}, false
 			}

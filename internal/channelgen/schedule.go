@@ -40,7 +40,8 @@ type Schedule struct {
 	FillerSeed int64 `json:"filler_seed,omitempty"`
 	// FillerStart is the filler-pool index the next rebuild begins from, so a pool larger than one
 	// loop's breaks rotates through all clips over successive rebuilds.
-	FillerStart int `json:"filler_start,omitempty"`
+	FillerStart   int   `json:"filler_start,omitempty"`
+	PendingSwapAt int64 `json:"pending_swap_at,omitempty"`
 }
 
 func (s *Schedule) total() float64 {

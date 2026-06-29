@@ -136,7 +136,7 @@ func TestBuildScheduleInjectsFiller(t *testing.T) {
 	now := time.Unix(1000, 0)
 	filler := FillerConfig{Sources: []string{fillerDir}, EveryCount: 2, Order: OrderSequential}
 
-	s, err := buildSchedule(context.Background(), p, "c", []string{dir}, testExtensions, "sequential", testSeasonPatterns, testEpisodePatterns, filler, nil, now)
+	s, err := tBuild(context.Background(), p, "c", []string{dir}, testExtensions, "sequential", testSeasonPatterns, testEpisodePatterns, filler, nil, now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -219,7 +219,7 @@ func TestRebuildReusesUnchangedFiller(t *testing.T) {
 	now := time.Unix(1000, 0)
 	filler := FillerConfig{Sources: []string{fillerDir}, EveryCount: 2, Order: OrderSequential}
 	build := func(old *Schedule) *Schedule {
-		s, err := buildSchedule(context.Background(), p, "c", []string{dir}, testExtensions, "sequential", testSeasonPatterns, testEpisodePatterns, filler, old, now)
+		s, err := tBuild(context.Background(), p, "c", []string{dir}, testExtensions, "sequential", testSeasonPatterns, testEpisodePatterns, filler, old, now)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -255,7 +255,7 @@ func TestFillerShuffleSeededIndependentlyOfContent(t *testing.T) {
 	now := time.Unix(1000, 0)
 	// Content is sequential (seed stays 0); filler is shuffled and must still get a real seed.
 	filler := FillerConfig{Sources: []string{fillerDir}, EveryCount: 2, Order: OrderShuffle}
-	s, err := buildSchedule(context.Background(), p, "c", []string{dir}, testExtensions, "sequential", testSeasonPatterns, testEpisodePatterns, filler, nil, now)
+	s, err := tBuild(context.Background(), p, "c", []string{dir}, testExtensions, "sequential", testSeasonPatterns, testEpisodePatterns, filler, nil, now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -267,7 +267,7 @@ func TestFillerShuffleSeededIndependentlyOfContent(t *testing.T) {
 	// Rebuild (new file) must keep the same FillerSeed so the pool order — and the FillerStart
 	// cursor — stays stable.
 	writeFile(t, filepath.Join(dir, "ep3.mkv"))
-	s2, err := buildSchedule(context.Background(), p, "c", []string{dir}, testExtensions, "sequential", testSeasonPatterns, testEpisodePatterns, filler, s, now)
+	s2, err := tBuild(context.Background(), p, "c", []string{dir}, testExtensions, "sequential", testSeasonPatterns, testEpisodePatterns, filler, s, now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -292,7 +292,7 @@ func TestBuildRotatesSurplusFillerAcrossRebuilds(t *testing.T) {
 	now := time.Unix(1000, 0)
 	filler := FillerConfig{Sources: []string{fillerDir}, EveryCount: 2, Order: OrderSequential}
 	build := func(old *Schedule) (*Schedule, error) {
-		return buildSchedule(context.Background(), p, "c", []string{dir}, testExtensions, "sequential", testSeasonPatterns, testEpisodePatterns, filler, old, now)
+		return tBuild(context.Background(), p, "c", []string{dir}, testExtensions, "sequential", testSeasonPatterns, testEpisodePatterns, filler, old, now)
 	}
 
 	airedFiller := func(s *Schedule) string {
@@ -346,7 +346,7 @@ func TestRebuildReinterleavesFillerAfterReorder(t *testing.T) {
 	now := time.Unix(1000, 0)
 	filler := FillerConfig{Sources: []string{fillerDir}, EveryCount: 1, Order: OrderSequential}
 	build := func(eps []*regexp.Regexp, old *Schedule) *Schedule {
-		s, err := buildSchedule(context.Background(), p, "c", []string{dir}, testExtensions, "sequential", testSeasonPatterns, eps, filler, old, now)
+		s, err := tBuild(context.Background(), p, "c", []string{dir}, testExtensions, "sequential", testSeasonPatterns, eps, filler, old, now)
 		if err != nil {
 			t.Fatal(err)
 		}

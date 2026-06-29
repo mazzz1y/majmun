@@ -76,15 +76,13 @@ type Channel struct {
 	descriptionTmpl *template.Template
 	categoryTmpl    *template.Template
 
-	mu        sync.Mutex
-	schedule  *Schedule
-	loaded    bool
-	dirty     bool
-	lastBuilt time.Time
-	building  atomic.Bool
-
-	pending   *Schedule
-	promoteAt time.Time
+	mu            sync.Mutex
+	schedule      *Schedule
+	loaded        bool
+	dirty         bool
+	lastBuilt     time.Time
+	pendingSwapAt time.Time
+	building      atomic.Bool
 }
 
 func NewChannel(cfg Config) *Channel {
@@ -112,51 +110,40 @@ func NewChannel(cfg Config) *Channel {
 
 // current returns the servable schedule without blocking. It is nil while the first build
 // runs (callers serve a placeholder). A background build is triggered when the channel is
-// unbuilt, marked dirty by a deleted file, or past its refresh interval.
+// unbuilt, marked dirty by a deleted file, past its refresh interval, or due for a deferred swap.
 func (c *Channel) current(now time.Time) *Schedule {
 	c.mu.Lock()
 	c.ensureLoadedLocked()
-	promoted := c.promotePendingLocked(now)
 	s := c.schedule
 	need := c.needsBuildLocked(now)
 	c.mu.Unlock()
 
-	if promoted != nil {
-		if err := saveSchedule(c.stateDir, promoted); err != nil {
-			logging.Error(c.logCtx(context.Background()), err, "failed to persist channel schedule")
-		}
-	}
 	if need {
 		c.maybeBuild(now)
 	}
 	return s
 }
 
-// promotePendingLocked adopts a deferred schedule once its swap time has arrived and the
-// programme playing at that time has finished. It returns the newly adopted schedule (to be
-// persisted by the caller outside the lock) or nil. Callers must hold c.mu.
-func (c *Channel) promotePendingLocked(now time.Time) *Schedule {
-	if c.pending == nil || now.Before(c.promoteAt) {
-		return nil
+// swapBoundary is when a freshly detected change should be adopted in old's timeline: the end of
+// the programme spanning the most recent swap window if we are still inside it, else the end of
+// the programme spanning the next window. Holding to the programme end avoids cutting a viewer
+// mid-programme; deferring past a consumed window avoids adopting a change the moment it appears.
+func (c *Channel) swapBoundary(old *Schedule, now time.Time) time.Time {
+	last := time.Date(now.Year(), now.Month(), now.Day(), c.swapHour, c.swapMin, 0, 0, now.Location())
+	if last.After(now) {
+		last = last.AddDate(0, 0, -1)
 	}
-	if c.schedule != nil {
-		// Boundary is anchored at promoteAt (the programme airing at the swap time), not now,
-		// so a long gap since promoteAt still promotes (the boundary is then in the past).
-		if _, _, _, boundary, ok := locate(c.schedule, c.promoteAt); ok && now.Before(boundary) {
-			return nil
-		}
+	if boundary := programmeEnd(old, last); now.Before(boundary) {
+		return boundary
 	}
-	s := c.pending
-	c.schedule = s
-	c.pending = nil
-	c.promoteAt = time.Time{}
-	return s
+	return programmeEnd(old, last.AddDate(0, 0, 1))
 }
 
-func (c *Channel) nextSwap(now time.Time) time.Time {
-	t := time.Date(now.Year(), now.Month(), now.Day(), c.swapHour, c.swapMin, 0, 0, now.Location())
-	if !t.After(now) {
-		t = t.AddDate(0, 0, 1)
+// programmeEnd is when the programme airing at t finishes in s's looping timeline, or t itself
+// when s cannot be resolved.
+func programmeEnd(s *Schedule, t time.Time) time.Time {
+	if _, _, _, b, ok := locate(s, t); ok {
+		return b
 	}
 	return t
 }
@@ -192,12 +179,22 @@ func (c *Channel) ensureLoadedLocked() {
 		logging.Error(c.logCtx(context.Background()), err, "failed to load channel schedule")
 	} else {
 		c.schedule = s
+		// Restore a deferred change's armed swap boundary so a restart before it keeps the
+		// original swap time rather than re-deferring to the next window.
+		if s != nil && s.PendingSwapAt != 0 {
+			c.pendingSwapAt = time.Unix(0, s.PendingSwapAt)
+		}
 	}
 	c.loaded = true
 }
 
 func (c *Channel) needsBuildLocked(now time.Time) bool {
-	return c.schedule == nil || c.dirty || (c.refresh > 0 && now.Sub(c.lastBuilt) >= c.refresh)
+	if c.schedule == nil || c.dirty || (c.refresh > 0 && now.Sub(c.lastBuilt) >= c.refresh) {
+		return true
+	}
+	// A deferred change arms a rebuild at its swap window so it is adopted there rather than at
+	// the next refresh tick.
+	return !c.pendingSwapAt.IsZero() && !now.Before(c.pendingSwapAt)
 }
 
 func (c *Channel) markDirty(now time.Time) {
@@ -222,74 +219,118 @@ func (c *Channel) build(ctx context.Context, now time.Time) {
 
 	c.mu.Lock()
 	old := c.schedule
-	c.dirty = false // consume the signal now; a change arriving mid-build re-sets it
+	pendingSwapAt := c.pendingSwapAt
+	c.dirty = false // a change arriving mid-build re-sets dirty
 	c.mu.Unlock()
 
-	logging.Info(ctx, "building channel schedule", "sources", c.sources)
-	started := time.Now()
-
-	s, err := buildSchedule(ctx, c.prober, c.id, c.sources, c.extensions, c.order, c.seasonPatterns, c.episodePatterns, c.filler, old, now)
+	scan, err := scanContent(c.sources, c.extensions, c.order, c.seasonPatterns, c.episodePatterns, c.filler)
 	if err != nil {
-		logging.Error(ctx, err, "failed to build channel schedule")
+		logging.Error(ctx, err, "failed to scan channel sources")
 		c.mu.Lock()
-		c.dirty = true // build failed; re-arm so the next access retries
+		c.dirty = true
 		c.mu.Unlock()
 		return
-	}
-
-	switch {
-	case len(s.Items) == 0:
-		logging.Error(ctx, errors.New("no playable items"),
-			"channel schedule is empty, channel will serve a placeholder",
-			"sources", c.sources, "extensions", c.extensions)
-	case old != nil && s.Fingerprint == old.Fingerprint:
-		logging.Info(ctx, "channel schedule unchanged", "items", len(s.Items))
-	default:
-		logging.Info(ctx, "channel schedule built",
-			"items", len(s.Items), "took", time.Since(started).Round(time.Millisecond))
 	}
 
 	c.mu.Lock()
 	c.lastBuilt = now
+	c.mu.Unlock()
 
-	changed := old != nil && !old.isEmpty() && s.Fingerprint != old.Fingerprint && !s.isEmpty()
-	if changed {
-		swapAt := c.nextSwap(now)
-		// Promotion holds until the programme spanning swapAt finishes, so a removal must be
-		// compared against that boundary, not swapAt, or it could air live before adoption.
-		boundary := swapAt
-		if _, _, _, b, ok := locate(old, swapAt); ok {
-			boundary = b
-		}
-		air, removed := earliestRemovedAir(old, s, now)
-		if !removed || !air.Before(boundary) {
-			// Keep an already-scheduled swap time so repeated refresh rebuilds of the same
-			// change do not keep pushing the promotion to the next day.
-			if c.pending == nil || c.pending.Fingerprint != s.Fingerprint {
-				c.promoteAt = swapAt
-				logging.Info(ctx, "channel schedule change deferred", "swap_at", c.promoteAt.Format(time.RFC3339))
-			}
-			c.pending = s
-			c.mu.Unlock()
-			return
-		}
-		logging.Info(ctx, "removed file airs before swap boundary, adopting schedule early",
-			"airs_at", air.Format(time.RFC3339), "boundary", boundary.Format(time.RFC3339))
-	}
-
-	if s.isEmpty() && old != nil && !old.isEmpty() {
-		c.mu.Unlock()
+	if old != nil && scan.fingerprint == old.Fingerprint {
+		c.setPendingSwap(old, time.Time{})
+		logging.Info(ctx, "channel schedule unchanged", "items", len(old.Items))
 		return
 	}
 
-	c.pending = nil
-	c.promoteAt = time.Time{}
+	// A change is held until its swap boundary unless a removed file would air before then (the
+	// running transcode would reopen a deleted file). Both decisions use the cheap scan, so the
+	// probe pass below only runs when the change is actually adopted.
+	if old != nil && !old.isEmpty() {
+		// present holds content and filler paths alike: old.Items has both, so omitting filler
+		// would flag every filler clip as removed and force an urgent swap on any change.
+		present := make(map[string]struct{}, len(scan.files)+len(scan.fillerFiles))
+		for _, f := range scan.files {
+			present[f.path] = struct{}{}
+		}
+		for _, f := range scan.fillerFiles {
+			present[f.path] = struct{}{}
+		}
+
+		// adoptBoundary is when this change is adopted: an already-deferred change keeps its armed
+		// boundary (pendingSwapAt), a freshly detected one computes a new one. The urgent check
+		// shares it, so a removal can never cut in before the schedule would have swapped anyway.
+		adoptBoundary := pendingSwapAt
+		if adoptBoundary.IsZero() {
+			adoptBoundary = c.swapBoundary(old, now)
+		}
+
+		air, removed := earliestRemovedAir(old, present, now)
+		urgent := removed && air.Before(adoptBoundary)
+		reached := !now.Before(adoptBoundary)
+
+		switch {
+		case urgent:
+			logging.Info(ctx, "removed file airs before swap boundary, adopting schedule early",
+				"airs_at", air.Format(time.RFC3339))
+		case reached:
+			logging.Info(ctx, "adopting deferred channel schedule change at swap window")
+		default:
+			c.setPendingSwap(old, adoptBoundary)
+			logging.Info(ctx, "channel schedule change deferred", "swap_at", adoptBoundary.Format(time.RFC3339))
+			return
+		}
+	}
+
+	logging.Info(ctx, "building channel schedule", "sources", c.sources)
+	started := time.Now()
+	s := buildSchedule(ctx, c.prober, c.id, scan, c.sources, c.order, c.seasonPatterns, c.episodePatterns, c.filler, old, now)
+
+	if len(s.Items) == 0 {
+		logging.Error(ctx, errors.New("no playable items"),
+			"channel schedule is empty, channel will serve a placeholder",
+			"sources", c.sources, "extensions", c.extensions)
+	} else {
+		logging.Info(ctx, "channel schedule built",
+			"items", len(s.Items), "took", time.Since(started).Round(time.Millisecond))
+	}
+
+	if s.isEmpty() && old != nil && !old.isEmpty() {
+		// Emptied sources can't be acted on; drop any armed swap so we don't rebuild on every
+		// access until files reappear. A genuine later change re-arms via refresh or markDirty.
+		c.setPendingSwap(old, time.Time{})
+		return
+	}
+
+	c.mu.Lock()
 	c.schedule = s
+	c.pendingSwapAt = time.Time{}
 	c.mu.Unlock()
 
-	if old == nil || s.Fingerprint != old.Fingerprint {
-		if err := saveSchedule(c.stateDir, s); err != nil {
-			logging.Error(ctx, err, "failed to persist channel schedule")
-		}
+	// The fingerprint always differs here (an unchanged scan returned above), so always persist.
+	if err := saveSchedule(c.stateDir, s); err != nil {
+		logging.Error(ctx, err, "failed to persist channel schedule")
+	}
+}
+
+// setPendingSwap records the armed swap time (zero for none) in memory and persists it so the
+// deferral survives a restart. The persisted marker is written to a copy: the published active
+// schedule is immutable, so concurrent readers never see a torn write. The save is skipped when
+// the armed time is unchanged.
+func (c *Channel) setPendingSwap(active *Schedule, at time.Time) {
+	c.mu.Lock()
+	changed := !c.pendingSwapAt.Equal(at)
+	c.pendingSwapAt = at
+	c.mu.Unlock()
+
+	if !changed {
+		return
+	}
+	persisted := *active
+	persisted.PendingSwapAt = 0
+	if !at.IsZero() {
+		persisted.PendingSwapAt = at.UnixNano()
+	}
+	if err := saveSchedule(c.stateDir, &persisted); err != nil {
+		logging.Error(c.logCtx(context.Background()), err, "failed to persist swap time")
 	}
 }

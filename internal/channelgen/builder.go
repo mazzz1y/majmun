@@ -13,20 +13,30 @@ import (
 	"time"
 )
 
-func buildSchedule(ctx context.Context, p prober, id string, sources, extensions []string, order Order, seasonPatterns, episodePatterns []*regexp.Regexp, filler FillerConfig, old *Schedule, now time.Time) (*Schedule, error) {
+type scanResult struct {
+	files       []scannedFile
+	fillerFiles []scannedFile
+	fingerprint string
+}
+
+func scanContent(sources, extensions []string, order Order, seasonPatterns, episodePatterns []*regexp.Regexp, filler FillerConfig) (scanResult, error) {
 	files, err := scanSources(sources, extensions)
 	if err != nil {
-		return nil, err
+		return scanResult{}, err
 	}
 	fillerFiles, err := scanSources(filler.Sources, extensions)
 	if err != nil {
-		return nil, err
+		return scanResult{}, err
 	}
+	return scanResult{
+		files:       files,
+		fillerFiles: fillerFiles,
+		fingerprint: fingerprint(files, fillerFiles, order, seasonPatterns, episodePatterns, filler),
+	}, nil
+}
 
-	fp := fingerprint(files, fillerFiles, order, seasonPatterns, episodePatterns, filler)
-	if old != nil && old.Fingerprint == fp {
-		return old, nil
-	}
+func buildSchedule(ctx context.Context, p prober, id string, scan scanResult, sources []string, order Order, seasonPatterns, episodePatterns []*regexp.Regexp, filler FillerConfig, old *Schedule, now time.Time) *Schedule {
+	files, fillerFiles, fp := scan.files, scan.fillerFiles, scan.fingerprint
 
 	var cache map[probeKey]probeResult
 	if old != nil {
@@ -86,7 +96,8 @@ func buildSchedule(ctx context.Context, p prober, id string, sources, extensions
 	if old != nil && len(fillerPool) > 0 {
 		fillerStart = old.FillerStart % len(fillerPool)
 	}
-	withFiller, nextFillerStart := injectFiller(items, fillerPool, fillerStart, filler.EveryCount, filler.Every, filler.MaxDuration)
+	withFiller, nextFillerStart := injectFiller(
+		items, fillerPool, fillerStart, filler.EveryCount, filler.Every, filler.MaxDuration)
 
 	return &Schedule{
 		Channel:     id,
@@ -96,7 +107,7 @@ func buildSchedule(ctx context.Context, p prober, id string, sources, extensions
 		Items:       withFiller,
 		FillerSeed:  fillerSeed,
 		FillerStart: nextFillerStart,
-	}, nil
+	}
 }
 
 // probeFile reads f from the cache or probes it, reporting ok=false (and logging) when it
@@ -111,6 +122,7 @@ func probeFile(ctx context.Context, p prober, cache map[probeKey]probeResult, f 
 			logging.Error(ctx, err, "failed to probe file duration, excluding", "file", f.path)
 			return probeResult{}, false
 		}
+		cache[cacheKey] = res
 	}
 	if res.Duration <= 0 {
 		return probeResult{}, false
@@ -144,7 +156,6 @@ func newItem(f scannedFile, res probeResult) Item {
 	}
 }
 
-// defaultFillerInterval spaces breaks when filler is enabled but no cadence is configured.
 const defaultFillerInterval = time.Hour
 
 // injectFiller inserts filler breaks between content, on a count (everyCount) or content-playtime
@@ -215,17 +226,14 @@ func deriveEpisode(file, episodeTag string, probeSeason, probeEpisode int, sourc
 func orderItems(items []Item, order Order, sources []string, seasonPatterns []*regexp.Regexp, seed int64) []Item {
 	switch order {
 	case OrderShuffle:
-		shuffle(items, seed)
+		return shuffle(items, seed)
 	case OrderInterleave:
-		items = interleave(items, sources, seasonPatterns)
+		return interleave(items, sources, seasonPatterns)
 	case OrderSpread:
-		items = spread(items, sources, seasonPatterns)
+		return spread(items, sources, seasonPatterns)
 	default:
-		sort.Slice(items, func(i, j int) bool {
-			return itemLess(items[i], items[j])
-		})
+		return sortNatural(items)
 	}
-	return items
 }
 
 // itemLess orders the schedule by the composite key (directory, season, episode,
@@ -329,8 +337,6 @@ func relToSource(file string, sources []string) (rel, source string) {
 	return filepath.Base(file), ""
 }
 
-// groupShows buckets items by show (container tag, else season-aware path), sorting each
-// show's episodes by episode order and returning the shows ordered by name (natsort).
 func groupShows(items []Item, sources []string, seasonPatterns []*regexp.Regexp) [][]Item {
 	groups := map[string][]Item{}
 	for _, it := range items {
@@ -403,59 +409,62 @@ func spread(items []Item, sources []string, seasonPatterns []*regexp.Regexp) []I
 	return out
 }
 
-func shuffle(items []Item, seed int64) {
+func sortNatural(items []Item) []Item {
+	sort.Slice(items, func(i, j int) bool {
+		return itemLess(items[i], items[j])
+	})
+	return items
+}
+
+func shuffle(items []Item, seed int64) []Item {
 	r := rand.New(rand.NewSource(seed))
 	r.Shuffle(len(items), func(i, j int) {
 		items[i], items[j] = items[j], items[i]
 	})
+	return items
 }
 
-// locate uses pure-modulo wrap over the total cycle, so item order is fixed until the
-// file set changes.
-func locate(s *Schedule, now time.Time) (index int, item Item, offset float64, nextBoundary time.Time, ok bool) {
+// locate reports which item plays at now, the offset into it (seconds), and when it ends, over a
+// modulo wrap of the total cycle anchored at s.Anchor. The last item is an unconditional catch-all
+// so float drift near the cycle end can't fall through to "no item"; the boundary is floored one
+// nanosecond past now so the entry re-clock and EPG end never land on an already-consumed slot.
+func locate(s *Schedule, now time.Time) (int, Item, float64, time.Time, bool) {
 	if s.isEmpty() {
 		return 0, Item{}, 0, time.Time{}, false
 	}
 
 	total := s.total()
-	elapsed := mathMod(float64(now.Unix()-s.Anchor), total)
+	nowSec := float64(now.UnixNano()) / float64(time.Second)
+	elapsed := mathMod(nowSec-float64(s.Anchor), total)
 
-	cycleStart := now.Add(-time.Duration(elapsed * float64(time.Second)))
-
+	lastIdx := len(s.Items) - 1
 	var acc float64
-	for i, it := range s.Items {
+	for i := range lastIdx {
+		it := s.Items[i]
 		if elapsed < acc+it.Duration {
-			offset = elapsed - acc
-			boundary := cycleStart.Add(time.Duration((acc + it.Duration) * float64(time.Second)))
-			return i, it, offset, boundary, true
+			d := max(time.Duration((acc+it.Duration-elapsed)*float64(time.Second)), time.Nanosecond)
+			return i, it, elapsed - acc, now.Add(d), true
 		}
 		acc += it.Duration
 	}
 
-	// Floating point edge: land on the last item.
-	lastIdx := len(s.Items) - 1
-	last := s.Items[lastIdx]
-	boundary := cycleStart.Add(time.Duration(total * float64(time.Second)))
-	return lastIdx, last, last.Duration, boundary, true
+	it := s.Items[lastIdx]
+	d := max(time.Duration((acc+it.Duration-elapsed)*float64(time.Second)), time.Nanosecond)
+	return lastIdx, it, elapsed - acc, now.Add(d), true
 }
 
-// earliestRemovedAir returns the soonest next occurrence in old's looping timeline of a file
-// present in old but absent from s, and whether any such file exists. The result lies in
-// [now, now+total): a removed file that is airing right now reports its next loop occurrence,
-// which is exactly when the running transcode would reopen (and fail on) the deleted file. It
-// is used to decide whether a removal must be adopted before the daily swap.
-func earliestRemovedAir(old, s *Schedule, now time.Time) (time.Time, bool) {
+// earliestRemovedAir returns the soonest start, in old's looping timeline, of a file present in
+// old but absent from present, and whether any such file exists. The result lies in [now,
+// now+total): it is when the running transcode would next open (and fail on) the deleted file,
+// used to decide whether a removal must be adopted before the daily swap. present is the set of
+// files still on disk (from a cheap scan), so this needs no probe.
+func earliestRemovedAir(old *Schedule, present map[string]struct{}, now time.Time) (time.Time, bool) {
 	total := old.total()
 	if total <= 0 {
 		return time.Time{}, false
 	}
 
-	present := make(map[string]struct{}, len(s.Items))
-	for _, it := range s.Items {
-		present[it.File] = struct{}{}
-	}
-
-	elapsed := mathMod(float64(now.Unix()-old.Anchor), total)
+	elapsed := mathMod(float64(now.UnixNano())/float64(time.Second)-float64(old.Anchor), total)
 
 	var acc float64
 	best := time.Time{}

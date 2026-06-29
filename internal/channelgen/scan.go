@@ -3,6 +3,7 @@ package channelgen
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"hash"
 	"io/fs"
@@ -46,6 +47,9 @@ func scanSources(sources []string, extensions []string) ([]scannedFile, error) {
 
 	for _, source := range sources {
 		info, err := os.Stat(source)
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
 		if err != nil {
 			return nil, err
 		}

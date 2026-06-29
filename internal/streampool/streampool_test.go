@@ -420,10 +420,7 @@ func TestRunPlayout_BacksOffWhenNoItem(t *testing.T) {
 	}
 }
 
-// On a clean exit before the slot boundary the supervisor must wait, not re-resolve and
-// replay the same file. The command runs longer than minRunDuration and exits cleanly, so
-// without the fix the loop re-resolves immediately (spinning); with it, it waits at the
-// boundary and resolves only once before the deadline.
+// On a clean exit before the slot boundary the supervisor must wait it out, resolving only once.
 func TestRunPlayout_WaitsOutSlotOnEarlyCleanExit(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2500*time.Millisecond)
 	defer cancel()
