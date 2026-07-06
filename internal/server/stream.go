@@ -293,7 +293,7 @@ func (s *Server) tryStream(
 	}
 	if err != nil {
 		logging.Error(ctx, err, "failed to get stream", "stream_index", streamIndex)
-		return streamResult{false, false, false}
+		return streamResult{isUpstreamError: true}
 	}
 	defer func() { _ = reader.Close() }()
 
