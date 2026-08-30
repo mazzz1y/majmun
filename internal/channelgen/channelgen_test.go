@@ -962,7 +962,7 @@ func TestResolveCurrentSkipsMissing(t *testing.T) {
 		},
 	}
 
-	it, ok := c.ResolveCurrent(now)
+	it, ok := c.ResolveCurrent(now, 0)
 	if !ok {
 		t.Fatal("resolve failed")
 	}
@@ -985,7 +985,7 @@ func TestResolveCurrentOffset(t *testing.T) {
 	warmUp(t, c, now)
 
 	resolveAt := now.Add(30 * time.Second)
-	it, ok := c.ResolveCurrent(resolveAt)
+	it, ok := c.ResolveCurrent(resolveAt, 0)
 	if !ok {
 		t.Fatal("resolve failed")
 	}
@@ -1010,7 +1010,7 @@ func TestResolveCurrentCatchUp(t *testing.T) {
 	warmUp(t, c, now)
 
 	// 40s in the past wraps onto the 100s loop at offset 60.
-	it, ok := c.ResolveCurrent(now.Add(-40 * time.Second))
+	it, ok := c.ResolveCurrent(now, 40*time.Second)
 	if !ok {
 		t.Fatal("resolve failed")
 	}
@@ -1058,6 +1058,292 @@ func TestCatchupWindow(t *testing.T) {
 	}
 }
 
+// NextBoundary must be comparable against real time.Now() by the caller, so a catch-up
+// playout must never return it in the past.
+func TestPlayoutNextBoundaryIsRealTime(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "a.mkv"))
+
+	p := newFakeProber()
+	p.durations[filepath.Join(dir, "a.mkv")] = 100
+	c, _ := newTestChannel(t, "c", []string{dir}, p)
+	anchor := time.Unix(1000, 0)
+	warmUp(t, c, anchor)
+
+	shift := 40 * time.Minute
+	now := anchor.Add(time.Hour) // well past the 100s loop many times over
+	playout := c.NewPlayout(shift)
+
+	it, ok := playout.Next(now)
+	if !ok {
+		t.Fatal("resolve failed")
+	}
+	if it.NextBoundary.Before(now) {
+		t.Errorf("expected NextBoundary in the future of real now (%v), got %v", now, it.NextBoundary)
+	}
+}
+
+// A catch-up playout's shifted position must never leak into the channel's shared lastBuilt,
+// which live viewers of the same channel depend on.
+func TestPlayoutNextDoesNotBackdateLastBuilt(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "a.mkv"))
+
+	p := newFakeProber()
+	p.durations[filepath.Join(dir, "a.mkv")] = 100
+	c, _ := newTestChannel(t, "c", []string{dir}, p)
+	c.refresh = time.Hour
+	anchor := time.Unix(1000, 0)
+	warmUp(t, c, anchor)
+
+	// Force a rebuild so lastBuilt is actually rewritten and observable.
+	c.mu.Lock()
+	c.dirty = true
+	c.mu.Unlock()
+
+	shift := 40 * time.Minute
+	now := anchor.Add(time.Minute)
+	playout := c.NewPlayout(shift)
+
+	if _, ok := playout.Next(now); !ok {
+		t.Fatal("resolve failed")
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for c.building.Load() && time.Now().Before(deadline) {
+		time.Sleep(2 * time.Millisecond)
+	}
+
+	c.mu.Lock()
+	lastBuilt := c.lastBuilt
+	c.mu.Unlock()
+	if !lastBuilt.Equal(now) {
+		t.Errorf("catch-up playout must stamp lastBuilt with real now (%v), got %v "+
+			"(shifted schedule time would be %v)", now, lastBuilt, now.Add(-shift))
+	}
+}
+
+func TestResumeShift_SameUTCResumesFromSavedPosition(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "a.mkv"))
+	p := newFakeProber()
+	p.durations[filepath.Join(dir, "a.mkv")] = 3600
+	c, _ := newTestChannel(t, "c", []string{dir}, p)
+	c.epgDuration = 7 * 24 * time.Hour
+	now := time.Unix(100000, 0)
+	warmUp(t, c, now)
+
+	requested := now.Add(-time.Hour)
+	stoppedAt := requested.Add(10 * time.Minute) // schedule position the session reached
+
+	c.SaveResume("client-a", requested, stoppedAt)
+
+	reconnectAt := now.Add(5 * time.Minute)
+	shift := c.ResumeShift("client-a", requested, reconnectAt)
+
+	wantShift := reconnectAt.Sub(stoppedAt)
+	if shift != wantShift {
+		t.Errorf("expected resume shift %v, got %v", wantShift, shift)
+	}
+}
+
+func TestResumeShift_DifferentUTCStartsFresh(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "a.mkv"))
+	p := newFakeProber()
+	p.durations[filepath.Join(dir, "a.mkv")] = 3600
+	c, _ := newTestChannel(t, "c", []string{dir}, p)
+	c.epgDuration = 7 * 24 * time.Hour
+	now := time.Unix(100000, 0)
+	warmUp(t, c, now)
+
+	firstRequested := now.Add(-time.Hour)
+	c.SaveResume("client-a", firstRequested, firstRequested.Add(10*time.Minute))
+
+	secondRequested := now.Add(-2 * time.Hour)
+	reconnectAt := now
+	shift := c.ResumeShift("client-a", secondRequested, reconnectAt)
+
+	wantShift := reconnectAt.Sub(secondRequested)
+	if shift != wantShift {
+		t.Errorf("a different utc must start fresh: expected shift %v, got %v", wantShift, shift)
+	}
+}
+
+func TestResumeShift_NoCursorStartsAtRequested(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "a.mkv"))
+	p := newFakeProber()
+	p.durations[filepath.Join(dir, "a.mkv")] = 3600
+	c, _ := newTestChannel(t, "c", []string{dir}, p)
+	c.epgDuration = 7 * 24 * time.Hour
+	now := time.Unix(100000, 0)
+	warmUp(t, c, now)
+
+	requested := now.Add(-time.Hour)
+	shift := c.ResumeShift("client-a", requested, now)
+
+	wantShift := now.Sub(requested)
+	if shift != wantShift {
+		t.Errorf("expected shift %v with no cursor, got %v", wantShift, shift)
+	}
+}
+
+func TestResumeShift_StaleCursorBeyondCatchupWindowIsDiscarded(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "a.mkv"))
+	p := newFakeProber()
+	p.durations[filepath.Join(dir, "a.mkv")] = 3600 // 1h loop
+	c, _ := newTestChannel(t, "c", []string{dir}, p)
+	c.epgDuration = 7 * 24 * time.Hour // loop (1h) caps the catch-up window
+	now := time.Unix(100000, 0)
+	warmUp(t, c, now)
+
+	requested := now.Add(-time.Hour)
+	// Saved position is 2h behind reconnectAt below, further than the 1h catch-up window.
+	stoppedAt := requested.Add(-time.Hour)
+	c.SaveResume("client-a", requested, stoppedAt)
+
+	reconnectAt := now
+	shift := c.ResumeShift("client-a", requested, reconnectAt)
+
+	wantShift := reconnectAt.Sub(requested)
+	if shift != wantShift {
+		t.Errorf("stale cursor beyond catch-up window must be discarded: expected shift %v, got %v", wantShift, shift)
+	}
+}
+
+// Mirrors the sequence stream.go runs per request. A client reconnecting with the same ?utc=
+// must resume, not rewind, while a different client on that utc still starts at the beginning.
+func TestCatchUpReconnect_ResumesForSameClientButNotOther(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "a.mkv"))
+	p := newFakeProber()
+	// A loop well longer than the session below, so CatchupWindow's staleness cap (min of
+	// epg_duration and one loop) never interferes with the resume math this test checks.
+	p.durations[filepath.Join(dir, "a.mkv")] = 24 * 3600
+	c, _ := newTestChannel(t, "c", []string{dir}, p)
+	c.epgDuration = 7 * 24 * time.Hour
+	anchor := time.Unix(100000, 0)
+	warmUp(t, c, anchor)
+
+	requested := anchor.Add(20 * time.Minute) // the programme's ?utc=
+
+	// Session 1 (client-a): connects, watches 40 minutes, then drops.
+	sessionStart := requested.Add(time.Hour)
+	shift1 := c.ResumeShift("client-a", requested, sessionStart)
+	playout1 := c.NewPlayout(shift1)
+	it1, ok := playout1.Next(sessionStart)
+	if !ok {
+		t.Fatal("session 1 resolve failed")
+	}
+	if it1.Offset != 20*60 { // requested is 20 minutes into the programme
+		t.Fatalf("expected initial offset 1200s, got %v", it1.Offset)
+	}
+	stoppedAt := sessionStart.Add(40 * time.Minute)
+	c.SaveResume("client-a", requested, stoppedAt.Add(-shift1))
+
+	// client-a reconnects with the same ?utc= shortly after: must resume exactly where it
+	// stopped (60 minutes into the programme, frozen — the reconnect gap does not advance
+	// schedule position), not rewind to 20 minutes.
+	reconnectAt := stoppedAt.Add(30 * time.Second)
+	shift2 := c.ResumeShift("client-a", requested, reconnectAt)
+	playout2 := c.NewPlayout(shift2)
+	it2, ok := playout2.Next(reconnectAt)
+	if !ok {
+		t.Fatal("reconnect resolve failed")
+	}
+	wantOffset := 60 * 60.0 // 60 minutes in, frozen regardless of the 30s reconnect gap
+	if diff := it2.Offset - wantOffset; diff > 1 || diff < -1 {
+		t.Errorf("client-a reconnect: expected offset ~%v (frozen), got %v (rewound to session start would be ~1200)",
+			wantOffset, it2.Offset)
+	}
+
+	// client-b requests the SAME ?utc= independently: must start at the programme's own
+	// beginning, not inherit client-a's cursor.
+	shiftOther := c.ResumeShift("client-b", requested, reconnectAt)
+	playoutOther := c.NewPlayout(shiftOther)
+	itOther, ok := playoutOther.Next(reconnectAt)
+	if !ok {
+		t.Fatal("client-b resolve failed")
+	}
+	if itOther.Offset != 20*60 {
+		t.Errorf("client-b must start at the requested utc's own offset (1200s), got %v; "+
+			"it must not inherit client-a's resume cursor", itOther.Offset)
+	}
+}
+
+// ClearResume is what the server calls on a live request: a client that returns to live and
+// later picks the same programme again must start at its beginning, not resurrect the cursor.
+func TestClearResume_DropsCursor(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "a.mkv"))
+	p := newFakeProber()
+	p.durations[filepath.Join(dir, "a.mkv")] = 3600
+	c, _ := newTestChannel(t, "c", []string{dir}, p)
+	c.epgDuration = 7 * 24 * time.Hour
+	now := time.Unix(100000, 0)
+	warmUp(t, c, now)
+
+	requested := now.Add(-time.Hour)
+	c.SaveResume("client-a", requested, requested.Add(10*time.Minute))
+	c.ClearResume("client-a")
+
+	shift := c.ResumeShift("client-a", requested, now)
+	wantShift := now.Sub(requested)
+	if shift != wantShift {
+		t.Errorf("expected shift %v after clearing cursor, got %v", wantShift, shift)
+	}
+}
+
+// TestProgrammesCycleMathMatchesLocate is a regression test: Programmes' cycle-origin
+// arithmetic must agree with locate's, or an EPG-derived ?utc= increasingly resolves to a
+// different item than the guide advertised. Uses a loop whose total has a fractional second
+// so int64 truncation (the historical bug) would visibly drift after many cycles.
+func TestProgrammesCycleMathMatchesLocate(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "a.mkv"))
+	p := newFakeProber()
+	p.durations[filepath.Join(dir, "a.mkv")] = 99.5 // fractional-second loop
+	c, _ := newTestChannel(t, "c", []string{dir}, p)
+	c.epgDuration = time.Hour
+	anchor := time.Unix(1000, 0)
+	warmUp(t, c, anchor)
+
+	// Many cycles out: with the old int64(total) truncation this would drift by whole
+	// seconds and the EPG programme boundaries would disagree with locate's.
+	farOut := anchor.Add(10000 * 995 * time.Millisecond)
+
+	progs, err := c.Programmes(context.Background(), farOut)
+	if err != nil {
+		t.Fatalf("Programmes: %v", err)
+	}
+
+	_, item, _, boundary, ok := locate(c.schedule, farOut)
+	if !ok {
+		t.Fatal("locate failed")
+	}
+
+	var found bool
+	for _, pr := range progs {
+		if pr.Stop.Equal(boundary) {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected a programme ending at locate's boundary %v (item %q), got stops: %v",
+			boundary, item.File, programmeStops(progs))
+	}
+}
+
+func programmeStops(progs []Programme) []time.Time {
+	out := make([]time.Time, len(progs))
+	for i, p := range progs {
+		out[i] = p.Stop
+	}
+	return out
+}
+
 func TestResolveCurrentEmptyChannel(t *testing.T) {
 	dir := t.TempDir() // no media files
 	p := newFakeProber()
@@ -1065,7 +1351,7 @@ func TestResolveCurrentEmptyChannel(t *testing.T) {
 	now := time.Unix(1000, 0)
 	warmUp(t, c, now)
 
-	_, ok := c.ResolveCurrent(now)
+	_, ok := c.ResolveCurrent(now, 0)
 	if ok {
 		t.Error("expected ok=false for empty channel")
 	}
@@ -1309,13 +1595,13 @@ func TestResolveDoesNotBlockOnFirstBuild(t *testing.T) {
 	now := time.Unix(1000, 0)
 
 	// First call must return immediately without a built schedule.
-	if _, ok := c.ResolveCurrent(now); ok {
+	if _, ok := c.ResolveCurrent(now, 0); ok {
 		t.Error("expected ok=false while first build runs")
 	}
 
 	warmUp(t, c, now)
 
-	if _, ok := c.ResolveCurrent(now); !ok {
+	if _, ok := c.ResolveCurrent(now, 0); !ok {
 		t.Error("expected ok=true after build completes")
 	}
 }

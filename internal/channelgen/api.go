@@ -31,15 +31,17 @@ type PlayItem struct {
 	AudioLanguages []string
 }
 
-// ResolveCurrent returns the file to play at now without blocking on a scan or probe. ok=false
-// means the schedule is still building or has no playable items; missing files are skipped.
-func (c *Channel) ResolveCurrent(now time.Time) (PlayItem, bool) {
+// ResolveCurrent returns the file to play at now-shift without blocking on a scan or probe.
+// ok=false means the schedule is still building or has no playable items; missing files are
+// skipped. As in Playout.Next, only the schedule lookup uses the trailing position; the
+// rebuild decisions shared with live viewers stay on real time.
+func (c *Channel) ResolveCurrent(now time.Time, shift time.Duration) (PlayItem, bool) {
 	s := c.current(now)
 	if s == nil {
 		return PlayItem{}, false
 	}
 
-	index, _, offset, boundary, ok := locate(s, now)
+	index, _, offset, boundary, ok := locate(s, now.Add(-shift))
 	if !ok {
 		return PlayItem{}, false
 	}
@@ -84,35 +86,48 @@ func (c *Channel) resolveFrom(s *Schedule, index int, offset float64, boundary, 
 
 // Playout locates the first item by wall clock (the live entry point), then advances the schedule
 // sequentially, re-clocking only to enter a rebuilt schedule where the old index no longer maps.
+//
+// It owns the catch-up offset: schedule positions resolve at now-shift, while everything
+// crossing the package boundary stays in real time.
 type Playout struct {
 	ch      *Channel
+	shift   time.Duration
 	sched   *Schedule
 	index   int
 	started bool
 }
 
-func (c *Channel) NewPlayout() *Playout {
-	return &Playout{ch: c}
+// NewPlayout starts a playout trailing wall clock by shift; zero shift is live.
+func (c *Channel) NewPlayout(shift time.Duration) *Playout {
+	return &Playout{ch: c, shift: shift}
 }
 
-// Next returns the file to play next, advancing the cursor. ok=false means no playable item yet.
+func (p *Playout) Shift() time.Duration {
+	return p.shift
+}
+
+// Next returns the file to play next, advancing the cursor. now and the returned NextBoundary
+// are both wall-clock. ok=false means no playable item yet.
 func (p *Playout) Next(now time.Time) (PlayItem, bool) {
+	// Rebuild decisions are shared with live viewers, so they run on real time.
 	s := p.ch.current(now)
 	if s == nil || s.isEmpty() {
 		p.started = false
 		return PlayItem{}, false
 	}
 
+	schedNow := now.Add(-p.shift)
+
 	if p.started && s == p.sched {
 		next := (p.index + 1) % len(s.Items)
-		boundary := now.Add(time.Duration(s.Items[next].Duration * float64(time.Second)))
+		boundary := schedNow.Add(time.Duration(s.Items[next].Duration * float64(time.Second)))
 		if item, idx, ok := p.ch.resolveFrom(s, next, 0, boundary, now); ok {
 			p.index = idx
-			return item, true
+			return p.toRealTime(item), true
 		}
 	}
 
-	index, _, offset, boundary, ok := locate(s, now)
+	index, _, offset, boundary, ok := locate(s, schedNow)
 	if !ok {
 		p.started = false
 		return PlayItem{}, false
@@ -123,7 +138,15 @@ func (p *Playout) Next(now time.Time) (PlayItem, bool) {
 		return PlayItem{}, false
 	}
 	p.sched, p.index, p.started = s, idx, true
-	return item, true
+	return p.toRealTime(item), true
+}
+
+// toRealTime converts a boundary resolved in schedule time back to wall clock.
+func (p *Playout) toRealTime(item PlayItem) PlayItem {
+	if !item.NextBoundary.IsZero() {
+		item.NextBoundary = item.NextBoundary.Add(p.shift)
+	}
+	return item
 }
 
 // ClampStart caps a catch-up start at now (future = live). Past times wrap on the loop.
@@ -168,12 +191,14 @@ func (c *Channel) Programmes(ctx context.Context, now time.Time) ([]Programme, e
 	start := now.Add(-backfill)
 	end := now.Add(c.epgDuration)
 
-	elapsed := float64(start.Unix() - s.Anchor)
-	cycles := int64(math.Floor(elapsed / total))
-	cycleStart := s.Anchor + cycles*int64(total)
+	// Full float64 precision, matching locate's mathMod: truncating total to int64 drifts the
+	// cycle origin off the playout timeline by its fractional second on every elapsed loop.
+	elapsed := float64(start.UnixNano())/float64(time.Second) - float64(s.Anchor)
+	cycles := math.Floor(elapsed / total)
+	cycleStart := float64(s.Anchor) + cycles*total
 
 	var programmes []Programme
-	cursor := time.Unix(cycleStart, 0)
+	cursor := time.Unix(0, int64(cycleStart*float64(time.Second)))
 	for cursor.Before(end) {
 		for i := 0; i < len(s.Items); i++ {
 			it := s.Items[i]

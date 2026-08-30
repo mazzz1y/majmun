@@ -485,6 +485,53 @@ func TestGetReader_SingleClientReceivesData(t *testing.T) {
 	}
 }
 
+// OnStop must fire exactly once, after the last client leaves, so a caller can rely on it as
+// the single point to persist where playback stopped.
+func TestGetReader_OnStopCalledOnceWhenSegmenterDrains(t *testing.T) {
+	skipWithoutFFmpeg(t)
+
+	d := New()
+	defer d.Stop()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	var stops atomic.Int64
+	req := Request{
+		StreamKey:      "test-onstop",
+		StreamURL:      testStreamURL,
+		ClientStreamer: testClientStreamer,
+		Runner:         testSegmenterCfg,
+		OnStop:         func(time.Time) { stops.Add(1) },
+	}
+
+	reader, err := d.GetReader(ctx, req)
+	if err != nil {
+		t.Fatalf("GetReader failed: %v", err)
+	}
+
+	buf := make([]byte, 64*1024)
+	if _, err := reader.Read(buf); err != nil {
+		t.Fatalf("Read failed: %v", err)
+	}
+
+	if n := stops.Load(); n != 0 {
+		t.Fatalf("expected OnStop not yet called while client is reading, got %d calls", n)
+	}
+
+	if err := reader.Close(); err != nil {
+		t.Fatalf("Close failed: %v", err)
+	}
+
+	deadline := time.Now().Add(5 * time.Second)
+	for stops.Load() == 0 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if n := stops.Load(); n != 1 {
+		t.Errorf("expected OnStop called exactly once after last client left, got %d", n)
+	}
+}
+
 func TestGetReader_TwoClientsShareOneSegmenter(t *testing.T) {
 	skipWithoutFFmpeg(t)
 

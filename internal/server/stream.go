@@ -134,11 +134,24 @@ func (s *Server) handleChannelStream(
 
 	gen := channel.Generator()
 
-	// shift offsets wall-clock to a past start (TiviMate-style ?utc=); zero = live.
 	now := time.Now()
-	shift := now.Sub(channelStart(gen, r, now))
+	requested := channelStart(gen, r, now)
+	resumeKey := client.Name()
 
-	if _, ok := gen.ResolveCurrent(now.Add(-shift)); !ok {
+	// ?utc= has second resolution, so a client asking for the current programme lands a
+	// fraction of a second in the past. Only a whole second of lag is a real rewind.
+	isCatchup := now.Sub(requested) >= time.Second
+
+	// Catch-up resumes where this client's session stopped, if it requested the same
+	// programme; live drops any stale cursor so a later catch-up on that utc starts fresh.
+	var shift time.Duration
+	if isCatchup {
+		shift = gen.ResumeShift(resumeKey, requested, now)
+	} else {
+		gen.ClearResume(resumeKey)
+	}
+
+	if _, ok := gen.ResolveCurrent(now, shift); !ok {
 		logging.Info(ctx, "channel not ready, serving placeholder")
 		w.Header().Set("Content-Type", streamContentType)
 		if _, err := channel.UpstreamErrorStreamer().RunWithStdout(ctx, w); err != nil {
@@ -147,19 +160,27 @@ func (s *Server) handleChannelStream(
 		return
 	}
 
-	// Live clients share one segmenter per channel; each distinct catch-up position gets its own.
+	// Live clients share one segmenter per channel. Catch-up is per client: resume ties the
+	// position to that client's cursor, and the pool joins an existing segmenter without
+	// consulting the joiner's NextItem, so a shared key would leak one position into another.
 	streamKey := channel.ID()
-	if shift > 0 {
-		streamKey = channel.ID() + ":utc=" + strconv.FormatInt(now.Add(-shift).Unix(), 10)
+	if isCatchup {
+		streamKey = channel.ID() + ":utc=" + strconv.FormatInt(requested.Unix(), 10) + ":" + client.Name()
 	}
 
-	playout := gen.NewPlayout()
+	playout := gen.NewPlayout(shift)
 	streamReq := streampool.Request{
 		StreamKey:      streamKey,
 		ClientStreamer: channel.ClientStreamer,
 		Runner:         channel.Playout(),
+		OnStop: func(at time.Time) {
+			// Live sessions have no position to remember: they re-enter at the wall clock.
+			if isCatchup {
+				gen.SaveResume(resumeKey, requested, at.Add(-playout.Shift()))
+			}
+		},
 		NextItem: func(now time.Time) (streampool.PlayItem, bool) {
-			it, ok := playout.Next(now.Add(-shift))
+			it, ok := playout.Next(now)
 			if !ok {
 				return streampool.PlayItem{}, false
 			}

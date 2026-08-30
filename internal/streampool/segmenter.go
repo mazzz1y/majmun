@@ -34,6 +34,9 @@ type segmenter struct {
 	done        bool // guarded by segmenterPool.mu; mutate only via join/removeClient
 	emptyChan   chan struct{}
 	emptyOnce   sync.Once
+	// emptyAt is written inside emptyOnce before emptyChan closes, so any reader that observed
+	// the close sees it.
+	emptyAt time.Time
 
 	ready     chan struct{}
 	readyOnce sync.Once
@@ -162,6 +165,11 @@ func (s *segmenter) waitEmpty() <-chan struct{} {
 	return s.emptyChan
 }
 
+// stoppedAt is when the segmenter drained. Valid only after waitEmpty has fired.
+func (s *segmenter) stoppedAt() time.Time {
+	return s.emptyAt
+}
+
 func (s *segmenter) stop() {
 	s.cancel()
 	s.notifyEmpty()
@@ -173,6 +181,7 @@ func (s *segmenter) cleanup() {
 
 func (s *segmenter) notifyEmpty() {
 	s.emptyOnce.Do(func() {
+		s.emptyAt = time.Now()
 		close(s.emptyChan)
 	})
 }

@@ -74,6 +74,9 @@ type Request struct {
 	// NextItem, when set, switches the segmenter to per-file playout: it runs one process
 	// per resolved file instead of a single long-lived command.
 	NextItem NextItemFunc
+	// OnStop, when set, is called once with the moment the segmenter stopped (all clients
+	// gone, or the pool shutting down), so a caller can persist a resume position.
+	OnStop func(at time.Time)
 }
 
 type StreamPool struct {
@@ -166,6 +169,11 @@ func (d *StreamPool) runSegmenter(ctx context.Context, req Request, seg *segment
 	seg.start(segCtx)
 
 	<-seg.waitEmpty()
+	if req.OnStop != nil {
+		// stoppedAt is when the drain was observed, not when teardown finishes: a viewer
+		// reconnecting during teardown must resume from where playback actually stopped.
+		req.OnStop(seg.stoppedAt())
+	}
 }
 
 func segmentDir(baseDir, streamKey string) string {

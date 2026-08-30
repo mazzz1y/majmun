@@ -83,6 +83,11 @@ type Channel struct {
 	lastBuilt     time.Time
 	pendingSwapAt time.Time
 	building      atomic.Bool
+
+	// resumeMu is separate from mu: cursors are per-viewer session state read on the streaming
+	// path, where blocking on a rebuild would stall an unrelated viewer.
+	resumeMu sync.Mutex
+	resume   map[string]resumeCursor
 }
 
 func NewChannel(cfg Config) *Channel {
