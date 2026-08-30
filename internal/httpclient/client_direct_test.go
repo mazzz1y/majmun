@@ -5,6 +5,7 @@ import (
 	"majmun/internal/config/common"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"testing"
 )
 
@@ -121,14 +122,7 @@ func TestNewDirectHTTPClient_Transport(t *testing.T) {
 	}
 
 	for _, expected := range extraHeaders {
-		found := false
-		for _, actual := range transport.headers {
-			if actual.Name == expected.Name && actual.Value == expected.Value {
-				found = true
-				break
-			}
-		}
-		if !found {
+		if !slices.Contains(transport.headers, expected) {
 			t.Errorf("header %s:%s not found in transport", expected.Name, expected.Value)
 		}
 	}

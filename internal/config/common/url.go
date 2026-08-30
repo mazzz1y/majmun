@@ -33,6 +33,5 @@ func (ur *URL) String() string {
 }
 
 func (ur *URL) ToURL() *url.URL {
-	u := url.URL(*ur)
-	return &u
+	return new(url.URL(*ur))
 }

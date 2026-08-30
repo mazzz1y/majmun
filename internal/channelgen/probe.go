@@ -1,6 +1,7 @@
 package channelgen
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"os/exec"
@@ -124,10 +125,7 @@ func parseProbeOutput(out []byte) (probeResult, error) {
 			res.FrameRate = st.RFrameRate
 			res.FieldOrder = st.FieldOrder
 		case "audio":
-			lang := strings.TrimSpace(st.Tags["language"])
-			if lang == "" {
-				lang = "und"
-			}
+			lang := cmp.Or(strings.TrimSpace(st.Tags["language"]), "und")
 			res.AudioLanguages = append(res.AudioLanguages, lang)
 			if haveAudio {
 				continue

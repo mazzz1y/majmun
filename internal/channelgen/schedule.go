@@ -7,23 +7,23 @@ type Item struct {
 	Description    string   `json:"description,omitempty"`
 	Category       string   `json:"category,omitempty"`
 	Date           string   `json:"date,omitempty"`
-	Season         int      `json:"season,omitempty"`
-	Episode        int      `json:"episode,omitempty"`
+	Season         int      `json:"season,omitzero"`
+	Episode        int      `json:"episode,omitzero"`
 	EpisodeTag     string   `json:"episode_tag,omitempty"`
-	IsFiller       bool     `json:"is_filler,omitempty"`
+	IsFiller       bool     `json:"is_filler,omitzero"`
 	Size           int64    `json:"size"`
 	MTime          int64    `json:"mtime"`
 	Duration       float64  `json:"duration"`
 	VideoCodec     string   `json:"video_codec,omitempty"`
-	Width          int      `json:"width,omitempty"`
-	Height         int      `json:"height,omitempty"`
-	AspectWidth    int      `json:"aspect_width,omitempty"`
+	Width          int      `json:"width,omitzero"`
+	Height         int      `json:"height,omitzero"`
+	AspectWidth    int      `json:"aspect_width,omitzero"`
 	PixelFormat    string   `json:"pixel_format,omitempty"`
 	FrameRate      string   `json:"frame_rate,omitempty"`
 	FieldOrder     string   `json:"field_order,omitempty"`
 	AudioCodec     string   `json:"audio_codec,omitempty"`
-	AudioChannels  int      `json:"audio_channels,omitempty"`
-	SampleRate     int      `json:"sample_rate,omitempty"`
+	AudioChannels  int      `json:"audio_channels,omitzero"`
+	SampleRate     int      `json:"sample_rate,omitzero"`
 	AudioLanguages []string `json:"audio_languages,omitempty"`
 }
 
@@ -37,11 +37,11 @@ type Schedule struct {
 	// FillerSeed shuffles the filler pool independently of content order, so filler.order: shuffle
 	// is randomized even when content is not shuffled. Sticky across rebuilds, like Seed, to keep
 	// the pool order (and thus the FillerStart cursor) stable.
-	FillerSeed int64 `json:"filler_seed,omitempty"`
+	FillerSeed int64 `json:"filler_seed,omitzero"`
 	// FillerStart is the filler-pool index the next rebuild begins from, so a pool larger than one
 	// loop's breaks rotates through all clips over successive rebuilds.
-	FillerStart   int   `json:"filler_start,omitempty"`
-	PendingSwapAt int64 `json:"pending_swap_at,omitempty"`
+	FillerStart   int   `json:"filler_start,omitzero"`
+	PendingSwapAt int64 `json:"pending_swap_at,omitzero"`
 }
 
 func (s *Schedule) total() float64 {

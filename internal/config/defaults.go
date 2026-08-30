@@ -29,11 +29,11 @@ func DefaultConfig() *Config {
 		Proxy: proxy.Proxy{
 			HTTPClient: common.HTTPClient{
 				Cache: common.Cache{
-					Enabled:     boolPtr(true),
-					Path:        stringPtr("cache"),
-					TTL:         durationPtr(24 * time.Hour),
-					Retention:   durationPtr(24 * time.Hour * 30),
-					Compression: boolPtr(false),
+					Enabled:     new(true),
+					Path:        new("cache"),
+					TTL:         new(common.Duration(24 * time.Hour)),
+					Retention:   new(common.Duration(24 * time.Hour * 30)),
+					Compression: new(false),
 				},
 			},
 			Stream: proxy.Handler{
@@ -71,26 +71,24 @@ func DefaultConfig() *Config {
 				ReadyTimeout: common.Duration(30 * time.Second),
 			},
 			Error: proxy.Error{
-				Handler: proxy.Handler{
-					Command: common.StringOrArr{
-						"ffmpeg",
-						"-v", "{{ .ffmpeg_log_level }}",
-						"-f", "lavfi",
-						"-i", "color=#301934:size=1280x720:rate=1",
-						"-vf", "drawtext=text='{{.message}}':fontcolor=white:fontsize=36:x=(w-text_w)/2:y=(h-text_h)/2+(line_h/2):text_align=C+M",
-						"-c:v", "libx264",
-						"-preset", "ultrafast",
-						"-tune", "stillimage",
-						"-g", "1",
-						"-r", "1",
-						"-t", "15",
-						"-pix_fmt", "yuv420p",
-						"-f", "mpegts",
-						"pipe:1",
-					},
-					TemplateVars: []common.NameValue{
-						{Name: "ffmpeg_log_level", Value: "fatal"},
-					},
+				Command: common.StringOrArr{
+					"ffmpeg",
+					"-v", "{{ .ffmpeg_log_level }}",
+					"-f", "lavfi",
+					"-i", "color=#301934:size=1280x720:rate=1",
+					"-vf", "drawtext=text='{{.message}}':fontcolor=white:fontsize=36:x=(w-text_w)/2:y=(h-text_h)/2+(line_h/2):text_align=C+M",
+					"-c:v", "libx264",
+					"-preset", "ultrafast",
+					"-tune", "stillimage",
+					"-g", "1",
+					"-r", "1",
+					"-t", "15",
+					"-pix_fmt", "yuv420p",
+					"-f", "mpegts",
+					"pipe:1",
+				},
+				TemplateVars: []common.NameValue{
+					{Name: "ffmpeg_log_level", Value: "fatal"},
 				},
 				RateLimitExceeded: proxy.Handler{
 					TemplateVars: []common.NameValue{
@@ -132,7 +130,7 @@ func DefaultConfig() *Config {
 				`(?i)\be[ ._-]?(\d{1,4})\b`,                                         // E05
 				`^\s*(\d{1,4})\.`,                                                   // 20. Title (dot required)
 			}...),
-			RefreshInterval: durationPtr(30 * time.Minute),
+			RefreshInterval: new(common.Duration(30 * time.Minute)),
 			EPGDuration:     common.Duration(7 * 24 * time.Hour),
 			ScheduleSwapAt:  "04:00",
 			Metadata: PlayoutMetadata{
@@ -148,17 +146,4 @@ func DefaultConfig() *Config {
 			},
 		},
 	}
-}
-
-func boolPtr(b bool) *bool {
-	return &b
-}
-
-func stringPtr(s string) *string {
-	return &s
-}
-
-func durationPtr(d time.Duration) *common.Duration {
-	cd := common.Duration(d)
-	return &cd
 }

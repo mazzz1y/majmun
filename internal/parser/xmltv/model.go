@@ -70,8 +70,8 @@ type CommonElement struct {
 
 type Icon struct {
 	Source string `xml:"src,attr"              json:"source"`
-	Width  int    `xml:"width,attr,omitempty"  json:"width,omitempty"`
-	Height int    `xml:"height,attr,omitempty" json:"height,omitempty"`
+	Width  int    `xml:"width,attr,omitempty"  json:"width,omitzero"`
+	Height int    `xml:"height,attr,omitempty" json:"height,omitzero"`
 }
 
 type Credits struct {

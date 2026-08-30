@@ -2,8 +2,10 @@ package m3u8
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/url"
 	"regexp"
 	"strconv"
@@ -69,7 +71,7 @@ func (d *M3UDecoder) Decode() (any, error) {
 
 	track, err := d.parseNextTrack()
 	if err != nil {
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			d.done = true
 			d.drainReader()
 		}
@@ -99,10 +101,7 @@ func (d *M3UDecoder) parseNextTrack() (*Track, error) {
 		}
 
 		if track != nil && hasWhitelistedTagPrefix(line) {
-			tagMap := parseTags(line)
-			for key, value := range tagMap {
-				track.Tags[key] = value
-			}
+			maps.Copy(track.Tags, parseTags(line))
 			continue
 		}
 
@@ -153,10 +152,10 @@ func parseExtInfLine(line string) (*Track, error) {
 		}
 	}
 
-	titleParts := strings.Split(remainingContent, ",")
-	if len(titleParts) > 1 {
-		track.Name = strings.TrimSpace(titleParts[len(titleParts)-1])
-	} else if len(titleParts) == 1 && len(attrMatches) == 0 {
+	_, title, found := strings.CutLast(remainingContent, ",")
+	if found {
+		track.Name = strings.TrimSpace(title)
+	} else if len(attrMatches) == 0 {
 		track.Name = strings.TrimSpace(remainingContent)
 	}
 
@@ -182,10 +181,9 @@ func parseTags(line string) map[string]string {
 
 		var key, value string
 		if prefix == "#EXT-X-" {
-			parts := strings.SplitN(line, ":", 2)
-			if len(parts) > 1 {
-				key = strings.TrimPrefix(parts[0], "#")
-				value = parts[1]
+			if before, after, found := strings.Cut(line, ":"); found {
+				key = strings.TrimPrefix(before, "#")
+				value = after
 			}
 		} else {
 			key = strings.TrimSuffix(strings.TrimPrefix(prefix, "#"), ":")
@@ -209,7 +207,7 @@ func (d *M3UDecoder) drainReader() {
 	buf := make([]byte, 64)
 	for {
 		_, err := d.reader.Read(buf)
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {

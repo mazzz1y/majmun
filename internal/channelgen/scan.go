@@ -1,6 +1,7 @@
 package channelgen
 
 import (
+	"cmp"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -10,7 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -76,8 +77,8 @@ func scanSources(sources []string, extensions []string) ([]scannedFile, error) {
 		}
 	}
 
-	sort.Slice(files, func(i, j int) bool {
-		return files[i].path < files[j].path
+	slices.SortFunc(files, func(a, b scannedFile) int {
+		return cmp.Compare(a.path, b.path)
 	})
 	return files, nil
 }

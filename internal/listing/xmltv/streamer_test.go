@@ -78,7 +78,7 @@ func TestNewStreamer(t *testing.T) {
 }
 
 func TestStreamer_WriteTo(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	streamer := createStreamer([]listing.EPG{}, nil)
 	buf := bytes.NewBuffer(nil)
 	_, err := streamer.WriteTo(ctx, buf)
@@ -126,7 +126,7 @@ func TestStreamer_WriteTo(t *testing.T) {
 }
 
 func TestStreamerSkipsFailingEPGWhenSkipOnError(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	httpClient := new(MockHTTPClient)
 
 	goodXML := `<?xml version="1.0" encoding="UTF-8"?>
@@ -179,7 +179,7 @@ func TestStreamerSkipsFailingEPGWhenSkipOnError(t *testing.T) {
 }
 
 func TestStreamerEPGFailsWithoutSkip(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	httpClient := new(MockHTTPClient)
 
 	httpClient.On("Do", mock.MatchedBy(func(req *http.Request) bool {
@@ -204,7 +204,7 @@ func TestStreamerEPGFailsWithoutSkip(t *testing.T) {
 }
 
 func TestStreamerWithMultipleEPGSources(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	httpClient := new(MockHTTPClient)
 
 	xmlContent1 := `<?xml version="1.0" encoding="UTF-8"?>
@@ -282,7 +282,7 @@ func TestStreamerWithMultipleEPGSources(t *testing.T) {
 }
 
 func TestStreamerWithMultipleSubscriptionsAndEPGs(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	httpClient := new(MockHTTPClient)
 
 	xmlContent1 := `<?xml version="1.0" encoding="UTF-8"?>
@@ -350,7 +350,7 @@ func TestStreamerWithMultipleSubscriptionsAndEPGs(t *testing.T) {
 }
 
 func TestChannelIDConflicts(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	httpClient := new(MockHTTPClient)
 
 	epg1 := `<?xml version="1.0" encoding="UTF-8"?>
@@ -420,7 +420,7 @@ func TestChannelIDConflicts(t *testing.T) {
 }
 
 func TestChannelNameMatching(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	httpClient := new(MockHTTPClient)
 
 	epg1 := `<?xml version="1.0" encoding="UTF-8"?>
@@ -546,7 +546,7 @@ func TestTVGIDConflictIssue(t *testing.T) {
 	streamer := createStreamer([]listing.EPG{sub1, sub2, sub3}, channelMap)
 
 	var buf bytes.Buffer
-	_, err = streamer.WriteTo(context.Background(), &buf)
+	_, err = streamer.WriteTo(t.Context(), &buf)
 	require.NoError(t, err)
 
 	output := buf.String()
@@ -614,7 +614,7 @@ func TestSameOriginalIDDifferentSources(t *testing.T) {
 	streamer := createStreamer([]listing.EPG{sub1, sub2}, channelMap)
 
 	var buf bytes.Buffer
-	_, err = streamer.WriteTo(context.Background(), &buf)
+	_, err = streamer.WriteTo(t.Context(), &buf)
 	require.NoError(t, err)
 
 	output := buf.String()
@@ -667,7 +667,7 @@ func TestStreamerEmitsGeneratedChannelEPG(t *testing.T) {
 	streamer := NewStreamer(nil, []listing.Channel{ch}, nil)
 
 	var buf bytes.Buffer
-	_, err = streamer.WriteTo(context.Background(), &buf)
+	_, err = streamer.WriteTo(t.Context(), &buf)
 	require.NoError(t, err)
 
 	output := buf.String()

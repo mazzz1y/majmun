@@ -247,8 +247,7 @@ func renderTemplate(tmpl *template.Template, tmplVars map[string]any) (string, e
 	buf := &bytes.Buffer{}
 	var prevResult string
 
-	iter := 0
-	for iter < maxRenderIterations {
+	for range maxRenderIterations {
 		buf.Reset()
 		if err := tmpl.Execute(buf, tmplVars); err != nil {
 			return "", fmt.Errorf("render: %w", err)
@@ -258,7 +257,6 @@ func renderTemplate(tmpl *template.Template, tmplVars map[string]any) (string, e
 			break
 		}
 		prevResult = newResult
-		iter++
 	}
 
 	return prevResult, nil

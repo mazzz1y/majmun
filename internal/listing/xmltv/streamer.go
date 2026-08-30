@@ -3,6 +3,7 @@ package xmltv
 import (
 	"compress/gzip"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"majmun/internal/hashid"
@@ -230,7 +231,7 @@ func (s *Streamer) processChannels(ctx context.Context, decoder *decoderWrapper,
 			return ctx.Err()
 		default:
 			item, err := decoder.NextItem()
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				return nil
 			}
 			if err != nil {
@@ -266,7 +267,7 @@ func (s *Streamer) processProgrammes(ctx context.Context, decoder *decoderWrappe
 			return ctx.Err()
 		default:
 			item, err := decoder.NextItem()
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				return nil
 			}
 			if err != nil {

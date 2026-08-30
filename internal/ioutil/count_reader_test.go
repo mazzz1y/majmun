@@ -3,6 +3,7 @@ package ioutil
 import (
 	"errors"
 	"io"
+	"sync/atomic"
 	"testing"
 )
 
@@ -62,7 +63,7 @@ func TestCountReadCloser_Read(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			src := &mockReadCloser{data: tc.source, readErr: tc.readErr}
-			var counter int64
+			var counter atomic.Int64
 			reader := NewCountReadCloser(src, &counter)
 			buf := make([]byte, tc.bufSize)
 			n, err := reader.Read(buf)
@@ -75,8 +76,8 @@ func TestCountReadCloser_Read(t *testing.T) {
 				t.Errorf("expected to read %d bytes, got %d", tc.expectRead, n)
 			}
 
-			if counter != int64(tc.expectRead) {
-				t.Errorf("expected counter to be %d, got %d", tc.expectRead, counter)
+			if counter.Load() != int64(tc.expectRead) {
+				t.Errorf("expected counter to be %d, got %d", tc.expectRead, counter.Load())
 			}
 		})
 	}
@@ -91,7 +92,7 @@ func TestCountReadCloser_ReadWithNilSource(t *testing.T) {
 		t.Errorf("expected to read 0 bytes, got %d", n)
 	}
 
-	if err != io.EOF {
+	if !errors.Is(err, io.EOF) {
 		t.Errorf("expected EOF error, got %v", err)
 	}
 }

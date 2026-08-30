@@ -1,12 +1,15 @@
 package channelgen
 
 import (
+	"cmp"
 	"context"
 	"majmun/internal/logging"
 	"majmun/internal/natsort"
+	"maps"
 	"math/rand"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -346,10 +349,7 @@ func groupShows(items []Item, sources []string, seasonPatterns []*regexp.Regexp)
 		}
 		groups[k] = append(groups[k], it)
 	}
-	keys := make([]string, 0, len(groups))
-	for k := range groups {
-		keys = append(keys, k)
-	}
+	keys := slices.Collect(maps.Keys(groups))
 	sort.Slice(keys, func(i, j int) bool { return natsort.Less(keys[i], keys[j]) })
 
 	shows := make([][]Item, len(keys))
@@ -395,11 +395,8 @@ func spread(items []Item, sources []string, seasonPatterns []*regexp.Regexp) []I
 			all = append(all, placed{pos: (float64(j) + 0.5) / float64(n), show: s, it: it})
 		}
 	}
-	sort.SliceStable(all, func(i, j int) bool {
-		if all[i].pos != all[j].pos {
-			return all[i].pos < all[j].pos
-		}
-		return all[i].show < all[j].show
+	slices.SortStableFunc(all, func(a, b placed) int {
+		return cmp.Or(cmp.Compare(a.pos, b.pos), cmp.Compare(a.show, b.show))
 	})
 
 	out := make([]Item, len(all))

@@ -7,10 +7,10 @@ import (
 
 type CountReadCloser struct {
 	src     io.ReadCloser
-	counter *int64
+	counter *atomic.Int64
 }
 
-func NewCountReadCloser(src io.ReadCloser, counter *int64) *CountReadCloser {
+func NewCountReadCloser(src io.ReadCloser, counter *atomic.Int64) *CountReadCloser {
 	return &CountReadCloser{
 		src:     src,
 		counter: counter,
@@ -25,7 +25,7 @@ func (sc *CountReadCloser) Read(p []byte) (n int, err error) {
 	n, err = sc.src.Read(p)
 
 	if sc.counter != nil {
-		atomic.AddInt64(sc.counter, int64(n))
+		sc.counter.Add(int64(n))
 	}
 	return
 }

@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"maps"
 	"testing"
 	"time"
 
@@ -371,10 +372,10 @@ func TestAutoCleanGauge_ConcurrentAccess(t *testing.T) {
 
 	done := make(chan bool, 100)
 
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		go func() {
 			defer func() { done <- true }()
-			for j := 0; j < 10; j++ {
+			for j := range 10 {
 				boundGauge.Inc()
 				boundGauge.Dec()
 				boundGauge.Set(float64(j))
@@ -383,7 +384,7 @@ func TestAutoCleanGauge_ConcurrentAccess(t *testing.T) {
 		}()
 	}
 
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		<-done
 	}
 
@@ -409,10 +410,7 @@ func TestAutoCleanGauge_MultipleLabels(t *testing.T) {
 	gauge3.Set(15.0)
 
 	gauge.mu.RLock()
-	values := make(map[string]float64)
-	for k, v := range gauge.values {
-		values[k] = v
-	}
+	values := maps.Clone(gauge.values)
 	gauge.mu.RUnlock()
 
 	expected := map[string]float64{
@@ -426,14 +424,8 @@ func TestAutoCleanGauge_MultipleLabels(t *testing.T) {
 	gauge2.Set(0.0)
 
 	gauge.mu.RLock()
-	values = make(map[string]float64)
-	zeroTimes := make(map[string]time.Time)
-	for k, v := range gauge.values {
-		values[k] = v
-	}
-	for k, v := range gauge.zeroTimes {
-		zeroTimes[k] = v
-	}
+	values = maps.Clone(gauge.values)
+	zeroTimes := maps.Clone(gauge.zeroTimes)
 	gauge.mu.RUnlock()
 
 	expectedAfterZero := map[string]float64{

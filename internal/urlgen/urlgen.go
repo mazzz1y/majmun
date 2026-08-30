@@ -61,7 +61,7 @@ type StreamData struct {
 type Stream struct {
 	ProviderInfo ProviderInfo `json:"pi"`
 	URL          string       `json:"u"`
-	Hidden       bool         `json:"h,omitempty"`
+	Hidden       bool         `json:"h,omitzero"`
 }
 
 type FileData struct {

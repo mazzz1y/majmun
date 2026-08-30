@@ -2,6 +2,7 @@ package streampool
 
 import (
 	"context"
+	"errors"
 	"io"
 	"majmun/internal/config/common"
 	"os"
@@ -113,7 +114,7 @@ func skipWithoutFFmpeg(t *testing.T) {
 
 func TestSegmenterPool_CreateAndRemove(t *testing.T) {
 	pool := newSegmenterPool()
-	ctx := context.Background()
+	ctx := t.Context()
 	dir := t.TempDir()
 
 	seg1, isNew, err := pool.getOrCreate(ctx, dir, testReq("stream-1"))
@@ -154,7 +155,7 @@ func TestSegmenterPool_CreateAndRemove(t *testing.T) {
 
 func TestSegmenterPool_StopAllClearsMap(t *testing.T) {
 	pool := newSegmenterPool()
-	ctx := context.Background()
+	ctx := t.Context()
 	dir := t.TempDir()
 
 	_, _, _ = pool.getOrCreate(ctx, dir, testReq("stream-1"))
@@ -172,8 +173,7 @@ func TestSegmenterPool_StopAllClearsMap(t *testing.T) {
 }
 
 func TestSegmenter_InitialClientCountIsOne(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	seg, err := newSegmenter(ctx, t.TempDir(), testReq("test"))
 	if err != nil {
@@ -186,8 +186,7 @@ func TestSegmenter_InitialClientCountIsOne(t *testing.T) {
 }
 
 func TestSegmenter_EmptySignalOnLastClientRemoved(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	seg, err := newSegmenter(ctx, t.TempDir(), testReq("test"))
 	if err != nil {
@@ -221,8 +220,7 @@ func TestSegmenter_EmptySignalOnLastClientRemoved(t *testing.T) {
 }
 
 func TestSegmenter_JoinFailsAfterDrained(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	seg, err := newSegmenter(ctx, t.TempDir(), testReq("test"))
 	if err != nil {
@@ -238,7 +236,7 @@ func TestSegmenter_JoinFailsAfterDrained(t *testing.T) {
 
 func TestSegmenterPool_JoinAfterDrainGetsFreshSegmenter(t *testing.T) {
 	pool := newSegmenterPool()
-	ctx := context.Background()
+	ctx := t.Context()
 	dir := t.TempDir()
 
 	seg1, isNew, err := pool.getOrCreate(ctx, dir, testReq("chan"))
@@ -264,7 +262,7 @@ func TestSegmenterPool_JoinAfterDrainGetsFreshSegmenter(t *testing.T) {
 
 func TestSegmenterPool_LateRemoveKeepsReplacement(t *testing.T) {
 	pool := newSegmenterPool()
-	ctx := context.Background()
+	ctx := t.Context()
 	dir := t.TempDir()
 
 	seg1, _, _ := pool.getOrCreate(ctx, dir, testReq("chan"))
@@ -310,8 +308,7 @@ func TestSegmentDir(t *testing.T) {
 }
 
 func TestSegmenter_DirCreatedOnInit(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	baseDir := t.TempDir()
 	seg, err := newSegmenter(ctx, baseDir, testReq("test-stream"))
@@ -325,8 +322,7 @@ func TestSegmenter_DirCreatedOnInit(t *testing.T) {
 }
 
 func TestSegmenter_CleanupRemovesDir(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	baseDir := t.TempDir()
 	seg, err := newSegmenter(ctx, baseDir, testReq("test-stream"))
@@ -343,7 +339,7 @@ func TestSegmenter_CleanupRemovesDir(t *testing.T) {
 }
 
 func TestRunPlayout_AdvancesPerFileAndStopsOnCancel(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	// A run longer than minRunDuration exercises the normal advance path (no backoff).
@@ -388,7 +384,7 @@ func TestRunPlayout_AdvancesPerFileAndStopsOnCancel(t *testing.T) {
 }
 
 func TestRunPlayout_BacksOffWhenNoItem(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
 	defer cancel()
 
 	cfg := RunnerSpec{
@@ -422,7 +418,7 @@ func TestRunPlayout_BacksOffWhenNoItem(t *testing.T) {
 
 // On a clean exit before the slot boundary the supervisor must wait it out, resolving only once.
 func TestRunPlayout_WaitsOutSlotOnEarlyCleanExit(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 2500*time.Millisecond)
+	ctx, cancel := context.WithTimeout(t.Context(), 2500*time.Millisecond)
 	defer cancel()
 
 	cfg := RunnerSpec{
@@ -459,7 +455,7 @@ func TestGetReader_SingleClientReceivesData(t *testing.T) {
 	d := New()
 	defer d.Stop()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 
 	req := Request{
@@ -493,7 +489,7 @@ func TestGetReader_OnStopCalledOnceWhenSegmenterDrains(t *testing.T) {
 	d := New()
 	defer d.Stop()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 
 	var stops atomic.Int64
@@ -538,7 +534,7 @@ func TestGetReader_TwoClientsShareOneSegmenter(t *testing.T) {
 	d := New()
 	defer d.Stop()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 
 	req := Request{
@@ -564,13 +560,11 @@ func TestGetReader_TwoClientsShareOneSegmenter(t *testing.T) {
 	bytesRead := make([]int, 2)
 
 	for i, reader := range []io.ReadCloser{reader1, reader2} {
-		wg.Add(1)
-		go func(idx int, r io.ReadCloser) {
-			defer wg.Done()
+		wg.Go(func() {
 			buf := make([]byte, 64*1024)
-			n, _ := r.Read(buf)
-			bytesRead[idx] = n
-		}(i, reader)
+			n, _ := reader.Read(buf)
+			bytesRead[i] = n
+		})
 	}
 
 	wg.Wait()
@@ -589,7 +583,7 @@ func TestGetReader_ReadFailsAfterClose(t *testing.T) {
 	d := New()
 	defer d.Stop()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 
 	req := Request{
@@ -626,7 +620,7 @@ func TestGetReader_SemaphoreBlocksSecondStream(t *testing.T) {
 
 	sem := semaphore.NewWeighted(1)
 
-	ctx1, cancel1 := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx1, cancel1 := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel1()
 
 	req1 := Request{
@@ -645,7 +639,7 @@ func TestGetReader_SemaphoreBlocksSecondStream(t *testing.T) {
 
 	go func() { _, _ = io.Copy(io.Discard, reader1) }()
 
-	ctx2, cancel2 := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx2, cancel2 := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel2()
 
 	req2 := Request{
@@ -657,7 +651,7 @@ func TestGetReader_SemaphoreBlocksSecondStream(t *testing.T) {
 	}
 
 	_, err = d.GetReader(ctx2, req2)
-	if err != ErrSubscriptionSemaphore {
+	if !errors.Is(err, ErrSubscriptionSemaphore) {
 		t.Errorf("expected ErrSubscriptionSemaphore, got %v", err)
 	}
 }
@@ -670,7 +664,7 @@ func TestGetReader_JoiningExistingStreamDoesNotConsumeSemaphore(t *testing.T) {
 
 	sem := semaphore.NewWeighted(1)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 
 	req := Request{
@@ -699,7 +693,7 @@ func TestStop_ReaderFailsAfterPoolStopped(t *testing.T) {
 
 	d := New()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 
 	req := Request{

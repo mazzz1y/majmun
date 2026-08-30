@@ -14,8 +14,7 @@ func MustTemplate(tmplStr string) *Template {
 	if err != nil {
 		panic(err)
 	}
-	t := Template(*tmpl)
-	return &t
+	return new(Template(*tmpl))
 }
 
 func (t *Template) UnmarshalYAML(value *yaml.Node) error {
@@ -33,6 +32,5 @@ func (t *Template) UnmarshalYAML(value *yaml.Node) error {
 }
 
 func (t *Template) ToTemplate() *template.Template {
-	tmpl := template.Template(*t)
-	return &tmpl
+	return new(template.Template(*t))
 }

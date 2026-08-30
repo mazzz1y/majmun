@@ -3,12 +3,14 @@ package httpclient
 import (
 	"compress/gzip"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"majmun/internal/ioutil"
 	"net/http"
 	"os"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -41,7 +43,7 @@ type Reader struct {
 	originResponse  *http.Response
 	client          *http.Client
 	contentLength   int64
-	downloadedBytes int64
+	downloadedBytes atomic.Int64
 	contentType     string
 	ttl             time.Duration
 	retention       time.Duration
@@ -51,7 +53,7 @@ type Reader struct {
 
 func (r *Reader) Read(p []byte) (n int, err error) {
 	n, err = r.ReadCloser.Read(p)
-	if err == io.EOF {
+	if errors.Is(err, io.EOF) {
 		r.eofReached = true
 	}
 	return
@@ -142,7 +144,7 @@ func (r *Reader) isDownloadComplete() bool {
 	if r.contentLength <= 0 {
 		return r.eofReached
 	}
-	return r.downloadedBytes == r.contentLength && r.eofReached
+	return r.downloadedBytes.Load() == r.contentLength && r.eofReached
 }
 
 func (r *Reader) checkCacheStatus() status {

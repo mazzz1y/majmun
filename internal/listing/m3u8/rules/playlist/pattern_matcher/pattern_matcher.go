@@ -1,9 +1,10 @@
 package pattern_matcher
 
 import (
+	"cmp"
 	"majmun/internal/listing/m3u8/store"
 	"regexp"
-	"sort"
+	"slices"
 	"strings"
 
 	"majmun/internal/config/common"
@@ -53,8 +54,8 @@ func (pm *PatternMatcher) GroupChannels() map[string][]*store.Channel {
 
 	for _, channels := range groups {
 		pm.matchGroup(channels)
-		sort.Slice(channels, func(i, j int) bool {
-			return channels[i].Priority() > channels[j].Priority()
+		slices.SortFunc(channels, func(a, b *store.Channel) int {
+			return cmp.Compare(b.Priority(), a.Priority())
 		})
 	}
 
@@ -96,8 +97,8 @@ func (pm *PatternMatcher) setPriorities() {
 	for ch, prios := range pm.channelPrios {
 		maxNonEmpty := -1
 		for _, p := range prios {
-			if p != pm.emptyPrio && p > maxNonEmpty {
-				maxNonEmpty = p
+			if p != pm.emptyPrio {
+				maxNonEmpty = max(maxNonEmpty, p)
 			}
 		}
 		if maxNonEmpty >= 0 {

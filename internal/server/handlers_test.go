@@ -1,7 +1,6 @@
 package server
 
 import (
-	"context"
 	"majmun/internal/config/proxy"
 	"majmun/internal/ctxutil"
 	"majmun/internal/hashid"
@@ -36,7 +35,7 @@ func TestServeLocalFile(t *testing.T) {
 
 	s := &Server{}
 	rec := httptest.NewRecorder()
-	s.serveLocalFile(context.Background(), rec, path)
+	s.serveLocalFile(t.Context(), rec, path)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
@@ -52,7 +51,7 @@ func TestServeLocalFile(t *testing.T) {
 func TestServeLocalFileMissing(t *testing.T) {
 	s := &Server{}
 	rec := httptest.NewRecorder()
-	s.serveLocalFile(context.Background(), rec, filepath.Join(t.TempDir(), "nope.png"))
+	s.serveLocalFile(t.Context(), rec, filepath.Join(t.TempDir(), "nope.png"))
 
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusNotFound)
@@ -62,7 +61,7 @@ func TestServeLocalFileMissing(t *testing.T) {
 func TestServeLocalFileDirectory(t *testing.T) {
 	s := &Server{}
 	rec := httptest.NewRecorder()
-	s.serveLocalFile(context.Background(), rec, t.TempDir())
+	s.serveLocalFile(t.Context(), rec, t.TempDir())
 
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusNotFound)
@@ -76,7 +75,7 @@ func TestHandleFileProxyRemoteURL(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	ctx := ctxutil.WithProvider(context.Background(), stubProvider{})
+	ctx := ctxutil.WithProvider(t.Context(), stubProvider{})
 	data := &urlgen.Data{
 		RequestType: urlgen.RequestTypeFile,
 		File:        urlgen.FileData{URL: upstream.URL + "/logo.png"},
@@ -103,7 +102,7 @@ func TestHandleFileProxyUpstreamError(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	ctx := ctxutil.WithProvider(context.Background(), stubProvider{})
+	ctx := ctxutil.WithProvider(t.Context(), stubProvider{})
 	data := &urlgen.Data{
 		RequestType: urlgen.RequestTypeFile,
 		File:        urlgen.FileData{URL: upstream.URL + "/logo.png"},

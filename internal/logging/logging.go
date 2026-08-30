@@ -137,7 +137,7 @@ func sanitizePath(path string) string {
 	if len(parts) > 2 {
 		parts = []string{"**", parts[len(parts)-1]}
 	} else {
-		for i := 0; i < len(parts)-1; i++ {
+		for i := range len(parts) - 1 {
 			parts[i] = "*"
 		}
 	}

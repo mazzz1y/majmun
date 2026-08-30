@@ -1,7 +1,6 @@
 package httpclient
 
 import (
-	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -100,7 +99,7 @@ func TestStore_NewReader(t *testing.T) {
 	}
 	defer st.Close()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	opt := Options{TTL: time.Hour, Retention: 24 * time.Hour, Compression: true}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -201,11 +200,10 @@ func TestStore_RemoveEntry(t *testing.T) {
 
 func createTestMetadata(path string, cachedAt int64, retention int64) error {
 	metadata := Metadata{
-		CachedAt: cachedAt,
-		Headers:  make(map[string]string, len(forwardedHeaders)),
+		CachedAt:         cachedAt,
+		RetentionSeconds: new(retention),
+		Headers:          make(map[string]string, len(forwardedHeaders)),
 	}
-	ret := retention
-	metadata.RetentionSeconds = &ret
 
 	file, err := os.Create(path)
 	if err != nil {

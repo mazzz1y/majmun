@@ -159,12 +159,11 @@ func (g *AutoCleanGauge) labelKey(labelValues ...string) string {
 }
 
 func (g *AutoCleanGauge) cleanupRoutine() {
-	ticker := time.NewTicker(cleanupTime)
-	defer ticker.Stop()
+	tick := time.Tick(cleanupTime)
 
 	for {
 		select {
-		case <-ticker.C:
+		case <-tick:
 			g.performCleanup()
 		case <-g.stopCleanup:
 			return

@@ -4,6 +4,8 @@ import (
 	"majmun/internal/config/rules/playlist"
 	"majmun/internal/listing/m3u8/store"
 	"majmun/internal/natsort"
+	"maps"
+	"slices"
 	"sort"
 )
 
@@ -49,10 +51,7 @@ func (sp *SortProcessor) Apply(st *store.Store) {
 	}
 
 	var sortedChannels []*store.Channel
-	groupNames := make([]string, 0, len(groups))
-	for name := range groups {
-		groupNames = append(groupNames, name)
-	}
+	groupNames := slices.Collect(maps.Keys(groups))
 
 	sort.Slice(groupNames, func(i, j int) bool {
 		iPriority := sp.getGroupPriority(groupNames[i])

@@ -242,7 +242,7 @@ func TestRebuildOnPatternChange(t *testing.T) {
 
 	now := time.Unix(1000, 0)
 	build := func(eps []*regexp.Regexp, old *Schedule) *Schedule {
-		s, err := tBuild(context.Background(), p, "c", []string{dir}, testExtensions, "sequential", testSeasonPatterns, eps, FillerConfig{}, old, now)
+		s, err := tBuild(t.Context(), p, "c", []string{dir}, testExtensions, "sequential", testSeasonPatterns, eps, FillerConfig{}, old, now)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -283,7 +283,7 @@ func TestRebuildPreservesShuffleOrder(t *testing.T) {
 	now := time.Unix(1000, 0)
 
 	build := func(eps []*regexp.Regexp, old *Schedule) *Schedule {
-		s, err := tBuild(context.Background(), p, "c", []string{dir}, testExtensions, "shuffle", testSeasonPatterns, eps, FillerConfig{}, old, now)
+		s, err := tBuild(t.Context(), p, "c", []string{dir}, testExtensions, "shuffle", testSeasonPatterns, eps, FillerConfig{}, old, now)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -667,7 +667,7 @@ func TestInterleaveGroupsByShowAcrossSeasonSources(t *testing.T) {
 	}
 	sources := []string{filepath.Join(root, "Show A"), filepath.Join(root, "Show B")}
 
-	s, err := tBuild(context.Background(), p, "c", sources, testExtensions, "interleave", testSeasonPatterns, testEpisodePatterns, FillerConfig{}, nil, time.Unix(1000, 0))
+	s, err := tBuild(t.Context(), p, "c", sources, testExtensions, "interleave", testSeasonPatterns, testEpisodePatterns, FillerConfig{}, nil, time.Unix(1000, 0))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -703,7 +703,7 @@ func TestInterleaveGroupsByShowTag(t *testing.T) {
 		p.results[path] = probeResult{Duration: 100, Show: show}
 	}
 
-	s, err := tBuild(context.Background(), p, "c", []string{root}, testExtensions, "interleave", testSeasonPatterns, testEpisodePatterns, FillerConfig{}, nil, time.Unix(1000, 0))
+	s, err := tBuild(t.Context(), p, "c", []string{root}, testExtensions, "interleave", testSeasonPatterns, testEpisodePatterns, FillerConfig{}, nil, time.Unix(1000, 0))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -737,7 +737,7 @@ func TestInterleaveSeasonPatternOverride(t *testing.T) {
 	sources := []string{filepath.Join(root, "Show A"), filepath.Join(root, "Show B")}
 	seasonPatterns := []*regexp.Regexp{regexp.MustCompile(`(?i)^vol[ ._-]*\d+$`)}
 
-	s, err := tBuild(context.Background(), p, "c", sources, testExtensions, "interleave", seasonPatterns, testEpisodePatterns, FillerConfig{}, nil, time.Unix(1000, 0))
+	s, err := tBuild(t.Context(), p, "c", sources, testExtensions, "interleave", seasonPatterns, testEpisodePatterns, FillerConfig{}, nil, time.Unix(1000, 0))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -831,7 +831,7 @@ func TestLocateSubSecondBoundary(t *testing.T) {
 // boundary is strictly in the future.
 func TestLocateInvariants(t *testing.T) {
 	r := rand.New(rand.NewSource(1))
-	for i := 0; i < 100000; i++ {
+	for i := range 100000 {
 		n := 1 + r.Intn(8)
 		items := make([]Item, n)
 		for j := range items {
@@ -1313,7 +1313,7 @@ func TestProgrammesCycleMathMatchesLocate(t *testing.T) {
 	// seconds and the EPG programme boundaries would disagree with locate's.
 	farOut := anchor.Add(10000 * 995 * time.Millisecond)
 
-	progs, err := c.Programmes(context.Background(), farOut)
+	progs, err := c.Programmes(t.Context(), farOut)
 	if err != nil {
 		t.Fatalf("Programmes: %v", err)
 	}
@@ -1370,7 +1370,7 @@ func TestProgrammesGrid(t *testing.T) {
 	now := time.Unix(10000, 0)
 	warmUp(t, c, now)
 
-	progs, err := c.Programmes(context.Background(), now)
+	progs, err := c.Programmes(t.Context(), now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1401,7 +1401,7 @@ func TestProgrammesTitleTemplatePrefixesShow(t *testing.T) {
 	now := time.Unix(10000, 0)
 	warmUp(t, c, now)
 
-	progs, err := c.Programmes(context.Background(), now)
+	progs, err := c.Programmes(t.Context(), now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1426,7 +1426,7 @@ func TestProgrammesTitleTemplateRelNoExt(t *testing.T) {
 	now := time.Unix(10000, 0)
 	warmUp(t, c, now)
 
-	progs, err := c.Programmes(context.Background(), now)
+	progs, err := c.Programmes(t.Context(), now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1453,7 +1453,7 @@ func TestProgrammesTitleTemplateSourceBase(t *testing.T) {
 	now := time.Unix(10000, 0)
 	warmUp(t, c, now)
 
-	progs, err := c.Programmes(context.Background(), now)
+	progs, err := c.Programmes(t.Context(), now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1478,7 +1478,7 @@ func TestProgrammesTitleTemplateErrorFallsBackToRaw(t *testing.T) {
 	now := time.Unix(10000, 0)
 	warmUp(t, c, now)
 
-	progs, err := c.Programmes(context.Background(), now)
+	progs, err := c.Programmes(t.Context(), now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1678,7 +1678,7 @@ func TestDirtySignalDuringBuildSurvives(t *testing.T) {
 	// Hold the single-flight guard as maybeBuild would, so the mid-build markDirty
 	// cannot spawn a competing build (its CAS fails) — matching real execution.
 	c.building.Store(true)
-	c.build(context.Background(), time.Unix(1000, 0))
+	c.build(t.Context(), time.Unix(1000, 0))
 	c.building.Store(false)
 
 	c.mu.Lock()
@@ -1802,7 +1802,7 @@ func TestUrgentRemovalDoesNotCutHeldProgramme(t *testing.T) {
 	// 04:10: past the swap time but inside the held programme (keep, ending 06:00). gone airs at
 	// 06:00, not before the held boundary, so it must NOT cut in early.
 	c.building.Store(true)
-	c.build(context.Background(), time.Date(2024, 1, 2, 4, 10, 0, 0, time.Local))
+	c.build(t.Context(), time.Date(2024, 1, 2, 4, 10, 0, 0, time.Local))
 	c.building.Store(false)
 
 	if activeFingerprint(c) != first {
@@ -1835,7 +1835,7 @@ func TestDeferredChangeReArmsAtProgrammeBoundary(t *testing.T) {
 
 	// 04:10: window open but held by the programme ending at 06:00 -> deferred.
 	c.building.Store(true)
-	c.build(context.Background(), time.Date(2024, 1, 2, 4, 10, 0, 0, time.Local))
+	c.build(t.Context(), time.Date(2024, 1, 2, 4, 10, 0, 0, time.Local))
 	c.building.Store(false)
 	if activeFingerprint(c) != first {
 		t.Fatal("precondition: held at 04:10")
@@ -1993,7 +1993,7 @@ func TestUnchangedEmptyScheduleSkipsProbe(t *testing.T) {
 	probed := p.calls[a]
 
 	c.building.Store(true)
-	c.build(context.Background(), time.Date(2024, 1, 1, 12, 0, 0, 0, time.Local))
+	c.build(t.Context(), time.Date(2024, 1, 1, 12, 0, 0, 0, time.Local))
 	c.building.Store(false)
 
 	if p.calls[a] != probed {
@@ -2039,7 +2039,7 @@ func TestEmptyRebuildAfterDeferredChangeClearsArm(t *testing.T) {
 	os.Remove(b)
 	os.Remove(cc)
 	c.building.Store(true)
-	c.build(context.Background(), time.Date(2024, 1, 2, 4, 1, 0, 0, time.Local))
+	c.build(t.Context(), time.Date(2024, 1, 2, 4, 1, 0, 0, time.Local))
 	c.building.Store(false)
 
 	c.mu.Lock()
@@ -2160,7 +2160,7 @@ func TestChangeFirstSeenAfterWindowDefers(t *testing.T) {
 	p.durations[b] = 60
 	writeFile(t, b)
 	c.building.Store(true)
-	c.build(context.Background(), time.Date(2024, 1, 2, 12, 0, 0, 0, time.Local))
+	c.build(t.Context(), time.Date(2024, 1, 2, 12, 0, 0, 0, time.Local))
 	c.building.Store(false)
 
 	if activeFingerprint(c) != first {

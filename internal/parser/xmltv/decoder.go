@@ -3,6 +3,7 @@ package xmltv
 import (
 	"bufio"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 )
@@ -33,7 +34,7 @@ func (d *XMLDecoder) Decode() (any, error) {
 	for {
 		tok, err := d.decoder.Token()
 		if err != nil {
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				d.done = true
 			}
 			return nil, err

@@ -56,9 +56,8 @@ func (d *BaseDecoder) StartBuffering(ctx context.Context) error {
 	}
 
 	d.bufferCtx, d.cancelBuffer = context.WithCancel(ctx)
-	d.bufferWG.Add(1)
 
-	go func() {
+	d.bufferWG.Go(func() {
 		batch := make([]any, 0, bufferBatchSize)
 		ticker := time.NewTicker(bufferTicker)
 
@@ -69,7 +68,6 @@ func (d *BaseDecoder) StartBuffering(ctx context.Context) error {
 				d.AddToBuffer(batch...)
 				batch = batch[:0]
 			}
-			d.bufferWG.Done()
 		}()
 
 		for {
@@ -88,7 +86,7 @@ func (d *BaseDecoder) StartBuffering(ctx context.Context) error {
 				}
 			}
 		}
-	}()
+	})
 
 	return nil
 }

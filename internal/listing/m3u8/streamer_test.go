@@ -92,7 +92,7 @@ func channelField(t *testing.T, selectorRaw, templateStr string) config.ChannelF
 }
 
 func TestStreamerInjectsGeneratedChannel(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	gen, err := urlgen.NewGenerator("http://localhost", "secret", time.Hour, time.Hour)
 	require.NoError(t, err)
 
@@ -135,7 +135,7 @@ func TestStreamerInjectsGeneratedChannel(t *testing.T) {
 }
 
 func TestStreamerChannelFieldsAttrOnly(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	gen, err := urlgen.NewGenerator("http://localhost", "secret", time.Hour, time.Hour)
 	require.NoError(t, err)
 
@@ -156,7 +156,7 @@ func TestStreamerChannelFieldsAttrOnly(t *testing.T) {
 }
 
 func TestStreamerChannelFieldsTemplated(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	gen, err := urlgen.NewGenerator("http://localhost", "secret", time.Hour, time.Hour)
 	require.NoError(t, err)
 
@@ -177,7 +177,7 @@ func TestStreamerChannelFieldsTemplated(t *testing.T) {
 }
 
 func TestStreamerChannelRulesApplyToGeneratedChannel(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	gen, err := urlgen.NewGenerator("http://localhost", "secret", time.Hour, time.Hour)
 	require.NoError(t, err)
 
@@ -210,7 +210,7 @@ func TestStreamerChannelRulesApplyToGeneratedChannel(t *testing.T) {
 }
 
 func TestStreamerChannelRulesSkipNonParentPlaylist(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	gen, err := urlgen.NewGenerator("http://localhost", "secret", time.Hour, time.Hour)
 	require.NoError(t, err)
 
@@ -297,7 +297,7 @@ func createTestSubscriptionWithSkip(name string, playlists []string, httpClient 
 }
 
 func TestStreamerWriteTo(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	httpClient := new(MockHTTPClient)
 
 	sampleM3U := `#EXTM3U
@@ -341,7 +341,7 @@ http://example.com/stream2`
 }
 
 func TestStreamerFilteringChannels(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	httpClient := new(MockHTTPClient)
 
 	sampleM3U := `#EXTM3U
@@ -384,7 +384,7 @@ http://example.com/movies1`
 }
 
 func TestStreamerDuplicateChannelRemoval(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	httpClient := new(MockHTTPClient)
 
 	sampleM3U := `#EXTM3U
@@ -431,7 +431,7 @@ http://example.com/stream1_duplicate`
 }
 
 func TestStreamerErrorHandling(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	httpClient := new(MockHTTPClient)
 
 	httpClient.On("Do", mock.MatchedBy(func(req *http.Request) bool {
@@ -457,7 +457,7 @@ func TestStreamerErrorHandling(t *testing.T) {
 }
 
 func TestStreamerSkipsFailingSourceWhenSkipOnError(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	httpClient := new(MockHTTPClient)
 
 	goodM3U := `#EXTM3U
@@ -502,7 +502,7 @@ http://example.com/ok`
 }
 
 func TestStreamerSkipOnErrorAllFailing(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	httpClient := new(MockHTTPClient)
 
 	httpClient.On("Do", mock.MatchedBy(func(req *http.Request) bool {
@@ -527,7 +527,7 @@ func TestStreamerSkipOnErrorAllFailing(t *testing.T) {
 }
 
 func TestStreamerWithMultipleSubscriptions(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	httpClient := new(MockHTTPClient)
 
 	sampleM3U1 := `#EXTM3U
@@ -578,7 +578,7 @@ http://example.com/sports1`
 }
 
 func TestStreamerWithMultipleSources(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	httpClient := new(MockHTTPClient)
 
 	sampleM3U1 := `#EXTM3U

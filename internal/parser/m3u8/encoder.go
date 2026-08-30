@@ -3,7 +3,8 @@ package m3u8
 import (
 	"fmt"
 	"io"
-	"sort"
+	"maps"
+	"slices"
 	"strings"
 )
 
@@ -49,7 +50,7 @@ func (e *M3UEncoder) writeHeader() error {
 			attrPairs = append(attrPairs, fmt.Sprintf(`%s="%s"`, k, v))
 		}
 
-		sort.Strings(attrPairs)
+		slices.Sort(attrPairs)
 		header += " " + strings.Join(attrPairs, " ")
 	}
 
@@ -77,7 +78,7 @@ func (e *M3UEncoder) encodeTrack(track *Track) error {
 			attrPairs = append(attrPairs, fmt.Sprintf(`%s="%s"`, k, v))
 		}
 
-		sort.Strings(attrPairs)
+		slices.Sort(attrPairs)
 		extinfLine += " " + strings.Join(attrPairs, " ")
 	}
 
@@ -92,13 +93,7 @@ func (e *M3UEncoder) encodeTrack(track *Track) error {
 	}
 
 	if len(track.Tags) > 0 {
-		keys := make([]string, 0, len(track.Tags))
-		for k := range track.Tags {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-
-		for _, key := range keys {
+		for _, key := range slices.Sorted(maps.Keys(track.Tags)) {
 			tagLine := fmt.Sprintf("#%s:%s", key, track.Tags[key])
 			_, err := fmt.Fprintln(e.writer, tagLine)
 			if err != nil {

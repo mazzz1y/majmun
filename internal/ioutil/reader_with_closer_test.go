@@ -69,11 +69,11 @@ func TestReaderWithCloser_Read(t *testing.T) {
 			n, err := rwc.Read(buf)
 
 			if tc.reader == nil {
-				if err != io.EOF {
+				if !errors.Is(err, io.EOF) {
 					t.Errorf("expected EOF for nil reader, got %v", err)
 				}
 			} else if tc.data == "" {
-				if err != io.EOF {
+				if !errors.Is(err, io.EOF) {
 					t.Errorf("expected EOF for empty reader, got %v", err)
 				}
 			}

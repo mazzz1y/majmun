@@ -2,7 +2,7 @@ package httpclient
 
 import (
 	"majmun/internal/config/common"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 )
@@ -39,6 +39,6 @@ func canonicalHeaders(headers []common.NameValue) string {
 	for _, h := range headers {
 		pairs = append(pairs, strings.ToLower(h.Name)+":"+h.Value)
 	}
-	sort.Strings(pairs)
+	slices.Sort(pairs)
 	return strings.Join(pairs, "\n")
 }

@@ -31,11 +31,9 @@ func (r *Reader) SaveMetadata() error {
 			}
 		}
 	}
-	ret := int64(r.retention / time.Second)
-
 	if err := json.NewEncoder(metaFile).Encode(Metadata{
 		CachedAt:         time.Now().Unix(),
-		RetentionSeconds: &ret,
+		RetentionSeconds: new(int64(r.retention / time.Second)),
 		Headers:          headers,
 	}); err != nil {
 		return err

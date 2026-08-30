@@ -133,11 +133,7 @@ func (c *Channel) CatchupDays(now time.Time) int {
 	if w <= 0 {
 		w = time.Duration(c.playout.EPGDuration)
 	}
-	days := int((w + 12*time.Hour) / (24 * time.Hour))
-	if days < 1 {
-		days = 1
-	}
-	return days
+	return max(int((w+12*time.Hour)/(24*time.Hour)), 1)
 }
 
 func (c *Channel) Programmes(ctx context.Context, now time.Time) ([]listing.Programme, error) {

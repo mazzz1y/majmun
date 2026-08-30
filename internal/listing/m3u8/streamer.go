@@ -3,6 +3,7 @@ package m3u8
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"majmun/internal/config/common"
@@ -218,7 +219,7 @@ func (s *Streamer) processTracks(ctx context.Context, decoder *decoderWrapper, s
 			return ctx.Err()
 		default:
 			item, err := decoder.NextItem()
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				return nil
 			}
 			if err != nil {

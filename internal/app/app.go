@@ -11,6 +11,7 @@ import (
 	"majmun/internal/logging"
 	"majmun/internal/metrics"
 	"majmun/internal/urlgen"
+	"slices"
 	"text/template"
 	"time"
 
@@ -252,21 +253,19 @@ func (m *Manager) channelGenerator(parentPlaylist string, channelConf config.Cha
 }
 
 func (m *Manager) findPlaylist(name string) (config.Playlist, error) {
-	for _, playlist := range m.config.Playlists {
-		if playlist.Name == name {
-			return playlist, nil
-		}
+	i := slices.IndexFunc(m.config.Playlists, func(pl config.Playlist) bool { return pl.Name == name })
+	if i < 0 {
+		return config.Playlist{}, fmt.Errorf("playlist not found: %s", name)
 	}
-	return config.Playlist{}, fmt.Errorf("playlist not found: %s", name)
+	return m.config.Playlists[i], nil
 }
 
 func (m *Manager) findEPG(name string) (config.EPG, error) {
-	for _, epg := range m.config.EPGs {
-		if epg.Name == name {
-			return epg, nil
-		}
+	i := slices.IndexFunc(m.config.EPGs, func(epg config.EPG) bool { return epg.Name == name })
+	if i < 0 {
+		return config.EPG{}, fmt.Errorf("EPG not found: %s", name)
 	}
-	return config.EPG{}, fmt.Errorf("EPG not found: %s", name)
+	return m.config.EPGs[i], nil
 }
 
 func (m *Manager) createURLGenerator(clientSecret string) (*urlgen.Generator, error) {

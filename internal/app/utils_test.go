@@ -202,8 +202,7 @@ func TestMergePlayoutsCascade(t *testing.T) {
 }
 
 func durPtr(d time.Duration) *common.Duration {
-	cd := common.Duration(d)
-	return &cd
+	return new(common.Duration(d))
 }
 
 func TestMergeHandlers(t *testing.T) {
@@ -406,7 +405,7 @@ func TestMergePairs(t *testing.T) {
 }
 
 func boolPtr(b bool) *bool {
-	return &b
+	return new(b)
 }
 
 func durationPtr(s string) *common.Duration {

@@ -59,9 +59,7 @@ func (p *Date) UnmarshalXML(d *xml.Decoder, start xml.StartElement) (err error) 
 		return nil
 	}
 
-	if strings.Contains(content, "|") {
-		content = strings.Split(content, "|")[0]
-	}
+	content, _, _ = strings.Cut(content, "|")
 
 	parsed, err := parseTime(content)
 	if err != nil {
